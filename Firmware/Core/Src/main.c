@@ -142,7 +142,7 @@ void SystemClock_Config(void)
 
   LL_PWR_EnableBkUpAccess();
   /* LSE configuration and activation */
-  LL_RCC_LSE_SetDriveCapability(LL_RCC_LSEDRIVE_MEDIUMLOW);
+  LL_RCC_LSE_SetDriveCapability(LL_RCC_LSEDRIVE_HIGH);
   LL_RCC_LSE_Enable();
   while(LL_RCC_LSE_IsReady() != 1)
   {
