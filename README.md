@@ -1,6 +1,6 @@
 # PB10A · General PowerBank
 
-> **项目状态：工程骨架阶段。** 当前固件只有 STM32CubeMX 生成的外设初始化骨架（GPIO/DMA/ADC1/I2C1/RTC/SPI1/TIM1/TIM3 + TIM7 时基），**没有业务代码**；`Firmware/APP`、`Firmware/BSP`、`Firmware/Peripheral` 为空目录，等待填充。硬件资料尚未入库。
+> **项目状态：工程骨架阶段。** 当前固件只有 STM32CubeMX 生成的外设初始化骨架（GPIO/DMA/ADC1/CRC/I2C1/RTC/SPI1/TIM1/TIM3，HAL 时基走 SysTick），**没有业务代码**；`Firmware/APP`、`Firmware/BSP`、`Firmware/Peripheral` 为空目录，等待填充。硬件资料尚未入库。
 
 ## 基本信息
 
@@ -10,7 +10,7 @@
 | 系统时钟 | 64 MHz（HSI 16 MHz → PLL×8 /2） |
 | 固件库 | STM32Cube FW_G0，HAL + LL 混用（`USE_HAL_DRIVER`, `USE_FULL_LL_DRIVER`） |
 | 工具链 | STM32CubeMX + Keil MDK-ARM V5（ArmClang / AC6） |
-| 已配置外设 | GPIO、DMA1、ADC1、I2C1、RTC（LSE 32.768 kHz）、SPI1、TIM1、TIM3、TIM7（HAL 时基） |
+| 已配置外设 | GPIO、DMA1、ADC1、CRC、I2C1、RTC（LSE 32.768 kHz）、SPI1、TIM1、TIM3；HAL 时基走 SysTick（不再使用 TIM7 时基） |
 | 许可证 | GNU AGPL-3.0-only（见 `LICENSE`） |
 
 ## 工程结构
