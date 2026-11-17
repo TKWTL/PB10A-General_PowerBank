@@ -22,6 +22,7 @@
 #include "stm32g0xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "spi.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -274,5 +275,9 @@ void I2C1_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
-
+/* Required for asynchronous HAL_SPI_Abort_IT recovery. */
+void SPI1_IRQHandler(void)
+{
+    HAL_SPI_IRQHandler(&hspi1);
+}
 /* USER CODE END 1 */

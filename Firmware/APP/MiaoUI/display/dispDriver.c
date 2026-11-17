@@ -1,0 +1,196 @@
+/*
+ * MiaoUI display adaptation for PB10A SSD1306, 128x64.
+ * Original MiaoUI display abstraction copyright/license: MIT, JFeng-Z.
+ */
+#include "display/dispDriver.h"
+#include "core/ui.h"
+#include "ssd1306_display.h"
+
+u8g2_t u8g2;
+/* SSD1306 contrast levels are mapped to 0..255. */
+int Contrast = 5;
+
+static uint8_t disp_contrast_raw(int level)
+{
+    if(level < 0)
+        level = 0;
+    else if(level > 15)
+        level = 15;
+
+    return (uint8_t)(level * level + 2 * level);
+}
+
+static ui_item_t s_contrast_item;
+static ui_item_t s_background_item;
+static ui_item_t s_rotation_item;
+static ui_item_t s_burnin_item;
+
+/* Adapted from DPC27A service_pages.c: a pass-based MiaoUI WORD page.
+ * An action is left unconsumed so the UI state machine exits on ANY key. */
+static void Disp_BurninPage(ui_t *ui)
+{
+    static uint8_t white_shown;
+
+    if(ui == 0) return;
+    if(ui->action != UI_ACTION_NONE)
+    {
+        white_shown = 0u;
+        return;
+    }
+
+    if(!white_shown)
+    {
+        uint8_t white = 1u;
+        Disp_SetMaxClipWindow();
+        Disp_SetDrawColor(&white);
+        Disp_DrawBox(0u, 0u, UI_HOR_RES, UI_VER_RES);
+        Disp_SendBuffer();
+        white_shown = 1u;
+    }
+}
+
+void Create_Disp_Parameters(ui_t *ui)
+{
+    static ui_data_t contrast_data;
+    static ui_data_t background_data;
+    static ui_data_t rotation_data;
+    static ui_element_t contrast_element;
+    static ui_element_t background_element;
+    static ui_element_t rotation_element;
+
+    contrast_data.name = "Contrast";
+    contrast_data.ptr = &Contrast;
+    contrast_data.function = Disp_SetContrast;
+    contrast_data.functionType = UI_DATA_FUNCTION_STEP_EXECUTE;
+    contrast_data.dataType = UI_DATA_INT;
+    contrast_data.actionType = UI_DATA_ACTION_RW;
+    contrast_data.max = 15;
+    contrast_data.min = 0;
+    contrast_data.step = 1;
+    contrast_data.decimals = 0;
+    contrast_element.data = &contrast_data;
+    Create_element(&s_contrast_item, &contrast_element);
+
+    background_data.name = "Background";
+    background_data.ptr = &ui->bgColor;
+    background_data.dataType = UI_DATA_SWITCH;
+    background_data.actionType = UI_DATA_ACTION_RW;
+    background_element.data = &background_data;
+    Create_element(&s_background_item, &background_element);
+
+    rotation_data.name = "Screen Flip";
+    rotation_data.ptr = &ui->rotation;
+    rotation_data.function = Disp_ResumeRotation;
+    rotation_data.dataType = UI_DATA_SWITCH;
+    rotation_data.actionType = UI_DATA_ACTION_RW;
+    rotation_element.data = &rotation_data;
+    Create_element(&s_rotation_item, &rotation_element);
+}
+
+void Add_Disp_Items(ui_page_t *parent_page)
+{
+    AddItem(" Contrast", UI_ITEM_DATA, 0, &s_contrast_item, parent_page, 0, 0);
+    AddItem(" Background", UI_ITEM_DATA, 0, &s_background_item, parent_page, 0, 0);
+    AddItem(" Burn-in Test", UI_ITEM_WORD, 0, &s_burnin_item, parent_page, 0, Disp_BurninPage);
+    AddItem(" Screen Flip", UI_ITEM_DATA, 0, &s_rotation_item, parent_page, 0, 0);
+}
+
+uint8_t diapInit(void)
+{
+    if(!SSD1306_Display_Begin(&u8g2))return 0u;
+    u8g2_SetFont(&u8g2, UI_FONT);
+    SSD1306_Display_RequestContrast(disp_contrast_raw(Contrast));
+    u8g2_ClearBuffer(&u8g2);
+    return 1u;
+}
+
+static uint32_t s_flush_count = 0u;
+
+void Disp_SendBuffer(void)
+{
+    s_flush_count++;
+    SSD1306_Display_RequestFlush(u8g2_GetBufferPtr(&u8g2));
+}
+
+uint32_t Disp_GetFlushCount(void)
+{
+    return s_flush_count;
+}
+
+void Disp_UpdateDisplayArea(uint8_t tx, uint8_t ty, uint8_t tw, uint8_t th)
+{
+    (void)tx;
+    (void)ty;
+    (void)tw;
+    (void)th;
+    Disp_SendBuffer();
+}
+
+void Disp_SetContrast(ui_t *ui)
+{
+    (void)ui;
+    SSD1306_Display_RequestContrast(disp_contrast_raw(Contrast));
+}
+
+void Disp_SetContrast2(uint8_t contrast)
+{
+    if(contrast > 15u)
+        contrast = 15u;
+    Contrast = (int)contrast;
+    SSD1306_Display_RequestContrast(disp_contrast_raw(Contrast));
+}
+
+void Disp_SetPowerSave(uint8_t is_enable)
+{
+    SSD1306_Display_RequestPowerSave(is_enable);
+}
+
+void Disp_ClearBuffer(void) { u8g2_ClearBuffer(&u8g2); }
+void Disp_SetFont(const uint8_t *font) { u8g2_SetFont(&u8g2, font); }
+void Disp_DrawPixel(uint16_t x, uint16_t y) { u8g2_DrawPixel(&u8g2, x, y); }
+void Disp_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2) { u8g2_DrawLine(&u8g2, x1, y1, x2, y2); }
+uint16_t Disp_Putchar(uint16_t x, uint16_t y, uint16_t encoding) { return u8g2_DrawGlyph(&u8g2, x, y, encoding); }
+uint16_t Disp_DrawStr(uint16_t x, uint16_t y, const char *str) { return u8g2_DrawUTF8(&u8g2, x, y, str); }
+void Disp_SetDrawColor(void *color) { u8g2_SetDrawColor(&u8g2, *(uint8_t *)color); }
+void Disp_SetBitmapMode(uint8_t is_transparent) { u8g2_SetBitmapMode(&u8g2, is_transparent); }
+void Disp_DrawFrame(uint16_t x, uint16_t y, uint16_t w, uint16_t h) { u8g2_DrawFrame(&u8g2, x, y, w, h); }
+void Disp_DrawRFrame(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t r) { u8g2_DrawRFrame(&u8g2, x, y, w, h, r); }
+void Disp_DrawBox(uint16_t x, uint16_t y, uint16_t w, uint16_t h) { u8g2_DrawBox(&u8g2, x, y, w, h); }
+void Disp_DrawRBox(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t r) { u8g2_DrawRBox(&u8g2, x, y, w, h, r); }
+void Disp_DrawCircle(uint16_t x, uint16_t y, uint16_t r, uint8_t opt) { u8g2_DrawCircle(&u8g2, x, y, r, opt); }
+void Disp_DrawDisc(uint16_t x, uint16_t y, uint16_t r, uint8_t opt) { u8g2_DrawDisc(&u8g2, x, y, r, opt); }
+void Disp_DrawXBMP(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint8_t *bitmap) { u8g2_DrawXBMP(&u8g2, x, y, w, h, bitmap); }
+uint8_t Disp_GetBufferTileHeight(void) { return u8g2_GetBufferTileHeight(&u8g2); }
+uint8_t Disp_GetBufferTileWidth(void) { return u8g2_GetBufferTileWidth(&u8g2); }
+uint8_t *Disp_GetBufferPtr(void) { return u8g2_GetBufferPtr(&u8g2); }
+void Disp_SetClipWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) { u8g2_SetClipWindow(&u8g2, x0, y0, x1, y1); }
+void Disp_SetMaxClipWindow(void) { u8g2_SetMaxClipWindow(&u8g2); }
+void Disp_SetBufferCurrTileRow(uint8_t row) { u8g2_SetBufferCurrTileRow(&u8g2, row); }
+uint16_t Disp_DrawUTF8(uint16_t x, uint16_t y, const char *str) { return u8g2_DrawUTF8(&u8g2, x, y, str); }
+uint16_t Disp_GetUTF8Width(const char *str) { return u8g2_GetUTF8Width(&u8g2, str); }
+
+void Disp_SetRotation(uint8_t rotation)
+{
+    u8g2_SetDisplayRotation(&u8g2, rotation ? U8G2_R0 : U8G2_R2);
+}
+
+void Disp_SetRotationMode(uint8_t rotation_mode)
+{
+    static const u8g2_cb_t *const rotations[4] = {U8G2_R0, U8G2_R1, U8G2_R2, U8G2_R3};
+    u8g2_SetDisplayRotation(&u8g2, rotations[rotation_mode & 3U]);
+}
+
+void Disp_ResumeRotation(ui_t *ui)
+{
+    if(ui != 0)
+        Disp_SetRotation(ui->rotation);
+}
+
+void Disp_UpdateRotation(ui_t *ui, uint8_t rotation_state)
+{
+    if(ui != 0)
+    {
+        ui->rotation = rotation_state ? 1U : 0U;
+        Disp_ResumeRotation(ui);
+    }
+}

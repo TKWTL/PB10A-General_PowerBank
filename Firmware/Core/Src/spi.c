@@ -57,7 +57,11 @@ void MX_SPI1_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN SPI1_Init 2 */
-
+  /* Keep the OLED SPI clock at 8 MHz and prevent per-byte NSS pulses.
+   * .ioc is updated to 8 MHz; guard against CubeMX default NSSP setting. */
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_8;
+  hspi1.Init.NSSPMode = SPI_NSS_PULSE_DISABLE;
+  if(HAL_SPI_Init(&hspi1) != HAL_OK) Error_Handler();
   /* USER CODE END SPI1_Init 2 */
 
 }
@@ -113,7 +117,8 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef* spiHandle)
     __HAL_LINKDMA(spiHandle,hdmatx,hdma_spi1_tx);
 
   /* USER CODE BEGIN SPI1_MspInit 1 */
-
+    HAL_NVIC_SetPriority(SPI1_IRQn, 2, 0);
+    HAL_NVIC_EnableIRQ(SPI1_IRQn);
   /* USER CODE END SPI1_MspInit 1 */
   }
 }
@@ -139,12 +144,66 @@ void HAL_SPI_MspDeInit(SPI_HandleTypeDef* spiHandle)
     /* SPI1 DMA DeInit */
     HAL_DMA_DeInit(spiHandle->hdmatx);
   /* USER CODE BEGIN SPI1_MspDeInit 1 */
-
+    HAL_NVIC_DisableIRQ(SPI1_IRQn);
   /* USER CODE END SPI1_MspDeInit 1 */
   }
 }
 
 /* USER CODE BEGIN 1 */
-
+/* SPI1 DMA TX transport. Only this CubeMX user region invokes
+ * HAL_SPI_* transfers. Caller owns the DMA source until DONE/ERROR.
+ * No blocking HAL_Delay, HAL_SPI_Transmit, or HAL_SPI_Abort.
+ */
+static volatile SPI1_DmaState s_spi1_tx_state=SPI1_DMA_IDLE;
+uint8_t SPI1_DmaTxStart(const uint8_t *bytes,uint16_t count)
+{
+    if(bytes==0 || count==0u || s_spi1_tx_state!=SPI1_DMA_IDLE ||
+       HAL_SPI_GetState(&hspi1)!=HAL_SPI_STATE_READY)
+        return 0u;
+    s_spi1_tx_state=SPI1_DMA_BUSY;
+    if(HAL_SPI_Transmit_DMA(&hspi1,(uint8_t *)(void *)bytes,count)!=HAL_OK)
+    {
+        s_spi1_tx_state=SPI1_DMA_ERROR;
+        return 0u;
+    }
+    return 1u;
+}
+SPI1_DmaState SPI1_DmaTxState(void)
+{
+    return s_spi1_tx_state;
+}
+uint8_t SPI1_DmaTxRelease(void)
+{
+    if(s_spi1_tx_state!=SPI1_DMA_DONE)return 0u;
+    s_spi1_tx_state=SPI1_DMA_IDLE;
+    return 1u;
+}
+uint8_t SPI1_DmaTxAbortAsync(void)
+{
+    if(s_spi1_tx_state!=SPI1_DMA_BUSY &&
+       s_spi1_tx_state!=SPI1_DMA_ERROR)return 0u;
+    s_spi1_tx_state=SPI1_DMA_ABORTING;
+    if(HAL_SPI_Abort_IT(&hspi1)!=HAL_OK)
+    {
+        s_spi1_tx_state=SPI1_DMA_ERROR;
+        return 0u;
+    }
+    return 1u;
+}
+void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+    if(hspi->Instance==SPI1 && s_spi1_tx_state==SPI1_DMA_BUSY)
+        s_spi1_tx_state=SPI1_DMA_DONE;
+}
+void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
+{
+    if(hspi->Instance==SPI1 && s_spi1_tx_state==SPI1_DMA_BUSY)
+        s_spi1_tx_state=SPI1_DMA_ERROR;
+}
+void HAL_SPI_AbortCpltCallback(SPI_HandleTypeDef *hspi)
+{
+    if(hspi->Instance==SPI1 && s_spi1_tx_state==SPI1_DMA_ABORTING)
+        s_spi1_tx_state=SPI1_DMA_IDLE;
+}
 /* USER CODE END 1 */
 

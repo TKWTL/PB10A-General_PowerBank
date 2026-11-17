@@ -1,6 +1,6 @@
 # Firmware · STM32G070KBTx
 
-**状态：仅 CubeMX 生成骨架，尚无业务代码。** 分层目录已建好但为空，见下表。
+**状态：OLED 最小移植阶段。** CubeMX 骨架已接入 SSD1306/SPI1 DMA、MiaoUI/u8g2 与 coroOS；尚未做硬件实测，也未实现 PD/电源管理和其它业务驱动。详见 [`Docs/OLED_BRINGUP.md`](../Docs/OLED_BRINGUP.md)。
 
 ## 分层与依赖
 
@@ -38,4 +38,4 @@ APP  ──►  BSP  ──►  Peripheral  ──►  Core / Drivers
 | 设备内存 | IROM 0x08000000 / 128 KB，IRAM 0x20000000 / 36 KB；布局见 `MDK-ARM/Ld/PB10A-General_PowerBank.sct`（末 256 B 为 `.noinit` 复位不清除区） |
 | 现有分组 | `Application/MDK-ARM`、`Application/User/Core`、`Drivers/STM32G0xx_HAL_Driver`、`Drivers/CMSIS`、`::CMSIS` |
 
-添加应用代码时建议追加分组 `Application/APP`、`Application/BSP`、`Application/Peripheral`，与目录一一对应。
+已新增 `Application/APP`、`Application/MiaoUI`、`Application/BSP` 和 `ThirdParty/u8g2` 分组，包含 OLED 最小系统所需的源码。`MiaoUI` 保留库原有子目录，作为目录深度约定的例外。未加入不需要的电源管理和外设驱动。

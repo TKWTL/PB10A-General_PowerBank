@@ -1,6 +1,6 @@
 # PB10A · General PowerBank
 
-> **项目状态：工程骨架阶段。** 当前固件只有 STM32CubeMX 生成的外设初始化骨架（GPIO/DMA/ADC1/CRC/I2C1/RTC/SPI1/TIM1/TIM3，HAL 时基走 SysTick），**没有业务代码**；`Firmware/APP`、`Firmware/BSP`、`Firmware/Peripheral` 为空目录，等待填充。硬件资料尚未入库。
+> **项目状态：OLED 最小移植阶段（尚未实测）。** STM32CubeMX 外设初始化骨架已接入 SSD1306 OLED 的 SPI1 DMA 驱动、MiaoUI/u8g2 和 coroOS；尚未实现电源管理、PD 业务和其它外设驱动。参见 [`Docs/OLED_BRINGUP.md`](Docs/OLED_BRINGUP.md)。
 
 ## 基本信息
 
