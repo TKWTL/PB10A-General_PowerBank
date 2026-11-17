@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_FULL_LL_DRIVER,USE_HAL_DRIVER,STM32G070xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G0xx/Include;../Drivers/CMSIS/Include;../APP;../APP/framework;../APP/MiaoUI;../BSP/Display;../BSP/u8g2</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G0xx/Include;../Drivers/CMSIS/Include;../APP;../APP/framework;../APP/MiaoUI;../BSP/Display;../BSP/u8g2;../BSP/I2C;../BSP/SW6306;../BSP/SC7A20;../BSP/RDA5807</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -838,7 +838,11 @@
               <FileType>1</FileType>
               <FilePath>../BSP/Display/ssd1306_display.c</FilePath>
             </File>
-          </Files>
+                    <File><FileName>bsp_i2c.c</FileName><FileType>1</FileType><FilePath>../BSP/I2C/bsp_i2c.c</FilePath></File>
+          <File><FileName>sw6306.c</FileName><FileType>1</FileType><FilePath>../BSP/SW6306/sw6306.c</FilePath></File>
+          <File><FileName>sc7a20.c</FileName><FileType>1</FileType><FilePath>../BSP/SC7A20/sc7a20.c</FilePath></File>
+          <File><FileName>rda5807m.c</FileName><FileType>1</FileType><FilePath>../BSP/RDA5807/rda5807m.c</FilePath></File>
+        </Files>
         </Group>
         <Group>
           <GroupName>BSP/u8g2</GroupName>
