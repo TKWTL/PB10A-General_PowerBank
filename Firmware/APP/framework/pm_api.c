@@ -59,11 +59,14 @@ void pm_api_poll(void)
     pm_api_init();
     if(s_key_irq)
     {
+        /* A normal RUN key must not activate the post-STOP input guard.
+         * Otherwise every navigation key is swallowed for 200 ms. */
+        uint8_t waking=(s_ctrl.state!=PM_STATE_RUN)?1u:0u;
         s_key_irq=0u;
         pm_sleep_timer_clear_force();
         s_forced=0u;
         pm_controller_refresh_idle(&s_ctrl);
-        s_wake_guard=1u;s_wake_at=HAL_GetTick();
+        if(waking){s_wake_guard=1u;s_wake_at=HAL_GetTick();}
     }
     else if(s_refresh_request && !s_forced)
     {

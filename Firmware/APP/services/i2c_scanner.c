@@ -39,7 +39,7 @@ void i2c_Scanner(ui_t *ui)
     if(ui->action==UI_ACTION_ENTER)
         scanner_reset();
     if(ui->action==UI_ACTION_UP && s_page>0u)--s_page;
-    if(ui->action==UI_ACTION_DOWN && (uint16_t)(s_page+1u)*4u<s_count)++s_page;
+    if(ui->action==UI_ACTION_DOWN && (uint16_t)(s_page+1u)*8u<s_count)++s_page;
     /* The WORD page callback must consume keys other than BACK. */
     ui->action=UI_ACTION_NONE;
     if(s_scanning)
@@ -65,7 +65,7 @@ void i2c_Scanner(ui_t *ui)
     Disp_DrawStr(75u,12u,line);
     for(row=0u;row<4u;row++)
     {
-        i=(uint8_t)(s_page*4u+row);
+        i=(uint8_t)(s_page*8u+row);
         if(i>=s_count)break;
         snprintf(line,sizeof(line),"0x%02X",s_found[i]);
         Disp_DrawStr(3u,(uint16_t)(26u+row*12u),line);
