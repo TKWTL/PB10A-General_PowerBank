@@ -1,0 +1,68 @@
+# 工程默认忽略规则(复制到新工程后按需增删)。
+
+# ---- 目录级约定:下面三处由 .gitattributes 管理,禁止在此处排除 ----
+# Images/        实物照片与测试截图       -text -diff,逐字节入库
+# Hardware/      原理图/PCB/BOM/网表      pdf、epro2 等按 binary;Preview/*.tel 是文本
+# 相关数据手册/  器件手册                 入库一次供远程 agent 查阅,发布前删除
+
+# ---- Keil MDK 构建产物 / 本地状态 ----
+# 产物目录由 uvprojx 的 OutputDirectory / ListingPath 指定
+/Firmware/MDK-ARM/Objects/
+/Firmware/MDK-ARM/Listings/
+# Keil 生成的中间文件只作用在固件树内:同名的量产固件 .hex/.bin 或 BOM 的 .lst
+# 出现在 Hardware/Manufacturing 时必须能入库,不能被全局通配吃掉。
+/Firmware/**/*.axf
+/Firmware/**/*.htm
+/Firmware/**/*.lnp
+/Firmware/**/*.dep
+/Firmware/**/*.crf
+/Firmware/**/*.iex
+/Firmware/**/*.scvd
+/Firmware/**/*.ini
+/Firmware/**/*.map
+/Firmware/**/*.lst
+/Firmware/**/*.siz
+/Firmware/**/*.su
+/Firmware/**/*.o
+/Firmware/**/*.d
+/Firmware/**/*.hex
+/Firmware/**/*.bin
+/Firmware/**/*.elf
+# Keil 的窗口布局(uvguix)与 CubeMX 工程元数据:随机器/随打开就变,不入库
+*.uvguix
+*.uvguix.*
+*.mxproject
+*.code-workspace
+# 调试器选择、Flash 下载算法、断点会话只存在 uvoptx 里,排除跟踪会导致
+# 换机器/重新 clone 后必然丢失,故 uvoptx 保持入库(按 Keil 原生序列化提交)。
+# 若下次 diff 只是窗口布局/断点变化,直接提交即可。
+
+# ---- 构建产物 ----
+/obj/
+/build/
+
+# ---- 编辑器 / 操作系统 ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
+*.bak
+
+# ---- 脚本工具本地环境 ----
+.venv/
+__pycache__/
+
+# ---- 必须保留进版本库的工程文件(防止上面的通配误伤) ----
+!*.uvprojx
+!*.uvoptx
+!*.ioc
+!*.sct
+!*.c
+!*.h
+!*.s
+!*.tel
+
+# ---- 内部调试笔记(示例:需要时取消注释并改为实际路径) ----
+# Firmware/**/debug_notes.md

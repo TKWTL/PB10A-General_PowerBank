@@ -1,0 +1,68 @@
+# 行尾策略:Git 内部统一存 LF,Windows 工具链检出时拿到 CRLF。
+* text=auto
+
+# Keil MDK 工程文件:Keil 自己写 LF,这里固定 eol=lf 把行尾钉死,
+# 否则 text=auto + core.autocrlf=true 会把它检出成 CRLF,Keil 每保存一次
+# 工作区就变回 LF,git 视作整文件修改,反复挡住 pull/rebase。
+*.uvprojx  text eol=lf
+# uvoptx 是"本机调试状态"却仍需入库(调试器选择、Flash 下载算法、断点)。
+# 它天然会在多机同步时冲突,且冲突内容没有合并意义,故挂自定义驱动:
+# 冲突时保留本地一份。驱动定义在仓库根 .gitconfig,引入方式见 Docs/GIT_WORKFLOW.md。
+*.uvoptx   text eol=lf merge=keil-uvoptx
+
+# 网表(Hardware/Preview/*.tel,Protel/Altium 文本导出)是纯文本:
+# 显式声明 text,保留行级 diff。这是 binary 通配之外的例外,不要给它加 -diff。
+*.tel  text
+
+# 二进制资产不被 Git 触碰:PDF / 图片 / 固件镜像必须逐字节保持不变。
+*.pdf  binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.bmp  binary
+*.ico  binary
+*.hex  binary
+*.bin  binary
+*.elf  binary
+*.a    binary
+*.lib  binary
+*.zip  binary
+*.xls  binary
+*.xlsx binary
+*.doc  binary
+*.docx binary
+
+# LCEDA / EasyEDA Pro 工程文件是 ZIP 容器:保持逐字节、不做文本 diff。
+*.epro2 binary
+*.epro  binary
+*.eprj binary
+
+# 交互式 BOM 导出(内嵌图片与全量位号数据,单文件可达十几 MB):
+# 按二进制处理,避免每次 status/diff 扫描整份数据。
+Hardware/Manufacturing/BOM/*.html binary
+
+# 归档与机械导出。
+*.rar  binary
+*.7z   binary
+*.tar  binary
+*.gz   binary
+*.stl  binary
+*.step binary
+*.stp  binary
+*.3mf  binary
+*.dxf  binary
+
+# Images/ 目录统一策略:目录内是实物照片/示波器截图等纯二进制资产,
+# 一律禁止行尾转换(避免 core.autocrlf 反复改写)并禁用文本 diff;
+# 目录里的说明文件仍按文本处理,改动要能在 review 里看到。
+Images/**            -text -diff
+Images/**/*.md       text diff
+Images/**/README.md  text diff
+Images/**/.gitkeep   text diff
+
+# 相关数据手册/:器件手册版权属原厂,默认只在本机保留(见 .git/info/exclude),不随仓库分发。
+# 万一被临时提交(供远程 agent 查阅),git archive 打包时由 export-ignore 剔除;
+# 发布前还须 git rm -r --cached,流程见 Docs/RELEASE.md。
+相关数据手册        export-ignore
+相关数据手册/**      export-ignore

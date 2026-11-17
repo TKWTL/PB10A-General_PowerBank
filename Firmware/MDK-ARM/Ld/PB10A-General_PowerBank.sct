@@ -1,0 +1,16 @@
+; PB10A · STM32G070KBTx：Flash 128 KiB / SRAM 36 KiB。
+; 仅末 256 B 为复位不清除区，其余 RW/ZI（含栈堆）在 RW_IRAM1。
+LR_IROM1 0x08000000 0x00020000 {
+  ER_IROM1 0x08000000 0x00020000 {
+    *.o (RESET, +First)
+    *(InRoot$$Sections)
+    .ANY (+RO)
+    .ANY (+XO)
+  }
+  RW_IRAM1 0x20000000 0x00008F00 {
+    .ANY (+RW +ZI)
+  }
+  RW_NOINIT 0x20008F00 UNINIT 0x00000100 {
+    *.o (.noinit)
+  }
+}

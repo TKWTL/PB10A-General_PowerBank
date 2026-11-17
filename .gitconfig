@@ -1,0 +1,13 @@
+# 仓库级 git 配置
+#
+# 必须一次性引入（每个 clone 都要做一次，git 无法在仓库里自动强制）：
+#     git config --local include.path ../.gitconfig
+#
+# 作用：给 Keil 工程文件挂自定义合并驱动，避免 uvoptx 在远程同步时反复冲突。
+
+[merge "keil-uvoptx"]
+	# uvoptx 里是调试器选择、Flash 下载算法、断点会话与窗口状态——都是本机状态，
+	# 冲突时保留当前分支（本地）那一份即可，对方那份丢掉不影响任何功能。
+	# driver 命令不改 %A 且退出 0，git 即认为"合并成功"，结果＝ours。
+	name = Keil uvoptx: 冲突保留本地
+	driver = true
