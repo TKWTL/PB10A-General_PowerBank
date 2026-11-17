@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_FULL_LL_DRIVER,USE_HAL_DRIVER,STM32G070xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G0xx/Include;../Drivers/CMSIS/Include;../APP;../APP/framework;../APP/MiaoUI;../BSP/Display;../ThirdParty/u8g2</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G0xx/Include;../Drivers/CMSIS/Include;../APP;../APP/framework;../APP/MiaoUI;../BSP/Display;../BSP/u8g2</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -835,7 +835,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>ThirdParty/u8g2</GroupName>
+          <GroupName>BSP/u8g2</GroupName>
           <Files>
             <File>
               <FileName>u8g2_bitmap.c</FileName>

@@ -64,3 +64,9 @@ No physical test or firmware build was conducted here. If the
 screen is blank, inspect PB2 CPEN, PA4 NSS, PA3 D/C, PA1 SCK, PA2 MOSI,
 the OLED power rail and DMA1 Channel1 interrupt before changing UI.
 The user will supply any ArmClang/Keil diagnostics.
+
+## Full-frame zero-copy SPI DMA
+
+The SSD1306 initialization sequence is unchanged (page addressing, `0x20 0x02`). On each frame the foreground service selects horizontal addressing (`0x20 0x00`), columns 0–127 and pages 0–7, then starts **one 1024-byte TX DMA** directly from `u8g2_GetBufferPtr()`. After DMA completion it restores page addressing (`0x20 0x02`). No page buffer or frame memcpy is used. The cooperative MiaoUI thread must not draw while `SSD1306_Display_FrameBusy()` is nonzero. Timeout/abort and transfer completion release the framebuffer only after safe completion or eventual recovery.
+
+u8g2 sources are under `Firmware/BSP/u8g2/`, not CubeMX-managed `ThirdParty/`.

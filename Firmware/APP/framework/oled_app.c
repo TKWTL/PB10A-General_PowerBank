@@ -25,7 +25,7 @@ THRD_DECLARE(MiaoUiThread)
     THRD_BEGIN;
     for(;;)
     {
-        if(SSD1306_Display_IsReady())
+        if(SSD1306_Display_IsReady() && !SSD1306_Display_FrameBusy())
             ui_loop(&s_ui);
         THRD_DELAY(20u);
     }
