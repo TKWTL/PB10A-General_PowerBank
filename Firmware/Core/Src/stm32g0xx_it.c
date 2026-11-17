@@ -55,11 +55,9 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
+extern DMA_HandleTypeDef hdma_adc1;
 extern I2C_HandleTypeDef hi2c1;
 extern DMA_HandleTypeDef hdma_spi1_tx;
-extern SPI_HandleTypeDef hspi1;
-extern TIM_HandleTypeDef htim7;
-
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -131,7 +129,7 @@ void SysTick_Handler(void)
   /* USER CODE BEGIN SysTick_IRQn 0 */
 
   /* USER CODE END SysTick_IRQn 0 */
-
+  HAL_IncTick();
   /* USER CODE BEGIN SysTick_IRQn 1 */
 
   /* USER CODE END SysTick_IRQn 1 */
@@ -143,6 +141,88 @@ void SysTick_Handler(void)
 /* For the available peripheral interrupt handler names,                      */
 /* please refer to the startup file (startup_stm32g0xx.s).                    */
 /******************************************************************************/
+
+/**
+  * @brief This function handles EXTI line 0 and line 1 interrupts.
+  */
+void EXTI0_1_IRQHandler(void)
+{
+  /* USER CODE BEGIN EXTI0_1_IRQn 0 */
+
+  /* USER CODE END EXTI0_1_IRQn 0 */
+  if (LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_0) != RESET)
+  {
+    LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_0);
+    /* USER CODE BEGIN LL_EXTI_LINE_0_FALLING */
+
+    /* USER CODE END LL_EXTI_LINE_0_FALLING */
+  }
+  /* USER CODE BEGIN EXTI0_1_IRQn 1 */
+
+  /* USER CODE END EXTI0_1_IRQn 1 */
+}
+
+/**
+  * @brief This function handles EXTI line 4 to 15 interrupts.
+  */
+void EXTI4_15_IRQHandler(void)
+{
+  /* USER CODE BEGIN EXTI4_15_IRQn 0 */
+
+  /* USER CODE END EXTI4_15_IRQn 0 */
+  if (LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_5) != RESET)
+  {
+    LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_5);
+    /* USER CODE BEGIN LL_EXTI_LINE_5_FALLING */
+
+    /* USER CODE END LL_EXTI_LINE_5_FALLING */
+  }
+  if (LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_6) != RESET)
+  {
+    LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_6);
+    /* USER CODE BEGIN LL_EXTI_LINE_6_FALLING */
+
+    /* USER CODE END LL_EXTI_LINE_6_FALLING */
+  }
+  if (LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_7) != RESET)
+  {
+    LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_7);
+    /* USER CODE BEGIN LL_EXTI_LINE_7_FALLING */
+
+    /* USER CODE END LL_EXTI_LINE_7_FALLING */
+  }
+  if (LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_9) != RESET)
+  {
+    LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_9);
+    /* USER CODE BEGIN LL_EXTI_LINE_9_FALLING */
+
+    /* USER CODE END LL_EXTI_LINE_9_FALLING */
+  }
+  if (LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_10) != RESET)
+  {
+    LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_10);
+    /* USER CODE BEGIN LL_EXTI_LINE_10_FALLING */
+
+    /* USER CODE END LL_EXTI_LINE_10_FALLING */
+  }
+  if (LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_12) != RESET)
+  {
+    LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_12);
+    /* USER CODE BEGIN LL_EXTI_LINE_12_FALLING */
+
+    /* USER CODE END LL_EXTI_LINE_12_FALLING */
+  }
+  if (LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_15) != RESET)
+  {
+    LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_15);
+    /* USER CODE BEGIN LL_EXTI_LINE_15_FALLING */
+
+    /* USER CODE END LL_EXTI_LINE_15_FALLING */
+  }
+  /* USER CODE BEGIN EXTI4_15_IRQn 1 */
+
+  /* USER CODE END EXTI4_15_IRQn 1 */
+}
 
 /**
   * @brief This function handles DMA1 channel 1 interrupt.
@@ -159,17 +239,17 @@ void DMA1_Channel1_IRQHandler(void)
 }
 
 /**
-  * @brief This function handles TIM7 global interrupt.
+  * @brief This function handles DMA1 channel 2 and channel 3 interrupts.
   */
-void TIM7_IRQHandler(void)
+void DMA1_Channel2_3_IRQHandler(void)
 {
-  /* USER CODE BEGIN TIM7_IRQn 0 */
+  /* USER CODE BEGIN DMA1_Channel2_3_IRQn 0 */
 
-  /* USER CODE END TIM7_IRQn 0 */
-  HAL_TIM_IRQHandler(&htim7);
-  /* USER CODE BEGIN TIM7_IRQn 1 */
+  /* USER CODE END DMA1_Channel2_3_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_adc1);
+  /* USER CODE BEGIN DMA1_Channel2_3_IRQn 1 */
 
-  /* USER CODE END TIM7_IRQn 1 */
+  /* USER CODE END DMA1_Channel2_3_IRQn 1 */
 }
 
 /**
@@ -191,20 +271,6 @@ void I2C1_IRQHandler(void)
   /* USER CODE BEGIN I2C1_IRQn 1 */
 
   /* USER CODE END I2C1_IRQn 1 */
-}
-
-/**
-  * @brief This function handles SPI1 global interrupt.
-  */
-void SPI1_IRQHandler(void)
-{
-  /* USER CODE BEGIN SPI1_IRQn 0 */
-
-  /* USER CODE END SPI1_IRQn 0 */
-  HAL_SPI_IRQHandler(&hspi1);
-  /* USER CODE BEGIN SPI1_IRQn 1 */
-
-  /* USER CODE END SPI1_IRQn 1 */
 }
 
 /* USER CODE BEGIN 1 */
