@@ -8,6 +8,7 @@
 #include "time_service.h"
 
 static ui_t s_ui;
+static uint32_t s_last_time_update_ms;
 static coro_scheduler_t s_scheduler;
 static coro_pt_t s_states[3];
 
@@ -28,7 +29,18 @@ THRD_DECLARE(MiaoUiThread)
     for(;;)
     {
         if(SSD1306_Display_IsReady() && !SSD1306_Display_FrameBusy() && !pm_api_ui_should_block())
+        {
+            /* Live RTC display/edit fields, but never overwrite a currently
+             * edited field with an asynchronous RTC read. */
+            if((uint32_t)(HAL_GetTick()-s_last_time_update_ms)>=1000u &&
+               s_ui.menuState!=UI_ITEM_RUNING &&
+               s_ui.menuState!=UI_ITEM_DRAWING)
+            {
+                s_last_time_update_ms=HAL_GetTick();
+                RTC_UpdateTime();
+            }
             ui_loop(&s_ui);
+        }
         THRD_DELAY(20u);
     }
     THRD_END;

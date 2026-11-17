@@ -58,7 +58,13 @@ void MX_RTC_Init(void)
   }
 
   /* USER CODE BEGIN Check_RTC_BKUP */
-
+  /* Keep user-set time across NRST/STOP and MCU software resets while
+   * the backup domain is powered. CubeMX-generated defaults below are
+   * applied only on the first initialization of a fresh backup domain. */
+  if (HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR0) == 0xB10Au)
+  {
+    return;
+  }
   /* USER CODE END Check_RTC_BKUP */
 
   /** Initialize RTC and set the Time and Date
@@ -83,7 +89,7 @@ void MX_RTC_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN RTC_Init 2 */
-
+  HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR0, 0xB10Au);
   /* USER CODE END RTC_Init 2 */
 
 }
