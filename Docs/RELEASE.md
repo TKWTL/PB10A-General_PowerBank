@@ -2,25 +2,20 @@
 
 对外发布（公开仓库、打包分发、交付）与本仓库日常开发是两件事。下面每一条都要在打 tag **之前**完成。
 
-## 1. `相关数据手册/`：默认不入库，按需临时提交
+## 1. `相关数据手册/`：只留本机，不进版本库
 
-器件手册版权属原厂，**默认只在本机保留**：`.git/info/exclude` 已把它排除，`git add -A` 不会带进提交，
-`git status` 里也看不到。目录规模基本固定（24 份，约 36.6 MB）。
+器件手册版权属原厂，**只在本机保留**：`.git/info/exclude` 已排除它，`git add -A` 不会带进提交，
+`git status` 里也看不到。目录规模固定（24 份，约 36.6 MB）。
 
-需要让远程仓库的 agent 读器件参数时，才临时提交：
+**本仓库是公开仓库**（匿名可 clone），所以手册不能进 main 的历史：
 
-```powershell
-git add -f 相关数据手册                     # -f 越过 .git/info/exclude
-git commit -m "tools: datasheets for remote agent"
-git push                                    # 慎重：一旦公开推送，历史里就永久有了
-```
+- 已实测：匿名克隆只拿到 263 个跟踪文件，`相关数据手册/` 目录、以及历史里任何指向它的对象都不存在，
+  克隆后的 `.git` 只有 1.37 MB。也就是说**别人 clone 不会同步到手册，也不会同步到任何手册历史**。
+- 已推送的历史撤不回来：`git rm` 只是新增一个删除提交，PDF 仍在历史对象里；只能
+  `git filter-repo` 重写并强推，而且 GitHub 侧对象可能仍可按 SHA 访问到。
 
-不再需要时撤销：
-
-```powershell
-git rm -r --cached 相关数据手册
-git commit -m "tools: drop datasheets"
-```
+需要让远程仓库的 agent 读器件参数时，用**独立的私有仓库**承载（例如 `TKWTL/PB10A-Datasheets`），
+把手册推那里，本仓库 README 写一句指路即可。**不要在本仓库执行 `git add -f 相关数据手册`。**
 
 三层机制，互不替代：
 
@@ -30,8 +25,8 @@ git commit -m "tools: drop datasheets"
 | `.gitattributes` 里 `相关数据手册/** export-ignore` | `git archive` 发布包自动不含该目录 | 只影响 `git archive`，不影响 `git clone` |
 | `git rm -r --cached` + 提交 | 后续提交不再包含 | **清不掉已推送的历史** |
 
-所以顺序很关键：**先确认没有把手册推到公开远程**。如果推过，删除提交无效，必须重写历史
-（`git filter-repo --path 相关数据手册 --invert-paths`）并强推，然后让所有克隆重新 clone。
+万一哪天误推了：删除提交无效，必须 `git filter-repo --path 相关数据手册 --invert-paths` 重写历史、
+强推，然后让所有克隆重新 clone。
 
 ## 2. 检查：`Images/`
 
