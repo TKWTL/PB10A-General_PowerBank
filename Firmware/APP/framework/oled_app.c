@@ -5,6 +5,7 @@
 #include "display/dispDriver.h"
 #include "ssd1306_display.h"
 #include "pm_api.h"
+#include "time_service.h"
 
 static ui_t s_ui;
 static coro_scheduler_t s_scheduler;
@@ -46,6 +47,7 @@ static const coro_thread_fn_t s_threads[] = {
 void OLED_AppInit(void)
 {
     if(!diapInit()) return;
+    RTC_UpdateTime();
     MiaoUi_Setup(&s_ui);
     pm_api_init();
     CoroOS_Init(&s_scheduler, s_threads, s_states,

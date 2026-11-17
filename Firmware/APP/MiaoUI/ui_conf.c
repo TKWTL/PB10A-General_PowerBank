@@ -3,13 +3,16 @@
 #include "core/ui.h"
 #include "display/dispDriver.h"
 #include "images/image.h"
+#include "time_service.h"
+#include "i2c_scanner.h"
 
 static ui_page_t s_root, s_display;
-static ui_item_t s_demo, s_display_item, s_back, s_about;
+static ui_item_t s_demo, s_display_item, s_back, s_about, s_scanner;
 
 void Create_Parameter(ui_t *ui)
 {
     Create_Disp_Parameters(ui);
+    Create_TimeSet_Parameters(ui);
 }
 
 void Create_Text(ui_t *ui)
@@ -42,6 +45,8 @@ void Create_MenuTree(ui_t *ui)
     AddPage("[Display]", &s_display, UI_PAGE_TEXT, &s_root);
     AddItem("[Return]", UI_ITEM_RETURN, 0, &s_back, &s_display, &s_root, 0);
     Add_Disp_Items(&s_display);
+    Add_TimeSet_Items(&s_root);
+    AddItem("-I2C Scanner",UI_ITEM_WORD,img_statistics,&s_scanner,&s_root,0,i2c_Scanner);
     AddItem("-About", UI_ITEM_WORD, img_user_account, &s_about, &s_root, 0, 0);
 }
 
