@@ -61,8 +61,8 @@ Images/**/*.md       text diff
 Images/**/README.md  text diff
 Images/**/.gitkeep   text diff
 
-# 相关数据手册/:器件手册版权属原厂,默认只在本机保留(见 .git/info/exclude),不随仓库分发。
-# 万一被临时提交(供远程 agent 查阅),git archive 打包时由 export-ignore 剔除;
-# 发布前还须 git rm -r --cached,流程见 Docs/RELEASE.md。
+# 相关数据手册/:器件手册版权属原厂,只供本工程与远程 agent 查阅,不随发布分发。
+# 已入库;发布前必须 git filter-repo 重写历史移除,仅删文件不够(见 Docs/RELEASE.md)。
+# export-ignore 是兜底:git archive 打出的发布包不含该目录。
 相关数据手册        export-ignore
 相关数据手册/**      export-ignore

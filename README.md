@@ -27,7 +27,7 @@
 | `Docs/` | 实验报告、协议与接口说明、测量原始数据 |
 | `Hardware/` | 原理图、PCB、BOM、结构件 |
 | `Images/` | `Assembly/` 装配、`Product/` 成品、`Testing/` 测试波形与截图 |
-| `相关数据手册/` | 关键器件数据手册，按器件类别分目录；**默认只在本机保留、不进版本库**（版权属原厂），需要远程 agent 查阅时临时提交，见 `Docs/RELEASE.md` |
+| `相关数据手册/` | 关键器件数据手册，按器件类别分目录；已入库供远程 agent 查阅，版权属原厂，发布前须从历史移除（见 `Docs/RELEASE.md`） |
 
 分层依赖方向固定为 `APP → BSP → Peripheral → Core/Drivers`，即下层不得反向引用上层，`Core`、`Drivers` 不得包含任何业务头文件。
 
