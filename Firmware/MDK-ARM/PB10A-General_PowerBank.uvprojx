@@ -777,7 +777,13 @@
               <FileType>1</FileType>
               <FilePath>../APP/framework/oled_app.c</FilePath>
             </File>
-          </Files>
+                    <File><FileName>pm_api.c</FileName><FileType>1</FileType><FilePath>../APP/framework/pm_api.c</FilePath></File>
+          <File><FileName>pm_controller.c</FileName><FileType>1</FileType><FilePath>../APP/framework/pm_controller.c</FilePath></File>
+          <File><FileName>pm_device.c</FileName><FileType>1</FileType><FilePath>../APP/framework/pm_device.c</FilePath></File>
+          <File><FileName>pm_device_builtin.c</FileName><FileType>1</FileType><FilePath>../APP/framework/pm_device_builtin.c</FilePath></File>
+          <File><FileName>pm_policy.c</FileName><FileType>1</FileType><FilePath>../APP/framework/pm_policy.c</FilePath></File>
+          <File><FileName>pm_sleep_timer.c</FileName><FileType>1</FileType><FilePath>../APP/framework/pm_sleep_timer.c</FilePath></File>
+        </Files>
         </Group>
         <Group>
           <GroupName>Application/MiaoUI</GroupName>

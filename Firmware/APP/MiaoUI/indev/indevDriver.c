@@ -4,6 +4,7 @@
  */
 #include "indev/indevDriver.h"
 #include "main.h"
+#include "pm_api.h"
 
 enum {
     KEY_UP_BIT    = 1u << 0,
@@ -43,6 +44,8 @@ UI_ACTION indevScan(void)
 
     pressed = (uint8_t)(raw & (uint8_t)~stable);
     stable = raw;
+    if(pressed)pm_api_refresh_idle();
+    if(pm_api_is_unstable_wake())return UI_ACTION_NONE;
     if(pressed & KEY_CONF_BIT) return UI_ACTION_ENTER;
     if(pressed & KEY_LEFT_BIT) return UI_ACTION_BACK;
     if(pressed & KEY_RIGHT_BIT) return UI_ACTION_ENTER;

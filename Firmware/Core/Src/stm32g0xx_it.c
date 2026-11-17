@@ -22,6 +22,7 @@
 #include "stm32g0xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "pm_api.h"
 #include "spi.h"
 /* USER CODE END Includes */
 
@@ -169,7 +170,13 @@ void EXTI0_1_IRQHandler(void)
 void EXTI4_15_IRQHandler(void)
 {
   /* USER CODE BEGIN EXTI4_15_IRQn 0 */
-
+  /* Snapshot key edges before CubeMX clears their EXTI flags. */
+  if(LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_6) ||
+     LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_9) ||
+     LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_10) ||
+     LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_12) ||
+     LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_15))
+      pm_api_on_key_irq();
   /* USER CODE END EXTI4_15_IRQn 0 */
   if (LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_5) != RESET)
   {
