@@ -119,8 +119,8 @@ extern "C" {
                                 func(__VA_ARGS__)
     #define SW6306_FUNC_BEGIN   {}
     #define SW6306_FUNC_END     {}
-    #define SW6306_MUTEX_TAKE ((void)0) /* single-threaded HAL I2C */
-    #define SW6306_MUTEX_GIVE ((void)0)
+    #define SW6306_MUTEX_TAKE   ((void)I2C_TransactionBegin()) /* whole operation */
+    #define SW6306_MUTEX_GIVE   I2C_TransactionEnd()
 #endif    
         
 struct SW6306_StatusTypedef

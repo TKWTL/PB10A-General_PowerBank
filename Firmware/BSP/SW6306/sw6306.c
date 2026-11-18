@@ -78,6 +78,7 @@ SW6306_RET SW6306_BytesRead(SW6306_ARGS(uint16_t reg, uint8_t *pdata, uint16_t l
 SW6306_RET SW6306_RegsetSwitch(SW6306_ARGS(uint16_t regset))
 {
     SW6306_FUNC_BEGIN;
+    SW6306_MUTEX_TAKE;
     SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_REV, SW6306_Status.sendbuf);
     if(regset > 0xFFU)
     {
@@ -99,6 +100,7 @@ SW6306_RET SW6306_RegsetSwitch(SW6306_ARGS(uint16_t regset))
 #endif
         }
     }
+    SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
 
@@ -109,9 +111,11 @@ SW6306_RET SW6306_RegsetSwitch(SW6306_ARGS(uint16_t regset))
 SW6306_RET SW6306_ByteModify(SW6306_ARGS(uint16_t reg, uint8_t mask, uint8_t data))
 {
     SW6306_FUNC_BEGIN;
+    SW6306_MUTEX_TAKE;
     SW6306_SPAWN_ARGS(SW6306_ByteRead, reg, SW6306_Status.sendbuf);
     SW6306_Status.sendbuf[0] = (SW6306_Status.sendbuf[0] &(~mask)) | (data & mask);
     SW6306_SPAWN_ARGS(SW6306_ByteWrite, reg, SW6306_Status.sendbuf[0]);
+    SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
 

@@ -10,6 +10,7 @@ extern "C" {
 #endif
 
 /*
+ * Inspired by Adam Dunkels' Protothreads (stackless cooperative threads).
  * Tiny cooperative scheduler derived from the Protothreads/coroOS model used
  * in TKWTL/3S1P-21700-Power-Bank.
  *

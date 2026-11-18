@@ -337,7 +337,7 @@
               <MiscControls />
               <Define>USE_FULL_LL_DRIVER,USE_HAL_DRIVER,STM32G070xx</Define>
               <Undefine />
-              <IncludePath>../Core/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G0xx/Include;../Drivers/CMSIS/Include;../APP;../APP/framework;../APP/services;../APP/functions;../APP/MiaoUI;../BSP/Display;../BSP/Time;../BSP/u8g2;../BSP/I2C;../BSP/SW6306;../BSP/SC7A20;../BSP/RDA5807</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G0xx/Include;../Drivers/CMSIS/Include;../APP;../Scheduler;../APP/framework;../APP/services;../APP/functions;../APP/MiaoUI;../BSP/Display;../BSP/Time;../BSP/u8g2;../BSP/I2C;../BSP/SW6306;../BSP/SC7A20;../BSP/RDA5807;../BSP/BMP180;../BSP/MMC5603</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -743,12 +743,12 @@
             <File>
               <FileName>coroOS.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../APP/framework/coroOS.c</FilePath>
+              <FilePath>../Scheduler/coroOS.c</FilePath>
             </File>
             <File>
-              <FileName>oled_app.c</FileName>
+              <FileName>app_task.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../APP/framework/oled_app.c</FilePath>
+              <FilePath>../APP/app_task.c</FilePath>
             </File>
             <File>
               <FileName>pm_api.c</FileName>
@@ -790,6 +790,13 @@
               <FileType>1</FileType>
               <FilePath>../APP/functions/i2c_scanner.c</FilePath>
             </File>
+                      <File><FileName>i18n.c</FileName><FileType>1</FileType><FilePath>../APP/i18n.c</FilePath></File>
+            <File><FileName>beep_algo.c</FileName><FileType>1</FileType><FilePath>../APP/services/beep_algo.c</FilePath></File>
+            <File><FileName>beep_hw.c</FileName><FileType>1</FileType><FilePath>../APP/services/beep_hw.c</FilePath></File>
+            <File><FileName>system_algo.c</FileName><FileType>1</FileType><FilePath>../APP/services/system_algo.c</FilePath></File>
+            <File><FileName>time_algo.c</FileName><FileType>1</FileType><FilePath>../APP/services/time_algo.c</FilePath></File>
+            <File><FileName>powerbank_app.c</FileName><FileType>1</FileType><FilePath>../APP/functions/powerbank_app.c</FilePath></File>
+            <File><FileName>radio_app.c</FileName><FileType>1</FileType><FilePath>../APP/functions/radio_app.c</FilePath></File>
           </Files>
         </Group>
         <Group>
@@ -870,6 +877,8 @@
               <FileType>1</FileType>
               <FilePath>../BSP/Time/millis.c</FilePath>
             </File>
+                      <File><FileName>bmp180.c</FileName><FileType>1</FileType><FilePath>../BSP/BMP180/bmp180.c</FilePath></File>
+            <File><FileName>mmc5603.c</FileName><FileType>1</FileType><FilePath>../BSP/MMC5603/mmc5603.c</FilePath></File>
           </Files>
         </Group>
         <Group>

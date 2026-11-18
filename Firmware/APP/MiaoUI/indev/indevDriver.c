@@ -6,6 +6,7 @@
 #include "main.h"
 #include "millis.h"
 #include "pm_api.h"
+#include "beep_algo.h"
 
 enum {
     KEY_UP_BIT    = 1u << 0,
@@ -47,6 +48,7 @@ UI_ACTION indevScan(void)
     stable = raw;
     if(pressed)pm_api_refresh_idle();
     if(pm_api_is_unstable_wake())return UI_ACTION_NONE;
+    if(pressed)beep_key_click();
     if(pressed & KEY_CONF_BIT) return UI_ACTION_ENTER;
     if(pressed & KEY_LEFT_BIT) return UI_ACTION_BACK;
     if(pressed & KEY_RIGHT_BIT) return UI_ACTION_ENTER;

@@ -1,5 +1,5 @@
 /* PB10A minimal OLED bring-up: coroOS drives asynchronous SPI DMA and MiaoUI. */
-#include "oled_app.h"
+#include "app_task.h"
 #include "coroOS.h"
 #include "core/ui.h"
 #include "display/dispDriver.h"
@@ -7,11 +7,14 @@
 #include "pm_api.h"
 #include "millis.h"
 #include "time_service.h"
+#include "time_algo.h"
+#include "beep_algo.h"
+#include "system_algo.h"
 
 static ui_t s_ui;
 static uint32_t s_last_time_update_ms;
 static coro_scheduler_t s_scheduler;
-static coro_pt_t s_states[3];
+static coro_pt_t s_states[4];
 
 THRD_DECLARE(OledServiceThread)
 {
@@ -38,7 +41,9 @@ THRD_DECLARE(MiaoUiThread)
                s_ui.menuState!=UI_ITEM_DRAWING)
             {
                 s_last_time_update_ms=Millis();
-                RTC_UpdateTime();
+                beep_init();
+    Time_Init();
+    RTC_UpdateTime();
             }
             ui_loop(&s_ui);
         }
@@ -53,11 +58,22 @@ THRD_DECLARE(PowerManagerThread)
     for(;;){pm_api_poll();THRD_DELAY(50u);}
     THRD_END;
 }
+THRD_DECLARE(SystemServiceThread)
+{
+    THRD_BEGIN;
+    for(;;)
+    {
+        beep_poll(Millis());
+        System_Poll();
+        THRD_DELAY(1u);
+    }
+    THRD_END;
+}
 static const coro_thread_fn_t s_threads[] = {
-    OledServiceThread, MiaoUiThread, PowerManagerThread
+    OledServiceThread, MiaoUiThread, PowerManagerThread, SystemServiceThread
 };
 
-void OLED_AppInit(void)
+void APP_TaskInit(void)
 {
     if(!diapInit()) return;
     RTC_UpdateTime();
@@ -67,7 +83,7 @@ void OLED_AppInit(void)
                 (uint8_t)(sizeof(s_threads) / sizeof(s_threads[0])));
 }
 
-void OLED_AppRunOnce(void)
+void APP_TaskRunOnce(void)
 {
     CoroOS_RunOnce(&s_scheduler);
 }

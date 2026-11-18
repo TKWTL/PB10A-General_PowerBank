@@ -19,3 +19,8 @@
 ### Millisecond timebase
 
 `Time/millis.h` declares `volatile uint32_t millis`; it is incremented once per SysTick IRQ directly inside `Core/Src/stm32g0xx_it.c` USER CODE. `Millis()` returns the counter, and `Millis_Delay(ms)` provides a blocking delay without HAL_GetTick/HAL_Delay. The HAL tick is kept for HAL internal users. On STOP1 SysTick is suspended, so `millis` intentionally does not measure sleep duration; use RTC for absolute elapsed time. Use unsigned subtraction for timeout checks across counter wrap-around.
+
+
+### I2C1 shared IRQ transport
+
+`I2C_TransactionBegin()`/`I2C_TransactionEnd()` delimit the full logical operation (e.g. SW6306 register-group switch, RDA5807 initialization, BMP180 ID+calibration, MMC5603 low-power sequence). Each transfer uses `HAL_I2C_*_IT`, completed through existing `I2C1_IRQHandler()` and BSP HAL callbacks. The foreground caller blocks waiting for those interrupts, with a finite timeout and interrupt-driven abort. `I2C_IsReady` issues a zero-byte address-only interrupt-driven transmit, as supported by the bundled STM32G0 HAL implementation. Do not call from IRQ, during STOP1, or from a coroutine that expects to yield while holding a bus lock.

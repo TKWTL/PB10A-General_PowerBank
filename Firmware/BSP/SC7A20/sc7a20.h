@@ -74,8 +74,8 @@ extern "C" {
                                 func(__VA_ARGS__)
     #define SC7A20_FUNC_BEGIN   {}
     #define SC7A20_FUNC_END     {}
-    #define SC7A20_MUTEX_TAKE ((void)0) /* single-threaded HAL I2C */
-    #define SC7A20_MUTEX_GIVE ((void)0)
+    #define SC7A20_MUTEX_TAKE   ((void)I2C_TransactionBegin()) /* whole operation */
+    #define SC7A20_MUTEX_GIVE   I2C_TransactionEnd()
 #endif    
 
 /******************************对外数据类型*************************************/

@@ -106,7 +106,8 @@ uint8_t RDA5807_CheckSTC(void)
  * 说    明: 无 
  * 更新日期：2021-1-1
  ******************************************************************************/
-void RDA5807_Init(void){ 
+void RDA5807_Init(void){
+    if(I2C_TransactionBegin()!=I2C_OK)return; 
     FM_WR_Reg(RDA5807_REG02, RDA5807_REG02_SRST);    //SOFT_RESET
     Millis_Delay(50);
     FM_WR_Reg(RDA5807_REG02, Register[0]);           //Power Up，Audio Output High-Z高阻:Normal operation;不静音;
@@ -117,6 +118,7 @@ void RDA5807_Init(void){
     //FM_WR_Reg(RDA5807_REG06, Register[4]);           //OPEN_MODE[14:13]:打开保留寄存器，11:打开保留寄存器读写功能；其他: 只有读功能
     //FM_WR_Reg(RDA5807_REG07, Register[5]);           //TH_SOFRBLEND[14:10]:Threshold for noise soft blend setting；Bit9:65M_50M MODE(频段设置为11时，1=65~76MHz;0=50~76MHz)
     RDA5807_WaitForSTC();                           //等待STC标志
+    I2C_TransactionEnd();
 }
 
 /*******************************************************************************
