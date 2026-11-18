@@ -144,6 +144,7 @@ void RDA5807_SetFreq(uint16_t Frequency);
 //uint32_t RDA5807_ChanToFreq(uint16_t Chan,uint8_t Band,uint8_t Step);
 //uint32_t RDA5807_RegToFreq(uint16_t RegisterVal);
 uint16_t RDA5807_ChanToFreq(uint16_t Chan,uint8_t Band,uint8_t Step);
+uint16_t RDA5807_FreqToReg(uint16_t Frequency, uint8_t Tune);
 uint16_t RDA5807_RegToFreq(uint16_t RegisterVal);
 uint8_t RDA5807_CheckReg03(uint16_t Reg03);
 void RDA5807_Reg03Tune(uint16_t Reg03);
