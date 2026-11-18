@@ -4,11 +4,13 @@
 #include "ui_conf.h"
 #include <stdint.h>
 
-/* Sampling service for the auxiliary USB-A circuit.
- * CH0=PA0 SUB_IOUT; CH5=PA5 SUB_VOUT; both are 12-bit raw ADC.
+/* Software-triggered ADC1 scan (CH0/CH5/Temp/VREFINT), one DMA buffer per scan.
+ * The caller is a coroOS task that waits for completion and delays 500 ms.
  */
 void PowerADC_Init(void);
-void PowerADC_Poll(void);
+uint8_t PowerADC_BeginScan(void);
+uint8_t PowerADC_ScanSettled(void);
+uint8_t PowerADC_IsSuspended(void);
 void PowerADC_AddStatisticsItems(ui_page_t *page);
 
 #endif

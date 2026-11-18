@@ -55,26 +55,43 @@ drawn by the SAME Radio UI as the regular application. After that,
 ordinary MiaoUI/coroOS execution resumes. `Radio_AppRun()` remains fixed
 to seek mode. There are no audio-protection confirmation screens.
 
-The independent USB-A is enabled once by `PowerADC_Init()` and
-**PA6 SUB_EN stays high**; no timed GPIO-off step remains in hw_test.
-`APP/services/power_adc_algo.c` takes one four-rank ADC-DMA sample
-every 200 ms (PA0/CH0, PA5/CH5, MCU temperature, VREFINT). Values are
-visible under `Statistics -> Power` as PA0 raw, PA5 raw and
-estimated USB-A output millivolts. Approximation uses R39=680k over
-R41=220k from `Hardware/Preview/Netlist_主板.tel` and an assumed
-3.3 V ADC reference; verify actual USB-A output with a voltmeter.
+The independent USB-A remains enabled at PA6. The ADC driver is
+`APP/services/power_adc_algo.c`, driven **only** by a fifth coroOS thread
+(`PowerADCThread`) in `APP/app_task.c`: one software-triggered ADC1 scan
+of exactly four ranks (PA0, PA5, MCU temperature, VREFINT), DMA completion
+via IRQ, then `THRD_DELAY(500)` before repeating. The coroutine is also
+run during the initial foreground FM test. The Power page shows two raw
+feedback values and the approximate USB-A output millivolts.
 
-`ADC Err` codes shown on the Power menu:
-- 0: sampling OK;
-- 1: calibration reported failure (sampling still attempted);
-- 2: HAL ADC DMA start failed;
-- 3: conversion/DMA timeout;
-- 4: HAL ADC reported a conversion/DMA error;
-- 5: first sample pending.
+**CubeMX state on the latest main branch:** ADC1 DMA1 Channel2 is
+already `DMA_NORMAL` in both `.ioc` and the generated `adc.c`.
+Keep software trigger, four ranks, continuous ADC conversion OFF,
+DMA continuous requests OFF, 16-bit peripheral/memory alignment,
+memory increment ON and DMA1_Channel2_3 IRQ enabled. No additional
+CubeMX changes are required.
 
-The previous "ADC init failed" screen combined calibration and DMA
-start failures; it did not prove which step failed. The new service
-reports them separately without claiming to fix a low USB-A voltage.
+`ADC Err` values in Statistics -> Power:
+- 0 = four-rank scan succeeded;
+- 1 = one-time ADC calibration returned error;
+- 2 = `HAL_ADC_Start_DMA` failed;
+- 3 = 50 ms completion timeout;
+- 4 = ADC/DMA error callback (or stop failure after completion);
+- 5 = first scan pending.
+
+`ADC HAL` shows `HAL_ADC_GetError()`, `DMA HAL` shows
+`HAL_DMA_GetError()`. For example, STM32 HAL's
+`HAL_ADC_ERROR_DMA = 0x04` and `HAL_DMA_ERROR_TE = 0x01`.
+The previous ADC Err=4 was only an application status, not proof of its
+underlying HAL error bits.
+
+Sampling continues in RUN and UI_OFF. The ADC device node suspends
+an active DMA scan when PM enters STOP1 preparation (before the platform
+clock/tick node), and resumes after STOP clock restoration. PA6 is not
+changed by STOP hooks. The sampling cadence restarts after wake; it is
+not a hardware-triggered timer or continuous ADC mode.
+
+`Vout~ mV` uses an assumed 3.3V analog reference and the netlist's
+R39=680k / R41=220k divider; confirm voltage with a multimeter.
 
 The seven home tiles now use Collar-Radio 30x30 XBM assets appropriate to
 their categories. Powerbank has a custom 30x30 battery/bolt XBM icon;

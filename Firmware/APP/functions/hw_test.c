@@ -4,7 +4,6 @@
  */
 #include "hw_test.h"
 #include "radio_app.h"
-#include "power_adc_algo.h"
 #include "ssd1306_display.h"
 #include "millis.h"
 
@@ -23,7 +22,6 @@ void HW_TestPoll(ui_t *ui)
     uint32_t now=Millis();
     if(!s_active)return;
     SSD1306_Display_Service();
-    PowerADC_Poll();
     Radio_AppPoll();
     if(SSD1306_Display_IsReady() && !SSD1306_Display_FrameBusy())
         Radio_AppDraw(ui);

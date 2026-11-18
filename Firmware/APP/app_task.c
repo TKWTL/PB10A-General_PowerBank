@@ -17,7 +17,7 @@
 static ui_t s_ui;
 static uint32_t s_last_time_update_ms;
 static coro_scheduler_t s_scheduler;
-static coro_pt_t s_states[4];
+static coro_pt_t s_states[5];
 
 THRD_DECLARE(OledServiceThread)
 {
@@ -66,13 +66,31 @@ THRD_DECLARE(SystemServiceThread)
     {
         beep_poll(Millis());
         System_Poll();
-        PowerADC_Poll();
         THRD_DELAY(1u);
     }
     THRD_END;
 }
+/* Exactly one four-rank ADC1 scan per coroutine iteration. The ADC/DMA
+ * IRQ signals completion while the coroutine yields to all other threads.
+ * The 500ms delay runs regardless of success or failure, and also when the
+ * display is off. Only a pending STOP1 suspends the ADC via the PM hook. */
+THRD_DECLARE(PowerADCThread)
+{
+    THRD_BEGIN;
+    for(;;)
+    {
+        if(!PowerADC_IsSuspended())
+        {
+            (void)PowerADC_BeginScan();
+            THRD_UNTIL(PowerADC_ScanSettled());
+        }
+        THRD_DELAY(500u);
+    }
+    THRD_END;
+}
 static const coro_thread_fn_t s_threads[] = {
-    OledServiceThread, MiaoUiThread, PowerManagerThread, SystemServiceThread
+    OledServiceThread, MiaoUiThread, PowerManagerThread,
+    SystemServiceThread, PowerADCThread
 };
 
 void APP_TaskInit(void)
@@ -83,7 +101,7 @@ void APP_TaskInit(void)
     /* PB02B SC7A20 initialization: WHO_AM_I + 25Hz/2g/BDU/HR.
      * PB10A INT is on PB5, independent from SW6306; no IRQ sharing. */
     SC7A20_Init();
-    PowerADC_Init(); /* PA6 stays on; 200ms ADC scans run in services. */
+    PowerADC_Init(); /* PA6 stays on; 500ms one-shot ADC scan coroutine. */
     RTC_UpdateTime();
     MiaoUi_Setup(&s_ui);
     pm_api_init();
@@ -99,6 +117,9 @@ void APP_TaskRunOnce(void)
 #if PB10A_HW_TEST_AUTORUN
     if(HW_TestActive())
     {
+        /* Normal scheduler is paused for initial FM foreground: run the
+         * very same ADC coroutine state explicitly, not a second sampler. */
+        (void)PowerADCThread(&s_states[4]);
         HW_TestPoll(&s_ui);
         return; /* Temporarily show only original FM seek screen at boot. */
     }
