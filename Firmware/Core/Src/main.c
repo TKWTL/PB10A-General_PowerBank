@@ -134,15 +134,9 @@ void SystemClock_Config(void)
   {
   }
 
-  /* LSI configuration and activation */
-  LL_RCC_LSI_Enable();
-  while(LL_RCC_LSI_IsReady() != 1)
-  {
-  }
-
   LL_PWR_EnableBkUpAccess();
   /* LSE configuration and activation */
-  LL_RCC_LSE_SetDriveCapability(LL_RCC_LSEDRIVE_HIGH);
+  LL_RCC_LSE_SetDriveCapability(LL_RCC_LSEDRIVE_LOW);
   LL_RCC_LSE_Enable();
   while(LL_RCC_LSE_IsReady() != 1)
   {
