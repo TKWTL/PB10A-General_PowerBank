@@ -533,9 +533,9 @@ SC7A20_RET SC7A20_Init(SC7A20_NOARG)
     SC7A20_SPAWN_ARGS(SC7A20_ByteRead, SC7A20_STRG_WHO_AM_I, SC7A20_Status.sendbuf);
     if(SC7A20_Status.sendbuf[0] == SC7A20_WHO_AM_I_VALUE)
     {
-        //① 修正INT极性：H_LACTIVE=1（低有效），无事件时INT1输出高电平。
-        //   上电默认H_LACTIVE=0（高有效）且INT1推挽输出，无事件时主动拉低，
-        //   与SW6306 IRQ共用EXINT8(GPIOB8)时会掩盖SW6306的低电平唤醒脉冲。
+        //① PB10A: configure INT output active-low for PB5 input.
+        //   PB10A INT (PB5) is NOT the PB02B shared SW6306/SC7A20 PB8.
+        //   Keep PB02B 25Hz/2g/BDU/HR default register initialization.
         SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL6, SC7A20_CTRL6_H_LACTIVE, SC7A20_CTRL6_H_LACTIVE);
         SC7A20_Status.ctrl6 = SC7A20_CTRL6_H_LACTIVE;
         //控制寄存器4：BDU + 量程 + 高精度（其余位保持默认）

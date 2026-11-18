@@ -13,4 +13,11 @@ extern const unsigned char img_burn_in[];
 extern const unsigned char img_sleep[];
 extern const unsigned char img_dino[];
 extern const unsigned char img_statistics[];
+extern const unsigned char img_radio[];
+extern const unsigned char img_games[];
+extern const unsigned char img_tools[];
+extern const unsigned char img_scan[];
+extern const unsigned char img_dinosuar[];
+extern const unsigned char img_screen[];
+extern const unsigned char img_powerbank[];
 #endif

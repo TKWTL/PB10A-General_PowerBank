@@ -10,6 +10,8 @@
 #include "time_algo.h"
 #include "beep_algo.h"
 #include "system_algo.h"
+#include "sc7a20.h"
+#include "hw_test.h"
 
 static ui_t s_ui;
 static uint32_t s_last_time_update_ms;
@@ -41,9 +43,7 @@ THRD_DECLARE(MiaoUiThread)
                s_ui.menuState!=UI_ITEM_DRAWING)
             {
                 s_last_time_update_ms=Millis();
-                beep_init();
-    Time_Init();
-    RTC_UpdateTime();
+                RTC_UpdateTime();
             }
             ui_loop(&s_ui);
         }
@@ -76,14 +76,29 @@ static const coro_thread_fn_t s_threads[] = {
 void APP_TaskInit(void)
 {
     if(!diapInit()) return;
+    beep_init(); /* one-shot hardware/queue init */
+    Time_Init(); /* one-shot uptime baseline */
+    /* PB02B SC7A20 initialization: WHO_AM_I + 25Hz/2g/BDU/HR.
+     * PB10A INT is on PB5, independent from SW6306; no IRQ sharing. */
+    SC7A20_Init();
     RTC_UpdateTime();
     MiaoUi_Setup(&s_ui);
     pm_api_init();
     CoroOS_Init(&s_scheduler, s_threads, s_states,
                 (uint8_t)(sizeof(s_threads) / sizeof(s_threads[0])));
+#if PB10A_HW_TEST_AUTORUN
+    HW_TestInit();
+#endif
 }
 
 void APP_TaskRunOnce(void)
 {
+#if PB10A_HW_TEST_AUTORUN
+    if(HW_TestActive())
+    {
+        HW_TestPoll();
+        return; /* Keep normal UI/coroOS paused during three hardware checks. */
+    }
+#endif
     CoroOS_RunOnce(&s_scheduler);
 }

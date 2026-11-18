@@ -43,3 +43,35 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 ### Seven icon entries
 
 Powerbank (app), Radio (app), Settings (TEXT: Display/Time/System), Statistics (TEXT: Power/Battery/Sensors), Game (ICON), Tools (ICON), About (WORD). Empty/statistics/game items are placeholders and not hardware telemetry.
+
+### Temporary three-stage board test (2026-11)
+
+`APP/functions/hw_test.h` currently sets `PB10A_HW_TEST_AUTORUN=1`.
+On each boot, after the normal CubeMX peripheral initialization and the
+one-shot `beep_init()`, `Time_Init()`, `SC7A20_Init()`, it runs:
+
+1. **USB-A**: PA6 SUB_EN high for 8 s; the screen displays raw 12-bit
+   PA0/ADC_CH0 and PA5/ADC_CH5 samples from the existing 4-channel ADC-DMA
+   configuration. Connect only a small known-safe load; use a meter at USB-A
+   to establish actual 5 V. These raw ADC counts alone do not constitute a
+   calibrated pass. PA6 is reset low after the window.
+2. **Buzzer**: PB1/TIM3_CH4, PSC=63, ARR=499 -> 2 kHz / 50% duty,
+   for 500 ms. Listen for audible output; firmware cannot detect sound.
+3. **Radio**: start RDA5807, initial tune at 87.0 MHz, then seek upward
+   once. Leave audio **hardware-muted**, regardless of volume register:
+   PB10A testing found even VOL=0 may be uncomfortably loud. After the
+   timer expires the normal MiaoUI menu appears; enter Radio and press
+   ENTER only when headphone level is safe to deliberately toggle DMUTE.
+
+After completing board checks, set `PB10A_HW_TEST_AUTORUN=0` to disable
+all three automatic tests without touching the regular application.
+
+The seven home tiles now use Collar-Radio 30x30 XBM assets appropriate to
+their categories. Powerbank has a custom 30x30 battery/bolt XBM icon;
+the Radio page includes the Spleen-based 24px font from Collar-Radio.
+The original shared 12px fusion-pixel menu font remains in place.
+
+`SC7A20_Init()` runs once in `APP_TaskInit()`; its PB02B 25 Hz, ±2 g,
+high-resolution BDU setup is unchanged. The PB10A sensor interrupt is PB5,
+not PB02B's PB8 shared interrupt. The experimental temperature-ADC
+compatibility register is not yet board-verified.
