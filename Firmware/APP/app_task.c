@@ -1,4 +1,4 @@
-/* PB10A minimal OLED bring-up: coroOS drives asynchronous SPI DMA and MiaoUI. */
+/* PB10A task table: MiaoUI, OLED DMA, PM and shared services. */
 #include "app_task.h"
 #include "coroOS.h"
 #include "core/ui.h"
@@ -12,6 +12,7 @@
 #include "system_algo.h"
 #include "sc7a20.h"
 #include "hw_test.h"
+#include "power_adc_algo.h"
 
 static ui_t s_ui;
 static uint32_t s_last_time_update_ms;
@@ -65,6 +66,7 @@ THRD_DECLARE(SystemServiceThread)
     {
         beep_poll(Millis());
         System_Poll();
+        PowerADC_Poll();
         THRD_DELAY(1u);
     }
     THRD_END;
@@ -81,6 +83,7 @@ void APP_TaskInit(void)
     /* PB02B SC7A20 initialization: WHO_AM_I + 25Hz/2g/BDU/HR.
      * PB10A INT is on PB5, independent from SW6306; no IRQ sharing. */
     SC7A20_Init();
+    PowerADC_Init(); /* PA6 stays on; 200ms ADC scans run in services. */
     RTC_UpdateTime();
     MiaoUi_Setup(&s_ui);
     pm_api_init();
@@ -96,8 +99,8 @@ void APP_TaskRunOnce(void)
 #if PB10A_HW_TEST_AUTORUN
     if(HW_TestActive())
     {
-        HW_TestPoll();
-        return; /* Keep normal UI/coroOS paused during three hardware checks. */
+        HW_TestPoll(&s_ui);
+        return; /* Temporarily show only original FM seek screen at boot. */
     }
 #endif
     CoroOS_RunOnce(&s_scheduler);

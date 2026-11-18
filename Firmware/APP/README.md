@@ -44,32 +44,42 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 
 Powerbank (app), Radio (app), Settings (TEXT: Display/Time/System), Statistics (TEXT: Power/Battery/Sensors), Game (ICON), Tools (ICON), About (WORD). Empty/statistics/game items are placeholders and not hardware telemetry.
 
-### Temporary three-stage board test (2026-11)
+### Temporary board verification (2026-11)
 
-`APP/functions/hw_test.h` currently sets `PB10A_HW_TEST_AUTORUN=1`.
-On each boot, after the normal CubeMX peripheral initialization and the
-one-shot `beep_init()`, `Time_Init()`, `SC7A20_Init()`, it runs:
+Buzzer PB1/TIM3_CH4 has passed the 2 kHz / 0.5 s hardware check and is
+not repeated during automatic startup.
 
-1. **USB-A**: PA6 SUB_EN high for 8 s; the screen displays raw 12-bit
-   PA0/ADC_CH0 and PA5/ADC_CH5 samples from the existing 4-channel ADC-DMA
-   configuration. Connect only a small known-safe load; use a meter at USB-A
-   to establish actual 5 V. These raw ADC counts alone do not constitute a
-   calibrated pass. PA6 is reset low after the window.
-2. **Buzzer**: PB1/TIM3_CH4, PSC=63, ARR=499 -> 2 kHz / 50% duty,
-   for 500 ms. Listen for audible output; firmware cannot detect sound.
-3. **Radio**: start RDA5807, initially tune to 87.0 MHz, then seek
-   upward once using the existing RDA5807 audio setup. The menu remains
-   in fixed search mode: UP/DOWN search, BACK exits. No audio-protection
-   confirmation, forced mute, or extra settings have been added. On this
-   board the 0 volume-register setting can still sound loud through headphones.
+`APP/functions/hw_test.h` keeps `PB10A_HW_TEST_AUTORUN=1`: the
+only temporary foreground sequence is RDA5807 automatic FM seek for at least 7 s (until seeking completes),
+drawn by the SAME Radio UI as the regular application. After that,
+ordinary MiaoUI/coroOS execution resumes. `Radio_AppRun()` remains fixed
+to seek mode. There are no audio-protection confirmation screens.
 
+The independent USB-A is enabled once by `PowerADC_Init()` and
+**PA6 SUB_EN stays high**; no timed GPIO-off step remains in hw_test.
+`APP/services/power_adc_algo.c` takes one four-rank ADC-DMA sample
+every 200 ms (PA0/CH0, PA5/CH5, MCU temperature, VREFINT). Values are
+visible under `Statistics -> Power` as PA0 raw, PA5 raw and
+estimated USB-A output millivolts. Approximation uses R39=680k over
+R41=220k from `Hardware/Preview/Netlist_主板.tel` and an assumed
+3.3 V ADC reference; verify actual USB-A output with a voltmeter.
 
-After completing board checks, set `PB10A_HW_TEST_AUTORUN=0` to disable
-all three automatic tests without touching the regular application.
+`ADC Err` codes shown on the Power menu:
+- 0: sampling OK;
+- 1: calibration reported failure (sampling still attempted);
+- 2: HAL ADC DMA start failed;
+- 3: conversion/DMA timeout;
+- 4: HAL ADC reported a conversion/DMA error;
+- 5: first sample pending.
+
+The previous "ADC init failed" screen combined calibration and DMA
+start failures; it did not prove which step failed. The new service
+reports them separately without claiming to fix a low USB-A voltage.
 
 The seven home tiles now use Collar-Radio 30x30 XBM assets appropriate to
 their categories. Powerbank has a custom 30x30 battery/bolt XBM icon;
-the Radio page includes the Spleen-based 24px font from Collar-Radio.
+the Radio page restores the original Collar-Radio 12px/24px fonts,
+status XBM icons, FM dial, discovered-station markers and RTC footer.
 The original shared 12px fusion-pixel menu font remains in place.
 
 `SC7A20_Init()` runs once in `APP_TaskInit()`; its PB02B 25 Hz, ±2 g,

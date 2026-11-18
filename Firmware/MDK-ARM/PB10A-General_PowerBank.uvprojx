@@ -798,6 +798,7 @@
             <File><FileName>powerbank_app.c</FileName><FileType>1</FileType><FilePath>../APP/functions/powerbank_app.c</FilePath></File>
             <File><FileName>radio_app.c</FileName><FileType>1</FileType><FilePath>../APP/functions/radio_app.c</FilePath></File>
           <File><FileName>hw_test.c</FileName><FileType>1</FileType><FilePath>../APP/functions/hw_test.c</FilePath></File>
+          <File><FileName>power_adc_algo.c</FileName><FileType>1</FileType><FilePath>../APP/services/power_adc_algo.c</FilePath></File>
           </Files>
         </Group>
         <Group>
@@ -844,6 +845,7 @@
               <FilePath>../APP/MiaoUI/fonts/font_fusion_pixel_p12_zhcn.c</FilePath>
             </File>
           <File><FileName>font_radio_h24w12.c</FileName><FileType>1</FileType><FilePath>../APP/MiaoUI/fonts/font_radio_h24w12.c</FilePath></File>
+          <File><FileName>font_radio_h12w6.c</FileName><FileType>1</FileType><FilePath>../APP/MiaoUI/fonts/font_radio_h12w6.c</FilePath></File>
           </Files>
         </Group>
         <Group>

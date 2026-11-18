@@ -8,6 +8,7 @@
 #include "powerbank_app.h"
 #include "radio_app.h"
 #include "system_algo.h"
+#include "power_adc_algo.h"
 static ui_page_t s_home,s_settings,s_stats,s_game,s_tools,s_display;
 static ui_page_t s_sys,s_stat_power,s_stat_battery,s_stat_sensors;
 static ui_item_t s_powerbank,s_radio,s_settings_item,s_stats_item,s_game_item,s_tools_item,s_about;
@@ -76,6 +77,7 @@ void Create_MenuTree(ui_t *ui)
     AddItem(" Sensors",UI_ITEM_PARENTS,0,&s_stat_sensors_item,&s_stats,&s_stat_sensors,0);
     AddPage("[Power]",&s_stat_power,UI_PAGE_TEXT,&s_stats);
     add_return(&s_stat_power,&s_stats,&s_stat_power_back,0);
+    PowerADC_AddStatisticsItems(&s_stat_power);
     System_AddStatisticsItems(&s_stat_power);
     AddPage("[Battery]",&s_stat_battery,UI_PAGE_TEXT,&s_stats);
     add_return(&s_stat_battery,&s_stats,&s_stat_battery_back,0);
