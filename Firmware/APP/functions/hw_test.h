@@ -4,8 +4,7 @@
 
 /* TEMPORARY board bring-up, then change to 0:
  * 1: on boot automatically check auxiliary USB-A -> PB1 buzzer -> FM seek.
- * FM is ALWAYS MUTED at startup because VOL=0 is loud on this board.
- * Audio is manually enabled using ENTER inside Radio after tests.
+ * FM runs with the original RDA5807 audio behavior; no extra audio gates.
  */
 #define PB10A_HW_TEST_AUTORUN 1u
 #define PB10A_HW_TEST_FM 1u

@@ -1,8 +1,8 @@
 /* PB10A temporary automatic smoke test. Only three checks:
  * 1. PA6 SUB_EN: enable USB-A and sample PA0, PA5 ADC raw counts.
  * 2. PB1 TIM3_CH4: 2 kHz PWM for 500 ms, listen for a beep.
- * 3. RDA5807: auto-seek once, intentionally MUTED until user presses ENTER
- *    in the Radio application (VOL=0 does not silence the headphones).
+ * 3. RDA5807: auto-seek once using original radio audio configuration.
+ *    No added mute/confirmation behavior; volume register starts at 0.
  *
  * No high-current USB load, charging protocol or full FM menu tests.
  * OLED is used for result observation, not for claiming measured PASS.
@@ -56,7 +56,7 @@ static void draw_status(void)
     {
         Disp_DrawStr(0u,29u,"3 FM: auto seek");
         Disp_DrawStr(0u,45u,Radio_AppIsSearching()?"Seeking...":"Scanning status");
-        Disp_DrawStr(0u,61u,"Audio MUTED");
+        Disp_DrawStr(0u,61u,"FM auto tune");
     }
     Disp_SendBuffer();
 }
@@ -101,7 +101,7 @@ void HW_TestPoll(void)
             if(s_beep_on)beep_hw_stop();
             s_beep_on=0u;s_phase=HW_FM;s_phase_started=now;
 #if PB10A_HW_TEST_FM
-            Radio_AppStart(); /* deliberately hardware-muted even when VOL=0 */
+            Radio_AppStart();
 #else
             s_phase=HW_DONE;
 #endif
@@ -123,7 +123,7 @@ void HW_TestPoll(void)
         LL_GPIO_ResetOutputPin(SUB_EN_GPIO_Port,SUB_EN_Pin);
         s_active=0u;
         /* Control returns to the normal MiaoUI scheduler.
-         * Radio remains muted and tuned until the user enters its app. */
+         * Radio stays tuned for manual listening/seek verification. */
         return;
     }
     if(SSD1306_Display_IsReady() && !SSD1306_Display_FrameBusy() &&

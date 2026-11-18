@@ -57,12 +57,12 @@ one-shot `beep_init()`, `Time_Init()`, `SC7A20_Init()`, it runs:
    calibrated pass. PA6 is reset low after the window.
 2. **Buzzer**: PB1/TIM3_CH4, PSC=63, ARR=499 -> 2 kHz / 50% duty,
    for 500 ms. Listen for audible output; firmware cannot detect sound.
-3. **Radio**: start RDA5807, initial tune at 87.0 MHz, then seek upward
-   once. Leave audio **hardware-muted**, regardless of volume register:
-   PB10A testing found even VOL=0 may be uncomfortably loud. After the
-   timer expires the normal MiaoUI menu appears; enter Radio and press
-   ENTER twice within 3 s (first press arms, second clears DMUTE) only
-   after arranging safe external attenuation. VOL=0 alone is **not** mute.
+3. **Radio**: start RDA5807, initially tune to 87.0 MHz, then seek
+   upward once using the existing RDA5807 audio setup. The menu remains
+   in fixed search mode: UP/DOWN search, BACK exits. No audio-protection
+   confirmation, forced mute, or extra settings have been added. On this
+   board the 0 volume-register setting can still sound loud through headphones.
+
 
 After completing board checks, set `PB10A_HW_TEST_AUTORUN=0` to disable
 all three automatic tests without touching the regular application.

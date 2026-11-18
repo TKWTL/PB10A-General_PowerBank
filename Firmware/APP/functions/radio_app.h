@@ -9,6 +9,4 @@ void Radio_AppPoll(void);
 void Radio_AppDraw(ui_t *ui);
 uint8_t Radio_AppIsReady(void);
 uint8_t Radio_AppIsSearching(void);
-uint8_t Radio_AppAudioIsMuted(void);
-void Radio_AppToggleAudio(void);
 #endif

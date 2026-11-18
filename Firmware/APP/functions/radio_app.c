@@ -3,7 +3,7 @@
  * RDA5807 driver register model. No nested while(1) and no FreeRTOS APIs.
  *
  * Enter: wake radio, initialize and start ONE seek automatically.
- * UP/DOWN: seek lower/higher, ENTER: seek higher again, BACK: power off.
+ * UP/DOWN: seek lower/higher; BACK: power off. No extra settings.
  * Bus transfers remain IRQ-driven by BSP/I2C and foreground-completion
  * waited; no long software delay is used in this MiaoUI callback.
  */
@@ -22,11 +22,11 @@ enum { RADIO_OFF=0, RADIO_RESET_WAIT, RADIO_POWER_WAIT, RADIO_TUNE_WAIT,
 #define RADIO_PM_BLOCK 0x04u
 #define RADIO_QUERY_MS 180u
 #define RADIO_SEEK_TIMEOUT_MS 8000u
-#define RADIO_MIN_VOLUME 0u /* minimum gain is NOT mute on tested board */
+#define RADIO_DEFAULT_VOLUME 0u /* existing lowest register gain, not mute */
 static uint8_t s_state, s_first_seek_pending, s_search_failed;
-static uint8_t s_volume, s_stereo, s_rssi, s_audio_muted, s_unmute_armed;
+static uint8_t s_volume, s_stereo, s_rssi;
 static uint16_t s_freq_mhz10; /* e.g. 1017 = 101.7 MHz */
-static uint32_t s_state_at, s_last_query, s_unmute_arm_at;
+static uint32_t s_state_at, s_last_query;
 static uint8_t s_error_code;
 
 static uint8_t radio_write16(uint8_t reg,uint16_t value)
@@ -80,9 +80,7 @@ void Radio_AppStart(void)
 {
     if(s_state!=RADIO_OFF)return;
     s_error_code=0u;s_search_failed=0u;s_first_seek_pending=1u;
-    s_volume=RADIO_MIN_VOLUME;s_stereo=0u;s_rssi=0u;s_freq_mhz10=870u;
-    s_audio_muted=1u;s_unmute_armed=0u; /* VOL=0 alone is still loud. */
-    Register[0]&=(uint16_t)~(RDA5807_REG02_DMUTE|RDA5807_REG02_BASS);
+    s_volume=RADIO_DEFAULT_VOLUME;s_stereo=0u;s_rssi=0u;s_freq_mhz10=870u;
     pm_api_set_sleep_block(RADIO_PM_BLOCK,1u); /* MCO clock must not stop */
     LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE,LL_RCC_MCO1_DIV_1);
     if(radio_write16(RDA5807_REG02,RDA5807_REG02_SRST)!=I2C_OK)
@@ -99,7 +97,7 @@ void Radio_AppStop(void)
     }
     LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_NOCLOCK,LL_RCC_MCO1_DIV_1);
     pm_api_set_sleep_block(RADIO_PM_BLOCK,0u);
-    s_audio_muted=1u;s_unmute_armed=0u;s_first_seek_pending=1u;
+    s_first_seek_pending=1u;
     s_state=RADIO_OFF;
 }
 void Radio_AppPoll(void)
@@ -109,9 +107,8 @@ void Radio_AppPoll(void)
     if(s_state==RADIO_RESET_WAIT)
     {
         if((uint32_t)(now-s_state_at)<50u)return;
-        Register[0]|=(RDA5807_REG02_ENABLE|
+        Register[0]|=(RDA5807_REG02_ENABLE|RDA5807_REG02_DMUTE|
                       RDA5807_REG02_DHIZ|RDA5807_REG02_SEEKUP);
-        Register[0]&=(uint16_t)~(RDA5807_REG02_DMUTE|RDA5807_REG02_BASS);
         Register[0]&=(uint16_t)~RDA5807_REG02_SEEK;
         if(radio_write16(RDA5807_REG02,Register[0])!=I2C_OK)
         {radio_fail(2u);return;}
@@ -163,31 +160,6 @@ void Radio_AppPoll(void)
             radio_fail(6u);
     }
 }
-uint8_t Radio_AppAudioIsMuted(void){return s_audio_muted;}
-/* ENTER deliberately toggles the real hardware DMUTE bit. At VOL=0 the
- * headphones were still loud: confirm listening level BEFORE unmuting. */
-void Radio_AppToggleAudio(void)
-{
-    uint16_t reg;
-    if(s_state!=RADIO_READY || I2C_TransactionBegin()!=I2C_OK)return;
-    reg=Register[0];
-    if(s_audio_muted)
-    {
-        /* Avoid a single accidental ENTER exposing loud headphone audio.
-         * Explicit two-stage acknowledgement expires after 3 s. */
-        if(!s_unmute_armed || (uint32_t)(Millis()-s_unmute_arm_at)>3000u)
-        {
-            s_unmute_armed=1u;s_unmute_arm_at=Millis();
-            I2C_TransactionEnd();return;
-        }
-        reg|=RDA5807_REG02_DMUTE;
-    }
-    else reg&=(uint16_t)~RDA5807_REG02_DMUTE;
-    if(radio_write16(RDA5807_REG02,reg)==I2C_OK)
-    {Register[0]=reg;s_audio_muted=(uint8_t)!s_audio_muted;
-     s_unmute_armed=0u;}
-    I2C_TransactionEnd();
-}
 uint8_t Radio_AppIsReady(void)
 {return s_state==RADIO_READY || s_state==RADIO_SEARCH;}
 uint8_t Radio_AppIsSearching(void)
@@ -203,7 +175,7 @@ void Radio_AppDraw(ui_t *ui)
     fg=(uint8_t)(ui->bgColor^1u);
     Disp_SetDrawColor(&fg);
     Disp_SetFont(UI_FONT);
-    Disp_DrawStr(0u,11u,s_audio_muted?"FM SEEK   MUTED":"FM SEEK  AUDIO ON");
+    Disp_DrawStr(0u,11u,"FM RADIO [SEEK]");
     Disp_DrawLine(0u,14u,127u,14u);
     if(s_state==RADIO_ERROR)
     {
@@ -224,9 +196,7 @@ void Radio_AppDraw(ui_t *ui)
         Disp_DrawStr(91u,38u,"MHz");
     }
     Disp_SetFont(UI_FONT);
-    if(s_unmute_armed && (uint32_t)(Millis()-s_unmute_arm_at)<3000u)
-        Disp_DrawStr(0u,61u,"LOUD! ENTER AGAIN");
-    else if(s_state==RADIO_SEARCH)Disp_DrawStr(0u,61u,"Seeking...");
+    if(s_state==RADIO_SEARCH)Disp_DrawStr(0u,61u,"Seeking...");
     else if(s_state==RADIO_READY)
     {
         if(s_search_failed)Disp_DrawStr(0u,61u,"No station");
@@ -237,7 +207,7 @@ void Radio_AppDraw(ui_t *ui)
             Disp_DrawStr(0u,61u,text);
         }
     }
-    else Disp_DrawStr(0u,61u,"ENTER audio / BACK");
+    else Disp_DrawStr(0u,61u,"UP/DN seek  BACK exit");
     Disp_SendBuffer();
 }
 void Radio_AppRun(ui_t *ui)
@@ -253,7 +223,6 @@ void Radio_AppRun(ui_t *ui)
     {
         if(ui->action==UI_ACTION_UP)radio_seek(0u);
         else if(ui->action==UI_ACTION_DOWN)radio_seek(1u);
-        else if(ui->action==UI_ACTION_ENTER)Radio_AppToggleAudio();
     }
     /* MiaoUI WORD pages leave automatically on any unconsumed key. */
     ui->action=UI_ACTION_NONE;
