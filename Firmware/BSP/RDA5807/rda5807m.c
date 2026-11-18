@@ -446,12 +446,14 @@ void RDA5807_PowerOff(void)
  ******************************************************************************/
 void RDA5807_PowerOn(void)
 {
+    if(I2C_TransactionBegin()!=I2C_OK)return;
     LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE, LL_RCC_MCO1_DIV_1);//开启外部的时钟源以降低功耗
     Register[0] |= (RDA5807_REG02_ENABLE| RDA5807_REG02_DMUTE| RDA5807_REG02_DHIZ);
     Register[0] &= ~RDA5807_REG02_SEEK;                       //SEEK位清零
     Register[1] |= RDA5807_REG03_TUNE;                       //Tune位置一
     FM_WR_Reg(RDA5807_REG02, Register[0]);
     FM_WR_Reg(RDA5807_REG03,Register[1]);
+    I2C_TransactionEnd();
 }
 
 /*******************************************************************************
@@ -486,19 +488,23 @@ void RDA5807_SeekDirection(uint8_t Direction)
 }
 
 void RDA5807_StartSeek(void){
+    if(I2C_TransactionBegin()!=I2C_OK)return;
     if(RDA5807_CheckSTC()){
         Register[0] |= RDA5807_REG02_SEEK;                        //SEEK位置一，使能自动搜台
         Register[1] &= ~RDA5807_REG03_TUNE;                       //Tune位清零
         FM_WR_Reg(RDA5807_REG02,Register[0]);
         FM_WR_Reg(RDA5807_REG03,Register[1]);
     }
+    I2C_TransactionEnd();
 }
 
 void RDA5807_InterruptSeek(void){
+    if(I2C_TransactionBegin()!=I2C_OK)return;
     Register[0] &= ~RDA5807_REG02_SEEK;                       //SEEK位清零
     Register[1] |= RDA5807_REG03_TUNE;                       //Tune位置一
     FM_WR_Reg(RDA5807_REG02,Register[0]);
     FM_WR_Reg(RDA5807_REG03,Register[1]);
+    I2C_TransactionEnd();
 }
 
 /*******************************************************************************
@@ -510,15 +516,17 @@ void RDA5807_InterruptSeek(void){
  * 更新日期：2022-5-26
  ******************************************************************************/
 uint16_t RDA5807_SeekChannel(void){
-  Register[0] |= RDA5807_REG02_SEEK;                        //SEEK位置一，使能自动搜台
-  Register[1] &= ~RDA5807_REG03_TUNE;                       //Tune位清零
+  uint16_t result=0u;
+  if(I2C_TransactionBegin()!=I2C_OK)return 0u;
+  Register[0] |= RDA5807_REG02_SEEK;
+  Register[1] &= ~RDA5807_REG03_TUNE;
   FM_WR_Reg(RDA5807_REG02,Register[0]);
   FM_WR_Reg(RDA5807_REG03,Register[1]);
-  RDA5807_WaitForSTC();                         //等待STC标志
-  if((FM_RD_Reg(RDA5807_REG0B) & RDA5807_REG0B_STA) == 0)         //核实是否搜到台
-    return 0;
-  else
-    return RDA5807_GetFreqReg();
+  RDA5807_WaitForSTC();
+  if((FM_RD_Reg(RDA5807_REG0B) & RDA5807_REG0B_STA)!=0u)
+      result=RDA5807_GetFreqReg();
+  I2C_TransactionEnd();
+  return result;
 }
 
 
