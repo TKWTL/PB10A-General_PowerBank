@@ -103,3 +103,40 @@ The original shared 12px fusion-pixel menu font remains in place.
 high-resolution BDU setup is unchanged. The PB10A sensor interrupt is PB5,
 not PB02B's PB8 shared interrupt. The experimental temperature-ADC
 compatibility register is not yet board-verified.
+
+### Fatal exception snapshot and reset
+
+`APP/services/fault_record.c` defines `g_fault_record` in the 256-byte
+`.noinit` SRAM region reserved by
+`MDK-ARM/Ld/PB10A-General_PowerBank.sct`. This also gives the previously
+empty `RW_NOINIT` region an actual input section.
+
+NMI, HardFault, CubeMX `Error_Handler()`, and weak startup default IRQ
+handlers invoke `FaultRecord_Reset()` instead of remaining in their
+infinite loops. It disables maskable interrupts, saves the minimum snapshot
+and requests `NVIC_SystemReset()`. It deliberately does *not* invoke HAL
+drivers, display or serial logging, or program Flash in a fault context.
+
+Inspect the public `g_fault_record` symbol in the Keil debugger after a
+software reset. The layout is defined in `fault_record.h`:
+`magic`, `version`, `reason`, `exception` (IPSR),
+`flash_eccr`, `syscfg_cfgr2`, `rcc_csr`, and `checksum`.
+Call `FaultRecord_IsValid()` before treating the record as genuine.
+Only the latest fault is retained; it can be overwritten by a repeated
+reset loop. SRAM retention is not guaranteed across power loss, boot
+loader/debugger memory initialization or a separate SRAM reset.
+In severely corrupted Flash/SRAM/stack conditions even this minimal
+recorder may fail before it can request reset.
+
+**G070/G071 ECC/parity caution:** Flash ECC (64-bit data + 8 ECC bits)
+is automatic and does not need enabling. `FLASH_ECCR_ECCD` signals an
+uncorrectable double error and raises NMI. The SRAM facility is *parity
+detection*, not correcting ECC; set the active-low
+`RAM_PARITY_CHECK` option bit to **0** to enable. Both parts change
+from 36KB usable SRAM to 32KB when parity is enabled. **Do not enable
+that option byte with this repository's current 36KB scatter file or
+uninitialized .noinit retention policy.** First redesign the scatter
+regions (e.g. move last-256B .noinit from 0x20008F00 to 0x20007F00),
+update startup SRAM parity initialization, and decide how to preserve
+and validate previous fault records without reading uninitialized
+parity bits. No option bytes have been changed by this commit.

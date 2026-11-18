@@ -25,6 +25,7 @@
 #include "pm_api.h"
 #include "spi.h"
 #include "millis.h"
+#include "fault_record.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -74,7 +75,7 @@ extern DMA_HandleTypeDef hdma_spi1_tx;
 void NMI_Handler(void)
 {
   /* USER CODE BEGIN NonMaskableInt_IRQn 0 */
-
+  FaultRecord_Reset(FAULT_REASON_NMI);
   /* USER CODE END NonMaskableInt_IRQn 0 */
   /* USER CODE BEGIN NonMaskableInt_IRQn 1 */
    while (1)
@@ -89,7 +90,7 @@ void NMI_Handler(void)
 void HardFault_Handler(void)
 {
   /* USER CODE BEGIN HardFault_IRQn 0 */
-
+  FaultRecord_Reset(FAULT_REASON_HARDFAULT);
   /* USER CODE END HardFault_IRQn 0 */
   while (1)
   {

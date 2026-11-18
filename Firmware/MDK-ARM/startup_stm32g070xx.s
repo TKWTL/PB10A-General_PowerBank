@@ -49,6 +49,8 @@ __heap_limit
                 PRESERVE8
                 THUMB
 
+                IMPORT  FaultRecord_UnhandledIRQ
+
 
 ; Vector Table Mapped to Address 0 at Reset
                 AREA    RESET, DATA, READONLY
@@ -205,6 +207,7 @@ USART1_IRQHandler
 USART2_IRQHandler
 USART3_4_IRQHandler
 
+                BL      FaultRecord_UnhandledIRQ
                 B       .
 
                 ENDP
