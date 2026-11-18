@@ -24,9 +24,9 @@ enum { RADIO_OFF=0, RADIO_RESET_WAIT, RADIO_POWER_WAIT, RADIO_TUNE_WAIT,
 #define RADIO_SEEK_TIMEOUT_MS 8000u
 #define RADIO_MIN_VOLUME 0u /* minimum gain is NOT mute on tested board */
 static uint8_t s_state, s_first_seek_pending, s_search_failed;
-static uint8_t s_volume, s_stereo, s_rssi, s_audio_muted;
+static uint8_t s_volume, s_stereo, s_rssi, s_audio_muted, s_unmute_armed;
 static uint16_t s_freq_mhz10; /* e.g. 1017 = 101.7 MHz */
-static uint32_t s_state_at, s_last_query;
+static uint32_t s_state_at, s_last_query, s_unmute_arm_at;
 static uint8_t s_error_code;
 
 static uint8_t radio_write16(uint8_t reg,uint16_t value)
@@ -81,7 +81,7 @@ void Radio_AppStart(void)
     if(s_state!=RADIO_OFF)return;
     s_error_code=0u;s_search_failed=0u;s_first_seek_pending=1u;
     s_volume=RADIO_MIN_VOLUME;s_stereo=0u;s_rssi=0u;s_freq_mhz10=870u;
-    s_audio_muted=1u; /* Earsafe default: VOL=0 alone is audible/loud. */
+    s_audio_muted=1u;s_unmute_armed=0u; /* VOL=0 alone is still loud. */
     Register[0]&=(uint16_t)~(RDA5807_REG02_DMUTE|RDA5807_REG02_BASS);
     pm_api_set_sleep_block(RADIO_PM_BLOCK,1u); /* MCO clock must not stop */
     LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE,LL_RCC_MCO1_DIV_1);
@@ -99,7 +99,7 @@ void Radio_AppStop(void)
     }
     LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_NOCLOCK,LL_RCC_MCO1_DIV_1);
     pm_api_set_sleep_block(RADIO_PM_BLOCK,0u);
-    s_audio_muted=1u;s_first_seek_pending=1u;
+    s_audio_muted=1u;s_unmute_armed=0u;s_first_seek_pending=1u;
     s_state=RADIO_OFF;
 }
 void Radio_AppPoll(void)
@@ -171,10 +171,21 @@ void Radio_AppToggleAudio(void)
     uint16_t reg;
     if(s_state!=RADIO_READY || I2C_TransactionBegin()!=I2C_OK)return;
     reg=Register[0];
-    if(s_audio_muted)reg|=RDA5807_REG02_DMUTE;
+    if(s_audio_muted)
+    {
+        /* Avoid a single accidental ENTER exposing loud headphone audio.
+         * Explicit two-stage acknowledgement expires after 3 s. */
+        if(!s_unmute_armed || (uint32_t)(Millis()-s_unmute_arm_at)>3000u)
+        {
+            s_unmute_armed=1u;s_unmute_arm_at=Millis();
+            I2C_TransactionEnd();return;
+        }
+        reg|=RDA5807_REG02_DMUTE;
+    }
     else reg&=(uint16_t)~RDA5807_REG02_DMUTE;
     if(radio_write16(RDA5807_REG02,reg)==I2C_OK)
-    {Register[0]=reg;s_audio_muted=(uint8_t)!s_audio_muted;}
+    {Register[0]=reg;s_audio_muted=(uint8_t)!s_audio_muted;
+     s_unmute_armed=0u;}
     I2C_TransactionEnd();
 }
 uint8_t Radio_AppIsReady(void)
@@ -213,7 +224,9 @@ void Radio_AppDraw(ui_t *ui)
         Disp_DrawStr(91u,38u,"MHz");
     }
     Disp_SetFont(UI_FONT);
-    if(s_state==RADIO_SEARCH)Disp_DrawStr(0u,61u,"Seeking...");
+    if(s_unmute_armed && (uint32_t)(Millis()-s_unmute_arm_at)<3000u)
+        Disp_DrawStr(0u,61u,"LOUD! ENTER AGAIN");
+    else if(s_state==RADIO_SEARCH)Disp_DrawStr(0u,61u,"Seeking...");
     else if(s_state==RADIO_READY)
     {
         if(s_search_failed)Disp_DrawStr(0u,61u,"No station");

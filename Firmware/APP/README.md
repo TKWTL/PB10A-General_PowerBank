@@ -61,7 +61,8 @@ one-shot `beep_init()`, `Time_Init()`, `SC7A20_Init()`, it runs:
    once. Leave audio **hardware-muted**, regardless of volume register:
    PB10A testing found even VOL=0 may be uncomfortably loud. After the
    timer expires the normal MiaoUI menu appears; enter Radio and press
-   ENTER only when headphone level is safe to deliberately toggle DMUTE.
+   ENTER twice within 3 s (first press arms, second clears DMUTE) only
+   after arranging safe external attenuation. VOL=0 alone is **not** mute.
 
 After completing board checks, set `PB10A_HW_TEST_AUTORUN=0` to disable
 all three automatic tests without touching the regular application.
