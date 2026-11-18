@@ -1,8 +1,8 @@
 /* PB02B-style frozen countdown with cooperative 32-bit TIME_Millis().
  * Timeout must remain below 2^31 ms for modular signed comparisons. */
 #include "pm_sleep_timer.h"
-#include "main.h"
-#define TIME_Millis() HAL_GetTick()
+#include "millis.h"
+#define TIME_Millis() Millis()
 
 static uint32_t s_timeout_ms, s_deadline, s_frozen_ms;
 static uint8_t s_disabled, s_paused, s_forced;

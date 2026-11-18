@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_FULL_LL_DRIVER,USE_HAL_DRIVER,STM32G070xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G0xx/Include;../Drivers/CMSIS/Include;../APP;../APP/framework;../APP/services;../APP/MiaoUI;../BSP/Display;../BSP/u8g2;../BSP/I2C;../BSP/SW6306;../BSP/SC7A20;../BSP/RDA5807</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G0xx/Include;../Drivers/CMSIS/Include;../APP;../APP/framework;../APP/services;../APP/functions;../APP/MiaoUI;../BSP/Display;../BSP/Time;../BSP/u8g2;../BSP/I2C;../BSP/SW6306;../BSP/SC7A20;../BSP/RDA5807</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -784,7 +784,7 @@
           <File><FileName>pm_policy.c</FileName><FileType>1</FileType><FilePath>../APP/framework/pm_policy.c</FilePath></File>
           <File><FileName>pm_sleep_timer.c</FileName><FileType>1</FileType><FilePath>../APP/framework/pm_sleep_timer.c</FilePath></File>
                   <File><FileName>time_service.c</FileName><FileType>1</FileType><FilePath>../APP/services/time_service.c</FilePath></File>
-          <File><FileName>i2c_scanner.c</FileName><FileType>1</FileType><FilePath>../APP/services/i2c_scanner.c</FilePath></File>
+          <File><FileName>i2c_scanner.c</FileName><FileType>1</FileType><FilePath>../APP/functions/i2c_scanner.c</FilePath></File>
         </Files>
         </Group>
         <Group>
@@ -844,6 +844,11 @@
           <File><FileName>sw6306.c</FileName><FileType>1</FileType><FilePath>../BSP/SW6306/sw6306.c</FilePath></File>
           <File><FileName>sc7a20.c</FileName><FileType>1</FileType><FilePath>../BSP/SC7A20/sc7a20.c</FilePath></File>
           <File><FileName>rda5807m.c</FileName><FileType>1</FileType><FilePath>../BSP/RDA5807/rda5807m.c</FilePath></File>
+                  <File>
+            <FileName>millis.c</FileName>
+            <FileType>1</FileType>
+            <FilePath>../BSP/Time/millis.c</FilePath>
+          </File>
         </Files>
         </Group>
         <Group>

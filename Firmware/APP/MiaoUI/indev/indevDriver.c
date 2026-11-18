@@ -4,6 +4,7 @@
  */
 #include "indev/indevDriver.h"
 #include "main.h"
+#include "millis.h"
 #include "pm_api.h"
 
 enum {
@@ -30,7 +31,7 @@ UI_ACTION indevScan(void)
     static uint8_t raw_last, stable;
     static uint32_t changed_at;
     const uint8_t raw = key_read_mask();
-    const uint32_t now = HAL_GetTick();
+    const uint32_t now = Millis();
     uint8_t pressed;
 
     if(raw != raw_last)

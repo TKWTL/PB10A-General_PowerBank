@@ -3,6 +3,7 @@
  * BACK exits. Never use osDelay/vTaskDelay in a MiaoUI callback.
  */
 #include "i2c_scanner.h"
+#include "millis.h"
 #include "bsp_i2c.h"
 #include "display/dispDriver.h"
 #include "pm_api.h"
@@ -22,7 +23,7 @@ void i2c_Scanner(ui_t *ui)
 {
     char line[24];
     uint8_t fg,row,i;
-    uint32_t now=HAL_GetTick();
+    uint32_t now=Millis();
     if(!ui)return;
     if(ui->action==UI_ACTION_BACK)
     {

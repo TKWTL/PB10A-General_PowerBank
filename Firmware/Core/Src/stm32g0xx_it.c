@@ -24,6 +24,7 @@
 /* USER CODE BEGIN Includes */
 #include "pm_api.h"
 #include "spi.h"
+#include "millis.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -129,7 +130,7 @@ void PendSV_Handler(void)
 void SysTick_Handler(void)
 {
   /* USER CODE BEGIN SysTick_IRQn 0 */
-
+  ++millis; /* Independent 1 ms application timebase; not HAL uwTick. */
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
   /* USER CODE BEGIN SysTick_IRQn 1 */

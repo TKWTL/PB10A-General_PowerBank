@@ -1,6 +1,7 @@
 /* 包含自定义头文件 */
 #include "rda5807m.h"
 #include "bsp_i2c.h"
+#include "millis.h"
 
 /* 全局变量 */
 struct RDA5807_t RDA5807 = {
@@ -83,11 +84,11 @@ uint16_t FM_RD_Reg(uint8_t Register)
  ******************************************************************************/
 void RDA5807_WaitForSTC(void)
 {
-  uint32_t start=HAL_GetTick();
+  uint32_t start=Millis();
   while((FM_RD_Reg(RDA5807_REG0A) & RDA5807_REG0A_STC) == 0 &&
-        (uint32_t)(HAL_GetTick()-start)<500u)            //等待STC位置一 表示搜索完成
+        (uint32_t)(Millis()-start)<500u)            //等待STC位置一 表示搜索完成
   {
-    HAL_Delay(10);                             //延时10ms
+    Millis_Delay(10);                             //延时10ms
   }
 }
 
@@ -107,9 +108,9 @@ uint8_t RDA5807_CheckSTC(void)
  ******************************************************************************/
 void RDA5807_Init(void){ 
     FM_WR_Reg(RDA5807_REG02, RDA5807_REG02_SRST);    //SOFT_RESET
-    HAL_Delay(50);
+    Millis_Delay(50);
     FM_WR_Reg(RDA5807_REG02, Register[0]);           //Power Up，Audio Output High-Z高阻:Normal operation;不静音;
-    HAL_Delay(400);
+    Millis_Delay(400);
     FM_WR_Reg(RDA5807_REG03, Register[1]);           //初始化频率，
     FM_WR_Reg(RDA5807_REG04, Register[2]);           //Bit[11]:De-emphasis（去加重:解调后对高频分量的压低）：50us；Bit[9]:softmute；Bit[8]:AFC自动频率控制
     FM_WR_Reg(RDA5807_REG05, Register[3]);           //SEEKTH[11:8]:搜台信噪比阈值；VOLUME[3:0]:DAC Gain Control Bits音量控制

@@ -2,8 +2,8 @@
 #define CORO_OS_H_
 
 #include <stdint.h>
-#include "main.h"
-#define TIME_Millis() HAL_GetTick()
+#include "millis.h"
+#define TIME_Millis() Millis()
 
 #ifdef __cplusplus
 extern "C" {

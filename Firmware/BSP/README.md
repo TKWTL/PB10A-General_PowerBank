@@ -14,3 +14,8 @@
 - 只依赖 `Peripheral/` 与 `Core/`；不写业务策略，不直接决定设备状态机。
 - 引脚号、有效电平、上拉方式等板级差异必须集中在本层，不散落到 `APP/`。
 - 新增模块后必须在 Keil 工程里加入 `Application/BSP` 分组，并把本目录加入 `IncludePath`。
+
+
+### Millisecond timebase
+
+`Time/millis.h` declares `volatile uint32_t millis`; it is incremented once per SysTick IRQ directly inside `Core/Src/stm32g0xx_it.c` USER CODE. `Millis()` returns the counter, and `Millis_Delay(ms)` provides a blocking delay without HAL_GetTick/HAL_Delay. The HAL tick is kept for HAL internal users. On STOP1 SysTick is suspended, so `millis` intentionally does not measure sleep duration; use RTC for absolute elapsed time. Use unsigned subtraction for timeout checks across counter wrap-around.

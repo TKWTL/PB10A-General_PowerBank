@@ -6,6 +6,7 @@
 #include "ssd1306_display.h"
 #include "spi.h"
 #include "main.h"
+#include "millis.h"
 #include <string.h>
 enum {OLED_PHASE_IDLE=0,OLED_PHASE_INIT,OLED_PHASE_ADDRESS,OLED_PHASE_FRAME,
       OLED_PHASE_RESTORE,OLED_PHASE_POWER,OLED_PHASE_CONTRAST};
@@ -46,7 +47,7 @@ static uint8_t oled_start(const uint8_t *data,uint16_t length,uint8_t data_mode,
     }
     if(data_mode) LL_GPIO_SetOutputPin(D_C_GPIO_Port,D_C_Pin);
     else LL_GPIO_ResetOutputPin(D_C_GPIO_Port,D_C_Pin);
-    s_dma_started_ms=HAL_GetTick();
+    s_dma_started_ms=Millis();
     if(!SPI1_DmaTxStart(data,length))
     {
         ++s_stats.dma_start_failed;
@@ -73,7 +74,7 @@ uint8_t SSD1306_Display_Begin(u8g2_t *screen)
 {
     if(!screen)return 0u;
     LL_GPIO_SetOutputPin(CPEN_GPIO_Port,CPEN_Pin);
-    s_power_ready_ms=HAL_GetTick()+30u;
+    s_power_ready_ms=Millis()+30u;
     s_screen=screen;s_frame=0;
     s_power_save=0u;s_power_requested=0u;s_power_dirty=0u;
     s_contrast_dirty=0u;s_contrast=0u;s_transmitted_value=0u;
@@ -112,7 +113,7 @@ void SSD1306_Display_Service(void)
         status=SPI1_DmaTxState();
         if(status==SPI1_DMA_BUSY)
         {
-            if((uint32_t)(HAL_GetTick()-s_dma_started_ms)<=OLED_TX_TIMEOUT_MS)
+            if((uint32_t)(Millis()-s_dma_started_ms)<=OLED_TX_TIMEOUT_MS)
                 return;
             ++s_stats.dma_runtime_timeouts;
             if(!SPI1_DmaTxAbortAsync())oled_failed(phase);
@@ -159,7 +160,7 @@ void SSD1306_Display_Service(void)
     }
     if(s_init_pending)
     {
-        if((int32_t)(HAL_GetTick()-s_power_ready_ms)<0)return;
+        if((int32_t)(Millis()-s_power_ready_ms)<0)return;
         status=SPI1_DmaTxState();
         if(status==SPI1_DMA_ABORTING || status==SPI1_DMA_BUSY)return;
         if(status==SPI1_DMA_ERROR)

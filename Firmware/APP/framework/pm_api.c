@@ -7,7 +7,7 @@
 #include "pm_sleep_timer.h"
 #include "ssd1306_display.h"
 #include "spi.h"
-#include "main.h"
+#include "millis.h"
 #define PM_DEFAULT_TIMEOUT_MS 60000u
 static pm_controller_t s_ctrl;
 static uint8_t s_ready,s_block_mask,s_paused,s_forced;
@@ -52,7 +52,7 @@ uint8_t pm_api_ui_should_block(void)
 uint8_t pm_api_is_sleeping(void)
 {return s_ready && s_ctrl.state!=PM_STATE_RUN;}
 uint8_t pm_api_is_unstable_wake(void)
-{return s_wake_guard && (uint32_t)(HAL_GetTick()-s_wake_at)<200u;}
+{return s_wake_guard && (uint32_t)(Millis()-s_wake_at)<200u;}
 void pm_api_poll(void)
 {
     pm_power_state_t previous,next;
@@ -66,7 +66,7 @@ void pm_api_poll(void)
         pm_sleep_timer_clear_force();
         s_forced=0u;
         pm_controller_refresh_idle(&s_ctrl);
-        if(waking){s_wake_guard=1u;s_wake_at=HAL_GetTick();}
+        if(waking){s_wake_guard=1u;s_wake_at=Millis();}
     }
     else if(s_refresh_request && !s_forced)
     {
@@ -97,6 +97,6 @@ void pm_api_poll(void)
         pm_controller_mark_ui_active(&s_ctrl,1u);
         pm_sleep_timer_clear_force();
         s_forced=0u;
-        s_wake_guard=1u;s_wake_at=HAL_GetTick();
+        s_wake_guard=1u;s_wake_at=Millis();
     }
 }

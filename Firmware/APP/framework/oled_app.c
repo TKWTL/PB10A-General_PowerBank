@@ -5,6 +5,7 @@
 #include "display/dispDriver.h"
 #include "ssd1306_display.h"
 #include "pm_api.h"
+#include "millis.h"
 #include "time_service.h"
 
 static ui_t s_ui;
@@ -32,11 +33,11 @@ THRD_DECLARE(MiaoUiThread)
         {
             /* Live RTC display/edit fields, but never overwrite a currently
              * edited field with an asynchronous RTC read. */
-            if((uint32_t)(HAL_GetTick()-s_last_time_update_ms)>=1000u &&
+            if((uint32_t)(Millis()-s_last_time_update_ms)>=1000u &&
                s_ui.menuState!=UI_ITEM_RUNING &&
                s_ui.menuState!=UI_ITEM_DRAWING)
             {
-                s_last_time_update_ms=HAL_GetTick();
+                s_last_time_update_ms=Millis();
                 RTC_UpdateTime();
             }
             ui_loop(&s_ui);

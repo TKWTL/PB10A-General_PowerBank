@@ -1,6 +1,6 @@
 #include "sw6306.h"
 #include <math.h>
-#include "main.h"
+#include "millis.h"
 
 /* initialized 默认 0（零初始化，.bss）：MCU 复位后即视为未初始化，
  * SW6306_task 会对 SW6306 执行一次 ForceOff+Init（芯片复位后重置）。
@@ -85,7 +85,7 @@ SW6306_RET SW6306_RegsetSwitch(SW6306_ARGS(uint16_t regset))
         {
             SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_WREN,0x81);
 #ifndef SW6306_USE_PROTOTHREAD
-            HAL_Delay(2U); /* >=50us */
+            Millis_Delay(2U); /* >=50us */
 #endif
         }
     }
@@ -95,7 +95,7 @@ SW6306_RET SW6306_RegsetSwitch(SW6306_ARGS(uint16_t regset))
         {
             SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_LREGSET,0x00);
 #ifndef SW6306_USE_PROTOTHREAD
-            HAL_Delay(2U); /* >=50us */
+            Millis_Delay(2U); /* >=50us */
 #endif
         }
     }
@@ -714,7 +714,7 @@ static uint8_t sw6306_wake_unlock_locked(void)
     data = SW6306_LPSET_EN;
     if (SW6306_I2C_Transmit(SW6306_I2C_ADDR, SW6306_CTRG_LPSET,
                             &data, 1U, &SW6306_Status.flag) != I2C_OK) return 0U;
-    HAL_Delay(2U);
+    Millis_Delay(2U);
     if (SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_REV,
                            &rev, 1U, &SW6306_Status.flag) != I2C_OK) return 0U;
     if (rev != 0x01U) {
@@ -722,7 +722,7 @@ static uint8_t sw6306_wake_unlock_locked(void)
     if (SW6306_I2C_Transmit(SW6306_I2C_ADDR, SW6306_CTRG_LREGSET,
                             &data, 1U, &SW6306_Status.flag) != I2C_OK) return 0U;
     /* 手册要求换页后至少50us；2个tick保证在1kHz时至少等待1ms。 */
-    HAL_Delay(2U);
+    Millis_Delay(2U);
     }
     if (SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_REV,
                            &rev, 1U, &SW6306_Status.flag) != I2C_OK ||
