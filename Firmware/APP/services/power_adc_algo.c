@@ -79,8 +79,7 @@ uint8_t PowerADC_BeginScan(void)
     HAL_StatusTypeDef result;
     if(s_suspended)return 0u;
     s_transfer_result=0u;
-    s_adc_hal_error=0;
-    s_dma_hal_error=0;
+    /* Keep the previous scan's error snapshot until this scan settles. */
     s_active=1u; /* Set BEFORE start: callback may run immediately. */
     s_started_at=Millis();
     result=HAL_ADC_Start_DMA(&hadc1,(uint32_t *)(void *)s_dma,4u);
@@ -111,14 +110,12 @@ uint8_t PowerADC_ScanSettled(void)
         s_adc_hal_error=(int)HAL_ADC_GetError(&hadc1);
         s_dma_hal_error=(int)HAL_DMA_GetError(hadc1.DMA_Handle);
     }
-    /* Stop the ADC/DMA after precisely four samples, or cancel on error.
-     * Normal DMA mode goes idle at transfer completion before this call. */
-    if(HAL_ADC_Stop_DMA(&hadc1)!=HAL_OK && result==1u)
-    {
-        s_adc_hal_error=(int)HAL_ADC_GetError(&hadc1);
-        s_dma_hal_error=(int)HAL_DMA_GetError(hadc1.DMA_Handle);
-        result=2u;
-    }
+    /* A completed NORMAL DMA transfer is already idle: do not stop and
+     * disable the ADC after a successful one-shot sequence. The next
+     * HAL_ADC_Start_DMA() re-arms DMA for the following 500ms sample.
+     * Abort only on a failed or timed-out sequence. */
+    if(result!=1u)
+        (void)HAL_ADC_Stop_DMA(&hadc1);
     s_active=0u;
     if(result==1u)
     {
