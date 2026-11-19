@@ -114,6 +114,42 @@ high-resolution BDU setup is unchanged. The PB10A sensor interrupt is PB5,
 not PB02B's PB8 shared interrupt. The experimental temperature-ADC
 compatibility register is not yet board-verified.
 
+### Restored Collar-Radio animations and radio sleep clock
+
+The Radio page now preserves the **original** Collar-Radio visual behavior
+from `Application/Applications/radio.c`, instead of replacing its
+graphics with a static approximation.
+
+- Main view: the original `disp_value1=12` offset moves the entire
+  top signal/audio/battery status row in from above (`y - offset`)
+  and the bottom time/date row in from below (`y + offset`) using
+  the cursor PID. The central frequency and 43/45/47px station ruler
+  keep their original coordinates.
+- Five-row menu: original `y=20+i*10`, title/separator, fixed label
+  at x=2 and dynamic value at x=74. The selected row has a 10px high
+  XOR inverted highlight with separate PID-animated **Y position**
+  and **text-width**, not a static full-row outline.
+- No blocking `while(1)`: the original animation positions now persist
+  across successive `Radio_AppRun()` calls. Each frame advances the
+  existing MiaoUI `UI_Animation()` PID using the same tuned coefficients,
+  stored in the firmware's Q10 fixed-point format. MiaoUI nominally
+  polls at 20ms but OLED DMA can limit actual display frame cadence.
+  The original Collar-Radio animated battery *fill* depends on battery
+  telemetry not yet connected to this page; only its outline is drawn.
+
+RDA5807 power policy: `RadioAlgo_Init()` runs after I2C1 initialization
+and calls `Radio_AppInitLowPower()`, briefly providing the LSE-derived
+32.768kHz MCO clock to write RDA5807 register 0x02 with ENABLE=0;
+MCO is immediately turned off. Use
+`RadioAlgo_BootSleepAcknowledged()` to inspect whether the I2C
+power-down command succeeded (failure means the chip state is not
+confirmed). `Radio_AppStart()` enables MCO before waking/resetting the
+chip; the UI_OFF/STOP1 callback always calls `Radio_AppStop()`, even
+after an error, and the STOP1 wake callback leaves MCO off until
+Radio is explicitly restarted. I2C radio errors also stop MCO and
+release the sleep block. Background Radio Power Mode=ON retains MCO
+until it is explicitly stopped or the user requests root-menu sleep.
+
 ### Radio MiaoUI WORD page (Collar-Radio five-item menu)
 
 Radio main view: physical UP/DOWN controls RDA5807 0-15 volume;
