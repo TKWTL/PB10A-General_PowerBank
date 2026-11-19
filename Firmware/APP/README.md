@@ -30,7 +30,7 @@ Board-level current and wake reliability still require measurement.
 
 ### Devices, RTC and scanning
 
-SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) and RDA5807 (Collar-Radio-derived) are integrated under BSP with a blocking HAL I2C1 adapter. They are not auto-started. The I2C Scanner WORD page probes one address per UI tick; ENTER rescans, UP/DOWN changes result page and BACK exits. The Collar-Radio style Time page offers aligned integer date/time edits via HAL RTC. RTC uses backup-register DR0 validity marking so CubeMX-generated default time/date is applied only on a fresh backup domain. RTC fields refresh every second outside active parameter editing; RTC currently uses LSI and is not crystal-accurate. STOP1 and all hardware peripherals remain untested on board.
+SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) and RDA5807 (Collar-Radio-derived) are integrated under BSP with a blocking HAL I2C1 adapter. SW6306 now initializes and is refreshed by an independent 100ms coroOS service thread. The I2C Scanner WORD page has regained the original Collar-Radio title and 16x8 address matrix. The Collar-Radio style Time page offers aligned integer date/time edits via HAL RTC. RTC uses backup-register DR0 validity marking so CubeMX-generated default time/date is applied only on a fresh backup domain. RTC fields refresh every second outside active parameter editing; RTC currently uses LSI and is not crystal-accurate. STOP1 and all hardware peripherals remain untested on board.
 
 
 ### Application versus service separation
@@ -43,7 +43,7 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 - `APP/app_task.c` registers coroOS tasks and polls shared services
 - `Scheduler/coroOS.*` is the stackless cooperative scheduler inspired by Adam Dunkels' Protothreads (not FreeRTOS, no priorities)
 - `APP/services/*_algo.c` holds reusable beep, RTC and system algorithms; `time_service.c` retains the MiaoUI calendar editor
-- `APP/functions/` hosts independent user-facing MiaoUI applications. Powerbank remains a placeholder; Radio is forced low-power at boot and starts only when its WORD page is entered (or kept running in explicit background ON mode)
+- `APP/functions/` hosts independent user-facing MiaoUI applications. Powerbank displays cached SW6306 voltage, current, percentage and protocol; Radio is forced low-power at boot and starts only when its WORD page is entered (or kept running in explicit background ON mode)
 - `APP/i18n.c/h` defines a shared localization interface and placeholder English-only catalog
 - `BSP/BMP180` ports Collar-Radio compensation code with Cortex-M0+ safe endian calibration; `BSP/MMC5603` supports register I/O, product ID and low-power configuration
 - `BSP/I2C` has one I2C1 HAL handle, IRQ-driven transfers and nested transaction-level locking. The legacy synchronous API waits in the foreground for each interrupt completion, so during those waits other coroOS threads **do not run**. This must not be confused with true nonblocking coroutine I2C; migrating the sensor drivers to yielding protothreads is future work
@@ -85,6 +85,38 @@ The reproduced G0 calibration failure (`hadc1.State=0x13`,
 `ErrorCode=0x01`, second `ADC_DISABLE_TIMEOUT` branch) and the verified
 CubeMX clock adjustment are documented in
 [`Docs/Debug/2026-11-19_stm32g0_adc_calibration.md`](../../Docs/Debug/2026-11-19_stm32g0_adc_calibration.md).
+
+### SW6306 staged polling and sleep guard (2026-11-19)
+
+The sixth coroOS thread initializes SW6306 on its first service tick,
+then retries at most every five seconds when uninitialized. Its 100ms
+staggered phases follow the accessible PB02B reference, not a verified
+PB02A source: phase 0 ADC (VBUS/IBUS/VBAT/IBAT), phase 1 Status,
+phase 2 Port/CC, phase 3 idle, phase 4 Power/protocol, with Capacity
+once per two complete cycles (about one second). Calls into legacy
+BSP I2C remain synchronous from the caller perspective, even though
+the HAL transport uses interrupts.
+
+The Powerbank WORD page displays a RAM snapshot only: shared BUS
+mV/mA (not separate per-port current sensing), battery mV/mA,
+capacity %, negotiated protocol, and C1/A1 path flags. UI labels
+freshness as unavailable until initialization and successful
+StatusLoad within the current cycle. An age above 2.5 seconds
+invalidates the displayed snapshot. Individual ADCLoad/PowerLoad
+failures cannot yet be proven from their void-returning driver API.
+
+PM sleep-block bit 0x08 is held while ports are active, status is
+uncertain or the driver is uninitialized. At STOP1 entry, a fresh
+`SW6306_TransportPortsIdle()` is mandatory: error or activity
+cancels sleep, never merely skips LPSet. The inherited SW6306
+configuration disables passive A-port VBUS insertion detection, so
+a cable plugged into an inactive A port may not be detectable.
+
+**Verify hardware configuration before connecting real loads:** the
+current SW6306 BSP initialization includes 5S/4.2V cells,
+5 mΩ battery shunt scaling, 30W maximum input and 55W output
+configuration inherited from PB02B. These are existing driver
+defaults, not independently confirmed PB10A battery/hardware specs.
 
 ### Key input (Collar-Radio Buttons DAS)
 

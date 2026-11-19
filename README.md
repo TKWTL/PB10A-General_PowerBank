@@ -1,6 +1,6 @@
 # PB10A · General PowerBank
 
-> **项目状态：OLED 最小移植阶段（尚未实测）。** STM32CubeMX 外设初始化骨架已接入 SSD1306 OLED 的 SPI1 DMA 驱动、MiaoUI/u8g2 和 coroOS；尚未实现电源管理、PD 业务和其它外设驱动。参见 [`Docs/OLED_BRINGUP.md`](Docs/OLED_BRINGUP.md)。
+> **项目状态：硬件联调与基础业务接入。** OLED、MiaoUI/coroOS、设备休眠回调已接入；SW6306 正在验证初始化、缓存监控与端口睡眠保护。参见 [`Docs/OLED_BRINGUP.md`](Docs/OLED_BRINGUP.md)。
 
 ## 基本信息
 
