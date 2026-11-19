@@ -230,6 +230,8 @@ void SSD1306_Display_Service(void)
         (void)oled_start(s_cmd,3u,0u,OLED_PHASE_POWER);
         return;
     }
+    /* Do not transmit contrast/config commands while CPEN is low. */
+    if(s_power_save)return;
     if(s_contrast_dirty)
     {
         s_transmitted_value=s_contrast;

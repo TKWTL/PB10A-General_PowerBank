@@ -56,24 +56,25 @@ static pm_hook_result_t sensor_suspend(void *ctx)
 }
 static pm_hook_result_t sensor_resume(void *ctx)
 {
- uint8_t ctrl;
+ uint8_t ctrl,failed=0u;
  (void)ctx;
  if(s_mmc_suspended)
  {
   if(MMC5603_WriteReg(MMC5603_REG_ODR,s_mmc_odr)!=I2C_OK ||
      MMC5603_WriteReg(MMC5603_REG_CTRL2,s_mmc_ctrl2)!=I2C_OK)
-   return PM_HOOK_ERROR;
-  s_mmc_suspended=0u;
+   failed=1u;
+  else s_mmc_suspended=0u;
  }
+ /* Always try to restore SC7A20, even when MMC5603 failed. */
  if(s_sc_suspended)
  {
   SC7A20_SetODR(s_sc_odr);
   if(I2C_RegRead(SC7A20_I2C_ADDR,SC7A20_CTRG_CTRL1,&ctrl,1u)!=I2C_OK ||
      (ctrl&SC7A20_CTRL1_ODR_MSK)!=s_sc_odr)
-   return PM_HOOK_ERROR;
-  s_sc_suspended=0u;
+   failed=1u;
+  else s_sc_suspended=0u;
  }
- return PM_HOOK_DONE;
+ return failed?PM_HOOK_ERROR:PM_HOOK_DONE;
 }
 static const pm_device_node_t s_node={
  "sensors",sensor_prepare,sensor_suspend,sensor_resume,0,80u,0,0

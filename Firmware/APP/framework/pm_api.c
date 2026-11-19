@@ -82,6 +82,14 @@ void pm_api_poll(void)
     if(pm_sleep_timer_expired())pm_controller_mark_ui_active(&s_ctrl,0u);
     previous=s_ctrl.state;
     next=pm_controller_step(&s_ctrl);
+    /* A device ERROR can cancel a forced sleep before STOP1. Clear the
+     * forced-expiry latch once recovery reaches RUN, or PM will loop
+     * indefinitely back into UI_OFF. */
+    if(s_forced && next==PM_STATE_RUN && !s_ctrl.transition_pending)
+    {
+        pm_sleep_timer_clear_force();
+        s_forced=0u;
+    }
     if(previous!=PM_STATE_DEEPSLEEP && next==PM_STATE_DEEPSLEEP)
     {
         /* Registered STM32G070 node: STOP1 then restore clocks/tick/ADC. */
