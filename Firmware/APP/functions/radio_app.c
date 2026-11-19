@@ -5,6 +5,7 @@
  * Background radio in ON mode is polled by the system coroOS thread.
  */
 #include "radio_app.h"
+#include "core/ui.h" /* MiaoUI Q10 PID animations */
 #include "rda5807m.h"
 #include "bsp_i2c.h"
 #include "pm_api.h"
@@ -27,8 +28,32 @@ enum { RADIO_POWER_AUTO=0, RADIO_POWER_ON, RADIO_POWER_OFF };
 static uint8_t s_state, s_first_seek_pending, s_search_failed;
 static uint8_t s_volume, s_stereo, s_rssi;
 static uint8_t s_mode=RADIO_MODE_PRESET,s_power_policy=RADIO_POWER_AUTO;
-static uint8_t s_menu_open,s_menu_index,s_full_scan;
+static uint8_t s_menu_open,s_menu_index,s_full_scan,s_view_entered;
 static uint16_t s_scan_last_freq;
+/* Collar-Radio disp_value1 status/footer slide and two-dimensional
+ * menu cursor PID. PB10A UI_Animation uses the same tuned coefficients
+ * in Q10 fixed-point rather than float. State must persist per frame. */
+static int32_t s_slide_q,s_cursor_y_q,s_cursor_w_q;
+static ui_animation_param_t s_slide_pid,s_cursor_y_pid,s_cursor_w_pid;
+static void radio_copy_pid(ui_animation_param_t *dst,
+                           const ui_animation_param_t *ref)
+{
+    *dst=*ref;
+    dst->error=0;dst->sum_error=0;dst->last_error=0;
+}
+static void radio_enter_main(ui_t *ui)
+{
+    s_menu_open=0u;
+    s_slide_q=UI_FX(12); /* top starts 12px above; footer 12px below */
+    radio_copy_pid(&s_slide_pid,&ui->animation.cursor_ani);
+}
+static void radio_enter_menu(ui_t *ui)
+{
+    s_menu_index=0u;s_menu_open=1u;
+    s_cursor_y_q=UI_FX(0);s_cursor_w_q=UI_FX(0);
+    radio_copy_pid(&s_cursor_y_pid,&ui->animation.cursor_ani);
+    radio_copy_pid(&s_cursor_w_pid,&ui->animation.optionbarPos_ani);
+}
 /* Collar-Radio radio.c: original XBM status icons (7x9, 6x9, 16x8). */
 static const uint8_t s_signal_icon[]={
     0x7f,0x49,0x2a,0x1c,0x08,0x08,0x08,0x08,0x08
@@ -51,6 +76,18 @@ static uint8_t radio_write16(uint8_t reg,uint16_t value)
 {
     uint8_t data[2]={(uint8_t)(value>>8),(uint8_t)value};
     return I2C_RegWrite(RDA5807_Wr_REG_Addr,reg,data,2u);
+}
+/* Enforce radio sleep at firmware startup; RCLK is provided only during
+ * the power-down I2C command and when the app explicitly starts radio. */
+uint8_t Radio_AppInitLowPower(void)
+{
+    uint8_t result;
+    LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE,LL_RCC_MCO1_DIV_1);
+    result=radio_write16(RDA5807_REG02,0u); /* ENABLE=0/DMUTE=0 */
+    LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_NOCLOCK,LL_RCC_MCO1_DIV_1);
+    pm_api_set_sleep_block(RADIO_PM_BLOCK,0u);
+    s_state=RADIO_OFF;s_view_entered=0u;
+    return (uint8_t)(result==I2C_OK);
 }
 static uint8_t radio_read16(uint8_t reg,uint16_t *value)
 {
@@ -82,6 +119,10 @@ static void radio_fail(uint8_t why)
 {
     s_state=RADIO_ERROR;
     s_error_code=why;
+    s_full_scan=0u;
+    /* Do not strand the MCU's MCO clock or sleep block after I2C failure. */
+    LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_NOCLOCK,LL_RCC_MCO1_DIV_1);
+    pm_api_set_sleep_block(RADIO_PM_BLOCK,0u);
 }
 static uint8_t radio_read_status(uint16_t *status,uint16_t *signal)
 {
@@ -224,9 +265,13 @@ void Radio_AppStart(void)
 }
 void Radio_AppStop(void)
 {
-    if(s_state!=RADIO_OFF && s_state!=RADIO_ERROR)
+    if(s_state!=RADIO_OFF)
     {
-        Register[0]&=(uint16_t)~(RDA5807_REG02_ENABLE|RDA5807_REG02_DMUTE);
+        /* The I2C command may need the external 32kHz MCO reference,
+         * including when trying to recover from RADIO_ERROR. */
+        LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE,LL_RCC_MCO1_DIV_1);
+        Register[0]&=(uint16_t)~(RDA5807_REG02_ENABLE|
+                               RDA5807_REG02_DMUTE|RDA5807_REG02_SEEK);
         (void)radio_write16(RDA5807_REG02,Register[0]);
     }
     LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_NOCLOCK,LL_RCC_MCO1_DIV_1);
@@ -318,7 +363,7 @@ void Radio_AppPoll(void)
     }
 }
 uint8_t Radio_AppIsActive(void)
-{return s_state!=RADIO_OFF;}
+{return s_state!=RADIO_OFF && s_state!=RADIO_ERROR;}
 uint8_t Radio_AppIsReady(void)
 {return s_state==RADIO_READY || s_state==RADIO_SEARCH;}
 uint8_t Radio_AppIsSearching(void)
@@ -448,7 +493,7 @@ static void radio_draw_menu(ui_t *ui)
     }
     Disp_SendBuffer();
 }
-static uint8_t radio_handle_menu(UI_ACTION action)
+static uint8_t radio_handle_menu(ui_t *ui,UI_ACTION action)
 {
     if(action==UI_ACTION_MINUS)
         s_menu_index=s_menu_index? (uint8_t)(s_menu_index-1u):
@@ -459,7 +504,7 @@ static uint8_t radio_handle_menu(UI_ACTION action)
     {
         switch(s_menu_index)
         {
-        case 0u:s_menu_open=0u;break;
+        case 0u:radio_enter_main(ui);break;
         case 1u:
             s_power_policy=(uint8_t)((s_power_policy+1u)%3u);
             if(s_power_policy==RADIO_POWER_OFF)Radio_AppStop();
@@ -483,6 +528,11 @@ void Radio_AppRun(ui_t *ui)
 {
     UI_ACTION action;
     if(!ui)return;
+    if(!s_view_entered)
+    {
+        s_view_entered=1u;
+        radio_enter_main(ui);
+    }
     action=ui->action;
     if(action==UI_ACTION_BACK)
     {
@@ -490,6 +540,7 @@ void Radio_AppRun(ui_t *ui)
          * playing until the platform powers off, exactly like Collar's
          * background listening mode. */
         s_menu_open=0u;
+        s_view_entered=0u;
         if(s_power_policy!=RADIO_POWER_ON)Radio_AppStop();
         return; /* Preserve BACK so MiaoUI leaves the WORD page. */
     }
@@ -498,9 +549,10 @@ void Radio_AppRun(ui_t *ui)
         Radio_AppStart();
     if(s_menu_open)
     {
-        if(radio_handle_menu(action))
+        if(radio_handle_menu(ui,action))
         {
             s_menu_open=0u;
+            s_view_entered=0u;
             if(s_power_policy!=RADIO_POWER_ON)Radio_AppStop();
             ui->action=UI_ACTION_BACK; /* request MiaoUI WORD exit */
             return;
@@ -512,7 +564,7 @@ void Radio_AppRun(ui_t *ui)
     }
     if(action==UI_ACTION_ENTER)
     {
-        s_menu_index=0u;s_menu_open=1u;
+        radio_enter_menu(ui);
         ui->action=UI_ACTION_NONE;
         radio_draw_menu(ui);
         return;
