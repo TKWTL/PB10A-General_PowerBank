@@ -44,66 +44,48 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 
 Powerbank (app), Radio (app), Settings (TEXT: Display/Time/System), Statistics (TEXT: Power/Battery/Sensors), Game (ICON), Tools (ICON), About (WORD). Empty/statistics/game items are placeholders and not hardware telemetry.
 
-### Temporary board verification (2026-11)
+### Board bring-up and ADC telemetry (2026-11)
 
-Buzzer PB1/TIM3_CH4 has passed the 2 kHz / 0.5 s hardware check and is
-not repeated during automatic startup.
+Basic bench bring-up has been performed for the buzzer, FM radio and ADC.
+The temporary boot-time hardware test, including forced FM auto-seek, has
+been removed. Startup now always runs the standard MiaoUI/coroOS
+scheduler; Radio starts only when its menu application is entered.
 
-`APP/functions/hw_test.h` keeps `PB10A_HW_TEST_AUTORUN=1`: the
-only temporary foreground sequence is RDA5807 automatic FM seek for at least 7 s (until seeking completes),
-drawn by the SAME Radio UI as the regular application. After that,
-ordinary MiaoUI/coroOS execution resumes. `Radio_AppRun()` remains fixed
-to seek mode. There are no audio-protection confirmation screens.
+The independent USB-A remains enabled at PA6. The ADC service is
+`APP/services/power_adc_algo.c`, driven only by the fifth coroOS thread:
+one software-triggered ADC1 four-rank scan (PA0, PA5, MCU temperature,
+VREFINT), DMA completion via IRQ, then `THRD_DELAY(500)` before repeating.
+Sampling remains active in RUN and UI_OFF and is paused around STOP1
+through the PM device hook. PA6 is unaffected by these hooks.
 
-The independent USB-A remains enabled at PA6. The ADC driver is
-`APP/services/power_adc_algo.c`, driven **only** by a fifth coroOS thread
-(`PowerADCThread`) in `APP/app_task.c`: one software-triggered ADC1 scan
-of exactly four ranks (PA0, PA5, MCU temperature, VREFINT), DMA completion
-via IRQ, then `THRD_DELAY(500)` before repeating. The coroutine is also
-run during the initial foreground FM test. The Power page shows two raw
-feedback values and the approximate USB-A output millivolts.
+The current CubeMX-generated configuration uses ADC1 HSI clock DIV1,
+39.5-cycle sampling for external channels and 79.5-cycle sampling for
+internal channels; four ranks, software triggering, normal DMA1 Channel2,
+16-bit transfers, memory increment, and DMA Channel2/3 IRQ enabled.
+Keep `.ioc` as the configuration source of truth; do not maintain a
+private patch to the vendor HAL files.
 
-**CubeMX state on the latest main branch:** ADC1 DMA1 Channel2 is
-already `DMA_NORMAL` in both `.ioc` and the generated `adc.c`.
-Keep software trigger, four ranks, continuous ADC conversion OFF,
-DMA continuous requests OFF, 16-bit peripheral/memory alignment,
-memory increment ON and DMA1_Channel2_3 IRQ enabled. No additional
-CubeMX changes are required.
+Statistics -> Power reports:
+- `ADC Err`: 0 = success; 1 = calibration failed; 2 = start failed;
+  3 = 50 ms timeout; 4 = ADC/DMA error callback; 5 = pending.
+- `ADC HAL`: `HAL_ADC_GetError()`; `DMA HAL`: `HAL_DMA_GetError()`.
+  These can show zero after an earlier state-machine failure because
+  `HAL_ADC_Start_DMA()` resets the ADC error code.
 
-`ADC Err` values in Statistics -> Power:
-- 0 = four-rank scan succeeded;
-- 1 = one-time ADC calibration returned error;
-- 2 = `HAL_ADC_Start_DMA` failed;
-- 3 = 50 ms completion timeout;
-- 4 = ADC/DMA error callback (or stop failure after completion);
-- 5 = first scan pending.
+The reproduced G0 calibration failure (`hadc1.State=0x13`,
+`ErrorCode=0x01`, second `ADC_DISABLE_TIMEOUT` branch) and the verified
+CubeMX clock adjustment are documented in
+[`Docs/Debug/2026-11-19_stm32g0_adc_calibration.md`](../../Docs/Debug/2026-11-19_stm32g0_adc_calibration.md).
 
-`ADC HAL` shows `HAL_ADC_GetError()`, `DMA HAL` shows
-`HAL_DMA_GetError()`. For example, STM32 HAL's
-`HAL_ADC_ERROR_DMA = 0x04` and `HAL_DMA_ERROR_TE = 0x01`.
-The previous ADC Err=4 was only an application status, not proof of its
-underlying HAL error bits. Successful NORMAL DMA scans are no longer stopped
-immediately; an ADC Err=4 now comes from an ADC/DMA error callback.
+### Key input (Collar-Radio-style page mapping)
 
-**STM32G0 ADC calibration timing fix:** The local HAL driver in
-`Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_adc_ex.c` calls its existing
-`ADC_Enable()` helper after eight calibration rounds instead of calling
-`LL_ADC_Enable()` followed by a DIV16-only delay. `ADC_Enable()` waits for
-`ADRDY` (and retries a premature ADEN), so it does not write CALFACT or issue
-ADDIS before the ADC becomes ready. This targets the observed
-`HAL_ADCEx_Calibration_Start()` disable timeout with ADC clock HSI/8
-(2 MHz), `hadc1.State=0x13` and `ErrorCode=0x01`.
-ST tracking reference: https://github.com/STMicroelectronics/STM32CubeG0/issues/44.
-Keep this local HAL change when updating the vendored driver.
-Keil/hardware verification is still required: calibration should return
-`HAL_OK`, `s_cal_failed=0`, and the first four-rank DMA scan should populate
-PA0/PA5 without an ADC error. No CubeMX change is needed for this fix.
-
-Sampling continues in RUN and UI_OFF. The ADC device node suspends
-an active DMA scan when PM enters STOP1 preparation (before the platform
-clock/tick node), and resumes after STOP clock restoration. PA6 is not
-changed by STOP hooks. The sampling cadence restarts after wake; it is
-not a hardware-triggered timer or continuous ADC mode.
+Keys are active-low and debounced for 25 ms. On ICON pages physical
+LEFT/RIGHT navigate previous/next and UP/DOWN emit MINUS/PLUS.
+On TEXT pages UP/DOWN navigate previous/next and LEFT/RIGHT emit
+MINUS/PLUS. The data widget uses MINUS/PLUS to decrement/increment
+editable integers (and scaled-integer float parameters). CONF short
+press/release is ENTER, while holding CONF for at least 700 ms is BACK;
+BACK is required for exiting WORD applications and parameter widgets.
 
 `Vout~ mV` uses an assumed 3.3V analog reference and the netlist's
 R39=680k / R41=220k divider; confirm voltage with a multimeter.

@@ -33,7 +33,7 @@ extern "C" {
 
 #include "ui_conf.h"
 
-UI_ACTION indevScan(void);
+UI_ACTION indevScan(const ui_t *ui);
 
 #ifdef __cplusplus
 }

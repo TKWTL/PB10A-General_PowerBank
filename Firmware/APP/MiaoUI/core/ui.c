@@ -1214,7 +1214,7 @@ static void Process_App_Run(ui_t *ui, ui_item_t *item, UI_ACTION Action)
     case UI_ITEM_WORD://显示字符串
         if (item->itemFunction == NULL) Text_Widget(ui);
         else (item->itemFunction)(ui);
-        /* BACK(K2 长按)强制离开函数页:dashboard/小恐龙/烧屏页都只是被菜单
+        /* BACK(CONF 长按)强制离开函数页:dashboard/小恐龙/烧屏页都只是被菜单
          * 调用的绘制函数,页面本身若吞掉了该 action(如烧屏说明页),这里重新
          * 置回,保证"长按=回到上一级"。 */
         if(Action == UI_ACTION_BACK) ui->action = UI_ACTION_BACK;
@@ -1256,7 +1256,7 @@ static void Process_App_Run(ui_t *ui, ui_item_t *item, UI_ACTION Action)
  */
 void ui_loop(ui_t *ui)
 {
-    UI_ACTION Action = indevScan(); // 扫描按钮方向，确定菜单操作方向
+    UI_ACTION Action = indevScan(ui); // 根据当前页面类型映射五向按键
     if (ui->menuState == UI_PAGE_INIT)
     {
         ui->menuState = UI_PAGE_RUNING;

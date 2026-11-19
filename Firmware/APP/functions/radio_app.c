@@ -301,8 +301,8 @@ void Radio_AppRun(ui_t *ui)
     if(s_state==RADIO_OFF)Radio_AppStart();
     else if(s_state==RADIO_READY)
     {
-        if(ui->action==UI_ACTION_UP)radio_seek(0u);
-        else if(ui->action==UI_ACTION_DOWN)radio_seek(1u);
+        if(ui->action==UI_ACTION_MINUS)radio_seek(0u);
+        else if(ui->action==UI_ACTION_PLUS)radio_seek(1u);
     }
     /* MiaoUI WORD pages leave automatically on any unconsumed key. */
     ui->action=UI_ACTION_NONE;

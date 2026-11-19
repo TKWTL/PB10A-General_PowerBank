@@ -1,6 +1,6 @@
 /* Collar-Radio 128x64 I2C scanner rewritten for nonblocking coroOS.
- * One address probe per UI tick; ENTER rescans, UP/DOWN pages results,
- * BACK exits. Never use osDelay/vTaskDelay in a MiaoUI callback.
+ * One address probe per UI tick; ENTER rescans, PLUS/MINUS pages results,
+ * BACK (long CONF) exits. Never use osDelay/vTaskDelay in a MiaoUI callback.
  */
 #include "i2c_scanner.h"
 #include "millis.h"
@@ -39,8 +39,8 @@ void i2c_Scanner(ui_t *ui)
     }
     if(ui->action==UI_ACTION_ENTER)
         scanner_reset();
-    if(ui->action==UI_ACTION_UP && s_page>0u)--s_page;
-    if(ui->action==UI_ACTION_DOWN && (uint16_t)(s_page+1u)*8u<s_count)++s_page;
+    if(ui->action==UI_ACTION_MINUS && s_page>0u)--s_page;
+    if(ui->action==UI_ACTION_PLUS && (uint16_t)(s_page+1u)*8u<s_count)++s_page;
     /* The WORD page callback must consume keys other than BACK. */
     ui->action=UI_ACTION_NONE;
     if(s_scanning)

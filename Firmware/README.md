@@ -1,6 +1,6 @@
 # Firmware · STM32G070KBTx
 
-**状态：OLED 最小移植阶段。** CubeMX 骨架已接入 SSD1306/SPI1 DMA、MiaoUI/u8g2 与 coroOS；尚未做硬件实测，也未实现 PD/电源管理和其它业务驱动。详见 [`Docs/OLED_BRINGUP.md`](../Docs/OLED_BRINGUP.md)。
+**状态：基础硬件联调阶段。** 已完成 ADC、蜂鸣器、FM 等板级功能的初步验证；应用菜单、按键映射和部分功耗行为仍需整机回归测试。调试经验见 [`Docs/Debug/`](../Docs/Debug/README.md)，早期 OLED 记录见 [`Docs/OLED_BRINGUP.md`](../Docs/OLED_BRINGUP.md)。
 
 ## 分层与依赖
 

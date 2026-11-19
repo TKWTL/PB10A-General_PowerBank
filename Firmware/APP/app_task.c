@@ -11,7 +11,6 @@
 #include "beep_algo.h"
 #include "system_algo.h"
 #include "sc7a20.h"
-#include "hw_test.h"
 #include "power_adc_algo.h"
 
 static ui_t s_ui;
@@ -107,22 +106,9 @@ void APP_TaskInit(void)
     pm_api_init();
     CoroOS_Init(&s_scheduler, s_threads, s_states,
                 (uint8_t)(sizeof(s_threads) / sizeof(s_threads[0])));
-#if PB10A_HW_TEST_AUTORUN
-    HW_TestInit();
-#endif
 }
 
 void APP_TaskRunOnce(void)
 {
-#if PB10A_HW_TEST_AUTORUN
-    if(HW_TestActive())
-    {
-        /* Normal scheduler is paused for initial FM foreground: run the
-         * very same ADC coroutine state explicitly, not a second sampler. */
-        (void)PowerADCThread(&s_states[4]);
-        HW_TestPoll(&s_ui);
-        return; /* Temporarily show only original FM seek screen at boot. */
-    }
-#endif
     CoroOS_RunOnce(&s_scheduler);
 }
