@@ -69,27 +69,27 @@ extern "C" {
 #endif
 
 //输入输出最大功率设定，最大100W
-#define SW6306_INPUT_POWER_MAX          30U         //输入/充电功率，单位1W
-#define SW6306_OUTPUT_POWER_MAX         55U         //输出/放电功率，单位1W
+#define SW6306_INPUT_POWER_MAX          100U        //输入/充电功率，单位1W
+#define SW6306_OUTPUT_POWER_MAX         100U        //输出/放电功率，单位1W
 
 //电池端输入输出最大电流设定，最大100W
 #define SW6306_BAT_DCHG_CURR_MAX        12000U      //设置放电电池端限流值（单位:mA，范围：100~12000）
-#define SW6306_BAT_CHG_CURR_MAX         4500U       //设置充电电池端限流值（单位:mA，范围：100~12000）
+#define SW6306_BAT_CHG_CURR_MAX         6000U       //设置充电电池端限流值（单位:mA，范围：100~12000）
 
 //PD各电流挡位设置
 #define SW6306_PD_5V_FIX_CURR           5000U       //PD 5V Fix电流（必须是10的倍数）（单位：mA）（最大5000）
 #define SW6306_PD_9V_FIX_CURR           5000U       //PD 9V Fix电流（必须是10的倍数）
-#define SW6306_PD_12V_FIX_CURR          3600U       //PD 12V Fix电流（必须是10的倍数）
-#define SW6306_PD_15V_FIX_CURR          3000U       //PD 15V Fix电流（必须是10的倍数）
-#define SW6306_PD_20V_FIX_CURR          2000U       //PD 20V Fix绝对上限2A；运行时还随POSET降低
+#define SW6306_PD_12V_FIX_CURR          5000U       //PD 12V Fix电流（必须是10的倍数）
+#define SW6306_PD_15V_FIX_CURR          5000U       //PD 15V Fix电流（必须是10的倍数）
+#define SW6306_PD_20V_FIX_CURR          5000U       //PD 20V Fix绝对上限2A；运行时还随POSET降低
 #define SW6306_PD_PPS0_CURR             5000U       //PD PPS0电流（最大6V）（必须是50的倍数）（单位：mA）（最大5000）
 #define SW6306_PD_PPS1_CURR             5000U       //PD PPS1电流（最大11V）（必须是50的倍数）
-#define SW6306_PD_PPS2_CURR             3000U       //PD PPS2电流（最大16V）（必须是50的倍数）
-#define SW6306_PD_PPS3_CURR             2000U       //PD PPS3(21V)绝对上限2A；运行时还随POSET降低
+#define SW6306_PD_PPS2_CURR             5000U       //PD PPS2电流（最大16V）（必须是50的倍数）
+#define SW6306_PD_PPS3_CURR             5000U       //PD PPS3(21V)绝对上限2A；运行时还随POSET降低
 //UFCS各电流挡位设置
 #define SW6306_UFCS_5V_MAX_MA           5000U       //UFCS source 5V可编程档位最大电流（必须是50的倍数）
 #define SW6306_UFCS_10V_MAX_MA          5000U       //UFCS source 10V可编程档位最大电流（必须是50的倍数）
-#define SW6306_UFCS_20V_MAX_MA          2000U       //UFCS高压(约21V)绝对上限2A；运行时还随POSET降低
+#define SW6306_UFCS_20V_MAX_MA          5000U       //UFCS高压(约21V)绝对上限2A；运行时还随POSET降低
 
 /******************************用户设置区结束**********************************/
 //操作语法宏，方便添加freeRTOS之类的支持
