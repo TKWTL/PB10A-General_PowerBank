@@ -82,7 +82,22 @@ CubeMX changes are required.
 `HAL_DMA_GetError()`. For example, STM32 HAL's
 `HAL_ADC_ERROR_DMA = 0x04` and `HAL_DMA_ERROR_TE = 0x01`.
 The previous ADC Err=4 was only an application status, not proof of its
-underlying HAL error bits.
+underlying HAL error bits. Successful NORMAL DMA scans are no longer stopped
+immediately; an ADC Err=4 now comes from an ADC/DMA error callback.
+
+**STM32G0 ADC calibration timing fix:** The local HAL driver in
+`Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_adc_ex.c` calls its existing
+`ADC_Enable()` helper after eight calibration rounds instead of calling
+`LL_ADC_Enable()` followed by a DIV16-only delay. `ADC_Enable()` waits for
+`ADRDY` (and retries a premature ADEN), so it does not write CALFACT or issue
+ADDIS before the ADC becomes ready. This targets the observed
+`HAL_ADCEx_Calibration_Start()` disable timeout with ADC clock HSI/8
+(2 MHz), `hadc1.State=0x13` and `ErrorCode=0x01`.
+ST tracking reference: https://github.com/STMicroelectronics/STM32CubeG0/issues/44.
+Keep this local HAL change when updating the vendored driver.
+Keil/hardware verification is still required: calibration should return
+`HAL_OK`, `s_cal_failed=0`, and the first four-rank DMA scan should populate
+PA0/PA5 without an ADC error. No CubeMX change is needed for this fix.
 
 Sampling continues in RUN and UI_OFF. The ADC device node suspends
 an active DMA scan when PM enters STOP1 preparation (before the platform

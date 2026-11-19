@@ -107,8 +107,6 @@ HAL_StatusTypeDef HAL_ADCEx_Calibration_Start(ADC_HandleTypeDef *hadc)
   uint32_t calibration_index;
   uint32_t calibration_factor_accumulated = 0;
   uint32_t tickstart;
-  uint32_t adc_clk_async_presc;
-  __IO uint32_t delay_cpu_cycles;
 
   /* Check the parameters */
   assert_param(IS_ADC_ALL_INSTANCE(hadc->Instance));
@@ -170,30 +168,17 @@ HAL_StatusTypeDef HAL_ADCEx_Calibration_Start(ADC_HandleTypeDef *hadc)
     calibration_factor_accumulated += (calibration_index / 2UL);
     calibration_factor_accumulated /= calibration_index;
 
-    /* Apply calibration factor (requires ADC enable and disable process) */
-    LL_ADC_Enable(hadc->Instance);
-
-    /* Case of ADC clocked at low frequency: Delay required between ADC enable and disable actions */
-    if (LL_ADC_GetClock(hadc->Instance) == LL_ADC_CLOCK_ASYNC)
+    /* The ADC may ignore an ADEN written immediately after calibration.
+       ADC_Enable() retries ADEN when necessary and waits for ADRDY before
+       allowing CALFACT to be written and ADDIS to be requested. This also
+       covers slow ADC clocks (e.g. 16 MHz HSI / 8 = 2 MHz) for which the
+       old prescaler >= DIV16 delay was never executed.
+       See STM32CubeG0 issue #44 (ADC calibration enable/disable timing). */
+    tmp_hal_status = ADC_Enable(hadc);
+    if (tmp_hal_status != HAL_OK)
     {
-      adc_clk_async_presc = LL_ADC_GetCommonClock(__LL_ADC_COMMON_INSTANCE(hadc->Instance));
-
-      /* Delay applied only when ADC clock frequency is much lower than CPU clock frequency
-         (in other cases, code execution time is sufficient to ensure necessary delay) */
-      if (adc_clk_async_presc >= LL_ADC_CLOCK_ASYNC_DIV16)
-      {
-        /* Delay loop initialization and execution */
-        /* Delay depends on ADC clock prescaler: Compute ADC clock asynchronous prescaler to decimal format
-           (for instance, computation from ADC prescaler 64 (register bitfield value 0x9) will give decimal value 64) */
-        delay_cpu_cycles = (1UL << ((adc_clk_async_presc >> ADC_CCR_PRESC_Pos) - 3UL));
-        /* Divide variable by 2 to compensate partially CPU processing cycles */
-        delay_cpu_cycles >>= 1UL;
-
-        while (delay_cpu_cycles != 0UL)
-        {
-          delay_cpu_cycles--;
-        }
-      }
+      __HAL_UNLOCK(hadc);
+      return tmp_hal_status;
     }
 
     LL_ADC_SetCalibrationFactor(hadc->Instance, calibration_factor_accumulated);
