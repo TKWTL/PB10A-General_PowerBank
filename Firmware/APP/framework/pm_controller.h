@@ -18,6 +18,8 @@ typedef struct {
     uint8_t wake_latched;
     uint8_t post_hold_ticks;
     uint8_t idle_timer_paused;
+    uint8_t transition_pending;
+    uint8_t resuming;
 } pm_controller_t;
 
 void pm_controller_init(pm_controller_t *ctx, uint32_t idle_timeout_ms);

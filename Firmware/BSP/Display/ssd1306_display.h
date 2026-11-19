@@ -14,6 +14,7 @@ SSD1306_InitState SSD1306_Display_InitState(void);
 void SSD1306_Display_RequestFlush(const uint8_t *framebuffer);
 void SSD1306_Display_RequestContrast(uint8_t contrast);
 void SSD1306_Display_RequestPowerSave(uint8_t enable);
+uint8_t SSD1306_Display_PowerSettled(uint8_t off);
 void SSD1306_Display_Service(void);
 /* Nonzero while u8g2 framebuffer is owned by the asynchronous SPI DMA. */
 uint8_t SSD1306_Display_FrameBusy(void);

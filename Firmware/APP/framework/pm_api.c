@@ -1,12 +1,10 @@
 /* PB10A cooperative power manager. State transitions from PB02B/IH01A.
- * No external peripheral low-power callbacks are active yet.
+ * Low-power hooks may asynchronously return PENDING.
  */
 #include "pm_api.h"
 #include "pm_controller.h"
 #include "pm_device.h"
 #include "pm_sleep_timer.h"
-#include "ssd1306_display.h"
-#include "spi.h"
 #include "millis.h"
 #define PM_DEFAULT_TIMEOUT_MS 60000u
 static pm_controller_t s_ctrl;
@@ -61,7 +59,7 @@ void pm_api_poll(void)
     {
         /* A normal RUN key must not activate the post-STOP input guard.
          * Otherwise every navigation key is swallowed for 200 ms. */
-        uint8_t waking=(s_ctrl.state!=PM_STATE_RUN)?1u:0u;
+        uint8_t waking=pm_controller_is_ui_blocked(&s_ctrl)?1u:0u;
         s_key_irq=0u;
         pm_sleep_timer_clear_force();
         s_forced=0u;
@@ -82,11 +80,6 @@ void pm_api_poll(void)
         pm_controller_resume_idle(&s_ctrl);s_paused=0u;
     }
     if(pm_sleep_timer_expired())pm_controller_mark_ui_active(&s_ctrl,0u);
-    /* Do not enter STOP while the OLED still owns the u8g2 framebuffer
-     * or the SPI HAL is processing/aborting a DMA operation. */
-    if(s_ctrl.state==PM_STATE_SLEEP_PREPARE &&
-       (SSD1306_Display_FrameBusy() || SPI1_DmaTxState()!=SPI1_DMA_IDLE))
-        pm_controller_refresh_idle(&s_ctrl);
     previous=s_ctrl.state;
     next=pm_controller_step(&s_ctrl);
     if(previous!=PM_STATE_DEEPSLEEP && next==PM_STATE_DEEPSLEEP)

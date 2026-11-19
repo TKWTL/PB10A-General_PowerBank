@@ -35,7 +35,7 @@ static ui_item_t s_adc_hal_item,s_dma_hal_item;
 static ui_data_t s_data[6];
 static ui_element_t s_elements[6];
 
-static void power_adc_suspend(void *ctx)
+static pm_hook_result_t power_adc_suspend(void *ctx)
 {
     (void)ctx;
     s_suspended=1u;
@@ -45,12 +45,14 @@ static void power_adc_suspend(void *ctx)
         s_active=0u;
         s_transfer_result=0u;
     }
+    return PM_HOOK_DONE;
 }
-static void power_adc_resume(void *ctx)
+static pm_hook_result_t power_adc_resume(void *ctx)
 {
     (void)ctx;
     /* STM32 platform node (order 250) restores clocks first. */
     s_suspended=0u;
+    return PM_HOOK_DONE;
 }
 static const pm_device_node_t s_power_adc_pm={
     "power-adc",0,power_adc_suspend,power_adc_resume,0,200u,0,0

@@ -22,7 +22,7 @@ static uint8_t s_init_cmd[]={
     0x81,0xCF,0xD9,0xF1,0xDB,0x40,0x2E,0xA4,0xA6,0xAF
 };
 static uint8_t s_restore_cmd[]={0x20,0x02};
-static uint8_t s_power_save,s_power_requested,s_power_dirty;
+static uint8_t s_power_save,s_power_requested,s_power_dirty,s_cpen_on;
 static uint8_t s_contrast_dirty,s_contrast,s_transmitted_value;
 static uint8_t s_ready,s_init_pending,s_init_failed,s_init_attempts,s_dma_phase;
 static uint32_t s_frames,s_dma_started_ms,s_power_ready_ms;
@@ -74,7 +74,8 @@ uint8_t SSD1306_Display_Begin(u8g2_t *screen)
 {
     if(!screen)return 0u;
     LL_GPIO_SetOutputPin(CPEN_GPIO_Port,CPEN_Pin);
-    s_power_ready_ms=Millis()+30u;
+    s_cpen_on=1u;
+    s_power_ready_ms=Millis()+1u; /* CPEN before charge pump */
     s_screen=screen;s_frame=0;
     s_power_save=0u;s_power_requested=0u;s_power_dirty=0u;
     s_contrast_dirty=0u;s_contrast=0u;s_transmitted_value=0u;
@@ -93,7 +94,7 @@ SSD1306_InitState SSD1306_Display_InitState(void)
 }
 void SSD1306_Display_RequestFlush(const uint8_t *framebuffer)
 {
-    if(!s_ready || !framebuffer || s_frame)return;
+    if(!s_ready || !framebuffer || s_frame || s_power_requested || s_power_save)return;
     /* No memcpy: caller must not modify framebuffer until FrameBusy clears. */
     s_frame=framebuffer;
 }
@@ -101,7 +102,23 @@ uint8_t SSD1306_Display_FrameBusy(void){return s_frame!=0;}
 void SSD1306_Display_RequestContrast(uint8_t contrast)
 { s_contrast=contrast;s_contrast_dirty=1u; }
 void SSD1306_Display_RequestPowerSave(uint8_t enable)
-{ s_power_requested=enable?1u:0u;s_power_dirty=1u; }
+{
+ s_power_requested=enable?1u:0u;
+ s_power_dirty=s_power_save!=s_power_requested;
+ if(!s_power_requested && !s_cpen_on)
+ {
+  LL_GPIO_SetOutputPin(CPEN_GPIO_Port,CPEN_Pin);
+  s_cpen_on=1u;s_power_ready_ms=Millis()+1u;
+ }
+}
+uint8_t SSD1306_Display_PowerSettled(uint8_t off)
+{
+ return (uint8_t)(s_ready && !s_init_pending &&
+  s_power_save==(off?1u:0u) && !s_power_dirty &&
+  s_dma_phase==OLED_PHASE_IDLE && !s_frame &&
+  SPI1_DmaTxState()==SPI1_DMA_IDLE &&
+  (off?!s_cpen_on:s_cpen_on));
+}
 void SSD1306_Display_Service(void)
 {
     SPI1_DmaState status;
@@ -150,7 +167,13 @@ void SSD1306_Display_Service(void)
             return;
         case OLED_PHASE_POWER:
             s_power_save=s_transmitted_value;
-            s_power_dirty=(s_power_requested!=s_transmitted_value);
+            /* Display OFF -> pump OFF -> CPEN LOW; no extra delay. */
+            if(s_power_save && s_cpen_on)
+            {
+                LL_GPIO_ResetOutputPin(CPEN_GPIO_Port,CPEN_Pin);
+                s_cpen_on=0u;
+            }
+            s_power_dirty=s_power_requested!=s_transmitted_value;
             return;
         case OLED_PHASE_CONTRAST:
             s_contrast_dirty=(s_contrast!=s_transmitted_value);
@@ -183,9 +206,28 @@ void SSD1306_Display_Service(void)
     }
     if(s_power_dirty)
     {
+        if(!s_power_requested)
+        {
+            if(!s_cpen_on)
+            {
+                LL_GPIO_SetOutputPin(CPEN_GPIO_Port,CPEN_Pin);
+                s_cpen_on=1u;
+                s_power_ready_ms=Millis()+1u;
+            }
+            if((int32_t)(Millis()-s_power_ready_ms)<0)return;
+        }
         s_transmitted_value=s_power_requested;
-        s_cmd[0]=s_transmitted_value?0xAEu:0xAFu;
-        (void)oled_start(s_cmd,1u,0u,OLED_PHASE_POWER);
+        if(s_transmitted_value)
+        {
+            s_cmd[0]=0xAEu; /* display OFF */
+            s_cmd[1]=0x8Du;s_cmd[2]=0x10u; /* pump OFF */
+        }
+        else
+        {
+            s_cmd[0]=0x8Du;s_cmd[1]=0x14u; /* pump ON */
+            s_cmd[2]=0xAFu; /* display ON */
+        }
+        (void)oled_start(s_cmd,3u,0u,OLED_PHASE_POWER);
         return;
     }
     if(s_contrast_dirty)
