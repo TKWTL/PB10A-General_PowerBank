@@ -61,3 +61,28 @@ BSP `ssd1306_display.c` 的 SPI DMA 是异步的，PM 回调只提交请求并
 - 回调涉及实际电源和时钟：需分别实测自动熄屏、按键中止休眠、
   STOP1 唤醒，以及充电/放电过程的连续性。**当前仅源码静态检查，
   未完成 Keil 编译和硬件功耗测量**。
+
+## 收音机动画移植与 MCO 电源时序
+
+**回归问题**：先前将 Collar-Radio 的阻塞式 `Radio_Run()` 简化为
+PB10A 的单次 `Radio_AppRun()` 时，把 `disp_value1` 的上/下状态栏 PID
+滑入，以及菜单选项框的 Y/宽度双 PID 动画替换成了静态控件。这是
+功能遗漏，不是 STM32G070 或 coroOS 的能力限制。
+
+**恢复方法**：保留原版菜单坐标、图标、XOR 选项框和 PID 参数，把
+`while(1)` 内每轮的绘制/输入处理改为一次 `Radio_AppRun()` 调用。
+三个动画状态 `s_slide_q`、`s_cursor_y_q`、`s_cursor_w_q` 保存在
+静态结构中，由 MiaoUI 的 Q10 定点 `UI_Animation()` 每帧推进；
+不用长时间独占调度器，也不需要浮点库。
+
+**功耗检查点**：Radio 服务初始化在 `MX_I2C1_Init()` 之后；
+初始化期间临时提供 LSE MCO，向 RDA5807 的 0x02 寄存器写
+`ENABLE=0` 后停止 MCO；状态可通过
+`RadioAlgo_BootSleepAcknowledged()` 检查。播放前开启 MCO，
+UI_OFF/STOP1 期间关闭（含错误状态的尽力关断），唤醒后不
+自动开启。播放过程中的 I²C 错误也不得持续占用 MCO 或
+休眠阻止标志。I²C 关断未确认时不能声称射频芯片已关断。
+
+**实机验证**：需观察进入 Radio 的上下状态栏同时滑入，菜单中
+连续移动选择项时框体位置及宽度均有过渡；同时测量 MCO
+引脚在初始化后、Radio 工作时、UI_OFF 和 STOP1 唤醒后的波形。
