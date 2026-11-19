@@ -49,13 +49,13 @@ void Create_MenuTree(ui_t *ui)
 {
     (void)ui;
     AddPage("[PB10A]",&s_home,UI_PAGE_ICON,0);
-    AddItem("-Powerbank",UI_ITEM_WORD,img_powerbank,&s_powerbank,&s_home,0,Powerbank_AppRun);
+    AddItem("-Powerbank",UI_ITEM_WORD,img_power,&s_powerbank,&s_home,0,Powerbank_AppRun);
     AddItem("-Radio",UI_ITEM_WORD,img_radio,&s_radio,&s_home,0,Radio_AppRun);
     AddItem("-Settings",UI_ITEM_PARENTS,img_configuration,&s_settings_item,&s_home,&s_settings,0);
     AddItem("-Statistics",UI_ITEM_PARENTS,img_statistics,&s_stats_item,&s_home,&s_stats,0);
     AddItem("-Game",UI_ITEM_PARENTS,img_games,&s_game_item,&s_home,&s_game,0);
     AddItem("-Tools",UI_ITEM_PARENTS,img_tools,&s_tools_item,&s_home,&s_tools,0);
-    AddItem("-About",UI_ITEM_WORD,img_user_account,&s_about,&s_home,0,0);
+    AddItem("-About",UI_ITEM_WORD,img_toby_fox,&s_about,&s_home,0,0);
 
     AddPage("[Settings]",&s_settings,UI_PAGE_TEXT,&s_home);
     add_return(&s_settings,&s_home,&s_settings_back,0);

@@ -19,5 +19,5 @@ extern const unsigned char img_tools[];
 extern const unsigned char img_scan[];
 extern const unsigned char img_dinosuar[];
 extern const unsigned char img_screen[];
-extern const unsigned char img_powerbank[];
+extern const unsigned char img_power[];
 #endif
