@@ -374,32 +374,36 @@ uint8_t Radio_AppIsSearching(void)
  * Only unknown battery fill is omitted until a battery telemetry service exists.
  * This is a single-pass MiaoUI callback, not Collar's blocking while(1).
  */
+/* Collar-Radio original geometry: PID-driven disp_value1 slides the
+ * status icons upward from offscreen and the RTC footer downward into view.
+ * Here s_slide_q persists between cooperative frames in fixed-point Q10. */
 void Radio_AppDraw(ui_t *ui)
 {
-    uint8_t fg, i, x;
+    uint8_t fg,i,x;
+    int16_t slide;
     char buf[24];
-    uint16_t fraction, textwidth;
+    uint16_t fraction,textwidth;
     if(!ui)return;
+    s_slide_q=UI_Animation(UI_FX(0),s_slide_q,&s_slide_pid);
+    slide=(int16_t)UI_FXI(s_slide_q);
     Disp_SetMaxClipWindow();
     Disp_SetDrawColor(&ui->bgColor);
     Disp_DrawBox(0u,0u,UI_HOR_RES,UI_VER_RES);
     fg=(uint8_t)(ui->bgColor^1u);
     Disp_SetDrawColor(&fg);
     Disp_SetFont(font_radio_h12w6);
-
-    /* Collar original XBM status widgets. MIC_INDET is PB10A jack detect. */
-    Disp_DrawXBMP(1u,1u,7u,9u,s_signal_icon);
+    /* Collar-Radio radio.c: every top status widget uses y-slide. */
+    Disp_DrawXBMP(1u,(uint16_t)(1-slide),7u,9u,s_signal_icon);
     (void)snprintf(buf,sizeof(buf),":%u",(unsigned)s_rssi);
-    Disp_DrawStr(8u,10u,buf);
-    Disp_DrawStr(48u,10u,
-                 LL_GPIO_IsInputPinSet(MIC_INDET_GPIO_Port,MIC_INDET_Pin)?"OFF":"ON");
-    Disp_DrawXBMP(69u,1u,6u,9u,s_speaker_icon);
+    Disp_DrawStr(8u,(uint16_t)(10-slide),buf);
+    Disp_DrawStr(48u,(uint16_t)(10-slide),
+        LL_GPIO_IsInputPinSet(MIC_INDET_GPIO_Port,MIC_INDET_Pin)?"OFF":"ON");
+    Disp_DrawXBMP(69u,(uint16_t)(1-slide),6u,9u,s_speaker_icon);
     (void)snprintf(buf,sizeof(buf),":%u%%",
-                   (unsigned)(((uint16_t)s_volume+1u)*100u/16u));
-    Disp_DrawStr(75u,10u,buf);
-    Disp_DrawXBMP(111u,2u,16u,8u,s_battery_icon);
+        (unsigned)(((uint16_t)s_volume+1u)*100u/16u));
+    Disp_DrawStr(75u,(uint16_t)(10-slide),buf);
+    Disp_DrawXBMP(111u,(uint16_t)(2-slide),16u,8u,s_battery_icon);
 
-    /* Same large Spleen digits as the original Collar-Radio UI. */
     Disp_SetFont(font_radio_h24w12);
     if(s_state==RADIO_SEARCH)
         Disp_DrawStr(4u,37u,"Seeking...");
@@ -412,9 +416,14 @@ void Radio_AppDraw(ui_t *ui)
         (void)snprintf(buf,sizeof(buf),"I2C ERROR %u",(unsigned)s_error_code);
         Disp_DrawStr(21u,36u,buf);
     }
+    else if(s_state==RADIO_OFF)
+    {
+        Disp_SetFont(font_radio_h12w6);
+        Disp_DrawStr(37u,36u,"Radio OFF");
+    }
     else
     {
-        fraction=(uint16_t)((s_freq_units%40u)*25u); /* kHz */
+        fraction=(uint16_t)((s_freq_units%40u)*25u);
         if((fraction%10u)==0u)
             (void)snprintf(buf,sizeof(buf),"%u.%02u",
                            (unsigned)(s_freq_units/40u),
@@ -429,35 +438,44 @@ void Radio_AppDraw(ui_t *ui)
         Disp_DrawStr(103u,38u,"MHz");
     }
 
-    /* Original station ruler: x = (freq-3440)*5/36, at y=43-48. */
+    /* Original 43/45/47 px station ruler and 25 kHz markers. */
     x=radio_marker_x(s_freq_units);
     Disp_DrawPixel(x,43u);
     Disp_DrawLine(0u,45u,127u,45u);
     for(i=0u;i<s_station_count;i++)
     {
-        uint8_t dot_x=radio_marker_x(s_stations[i]);
-        Disp_DrawPixel(dot_x,47u);
+        uint8_t station_x=radio_marker_x(s_stations[i]);
+        Disp_DrawPixel(station_x,47u);
         if(s_stations[i]==s_freq_units)
         {
-            Disp_DrawPixel(dot_x,46u);
-            Disp_DrawPixel(dot_x,48u);
+            Disp_DrawPixel(station_x,46u);
+            Disp_DrawPixel(station_x,48u);
         }
     }
 
+    /* The original date/time footer moves in from y=63+12. */
     Disp_SetFont(font_radio_h12w6);
     (void)snprintf(buf,sizeof(buf),"%02d:%02d:%02d",
                    sTime.Hours,sTime.Minutes,sTime.Seconds);
-    Disp_DrawStr(1u,63u,buf);
+    Disp_DrawStr(1u,(uint16_t)(63+slide),buf);
     (void)snprintf(buf,sizeof(buf),"20%02d/%02d/%02d",
                    sTime.Year,sTime.Month,sTime.Date);
-    Disp_DrawStr(68u,63u,buf);
+    Disp_DrawStr(68u,(uint16_t)(63+slide),buf);
     Disp_SendBuffer();
 }
 /* Collar-Radio 5-row settings menu; no blocking while(1). */
+/* The original five-row Collar-Radio menu, including its animated
+ * 10-pixel XOR selection box (PID position AND PID text-width).
+ * The earlier fixed full-row outline was not equivalent. */
 static void radio_draw_menu(ui_t *ui)
 {
-    uint8_t i,fg;
-    char row[40];
+    static const char *const fixed_labels[RADIO_MENU_COUNT]={
+        "Return","Power Mode:","Radio Mode:",0,"Exit Radio Page"
+    };
+    uint8_t i,fg,xor_color=2u;
+    uint16_t width_target;
+    const char *selected_label=0;
+    char option[36];
     const char *mode=s_mode==RADIO_MODE_SEARCH?"Search":
                      s_mode==RADIO_MODE_FREQ?"Frequency":"Preset";
     const char *power=s_power_policy==RADIO_POWER_ON?"ON":
@@ -469,28 +487,42 @@ static void radio_draw_menu(ui_t *ui)
     fg=(uint8_t)(ui->bgColor^1u);
     Disp_SetDrawColor(&fg);
     Disp_SetFont(font_radio_h12w6);
-    Disp_DrawStr(18u,10u,"-Radio Setting-");
-    Disp_DrawLine(0u,12u,127u,12u);
+    Disp_DrawLine(0u,6u,127u,6u);
+    Disp_DrawStr(19u,10u,"-Radio Setting:-");
+
     for(i=0u;i<RADIO_MENU_COUNT;i++)
     {
-        const uint8_t y=(uint8_t)(22u+i*10u);
-        switch(i)
+        const uint8_t y=(uint8_t)(20u+i*10u);
+        if(i!=3u)Disp_DrawStr(2u,y,fixed_labels[i]);
+        if(i==1u)Disp_DrawStr(74u,y,power);
+        else if(i==2u)Disp_DrawStr(74u,y,mode);
+        else if(i==3u)
         {
-        case 0u:(void)snprintf(row,sizeof(row),"Return");break;
-        case 1u:(void)snprintf(row,sizeof(row),"Power Mode: %s",power);break;
-        case 2u:(void)snprintf(row,sizeof(row),"Radio Mode: %s",mode);break;
-        case 3u:
             if(s_mode==RADIO_MODE_PRESET)
-                (void)snprintf(row,sizeof(row),"Clear + Full Seek");
+                (void)snprintf(option,sizeof(option),"-All Clear and Seek-");
             else
-                (void)snprintf(row,sizeof(row),"%s station",
-                   radio_has_station(s_freq_units)?"Remove":"Save");
-            break;
-        default:(void)snprintf(row,sizeof(row),"Exit Radio Page");break;
+                (void)snprintf(option,sizeof(option),"%s",
+                    radio_has_station(s_freq_units)?
+                    "-Remove from List-":"-Add to station List-");
+            Disp_DrawStr(1u,y,option);
         }
-        Disp_DrawStr(2u,y,row);
-        if(i==s_menu_index)Disp_DrawFrame(0u,(uint16_t)(y-9u),128u,10u);
+        if(i==s_menu_index)
+            selected_label=i==3u?option:fixed_labels[i];
     }
+    width_target=(uint16_t)(selected_label?
+        Disp_GetUTF8Width(selected_label)+2u:2u);
+    if(width_target>UI_HOR_RES)width_target=UI_HOR_RES;
+
+    /* Collar's UI_Animation label-width + Y-position pair, with its
+     * actual MiaoUI PID coefficients copied at menu entry. */
+    s_cursor_w_q=UI_Animation(UI_FX(width_target),
+                              s_cursor_w_q,&s_cursor_w_pid);
+    s_cursor_y_q=UI_Animation(UI_FX((int32_t)(10u+s_menu_index*10u)),
+                              s_cursor_y_q,&s_cursor_y_pid);
+    Disp_SetDrawColor(&xor_color);
+    Disp_DrawRBox(0u,(uint16_t)(UI_FXI(s_cursor_y_q)+1),
+                  (uint16_t)UI_FXI(s_cursor_w_q),10u,0u);
+    Disp_SetDrawColor(&fg);
     Disp_SendBuffer();
 }
 static uint8_t radio_handle_menu(ui_t *ui,UI_ACTION action)
