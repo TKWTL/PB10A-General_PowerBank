@@ -1,7 +1,7 @@
 # STM32G070 ADC 校准后禁用超时（PB10A）
 
 - **日期**：2026-11-19
-- **位置**：`Firmware/APP/services/power_adc_algo.c` 调用的
+- **位置**：`Firmware/APP/services/power_algo.c` 调用的
   `HAL_ADCEx_Calibration_Start(&hadc1)`
 - **芯片**：STM32G070KBTx，ADC1，软件触发四通道、DMA Normal
 - **状态**：板级 ADC 采样已经恢复；本案例记录 Keil 调试过程与
@@ -11,7 +11,7 @@
 
 Statistics → Power 曾出现 `ADC Err 4`，`ADC HAL` 和
 `DMA HAL` 为 0，PA0/PA5 原始采样值保持 0。随后 Keil 发现
-`PowerADC_Init()` 中 `s_cal_failed=1`，进入校准失败处理分支。
+`PowerAlgo_Init()` 中 `s_cal_failed=1`，进入校准失败处理分支。
 
 在该分支暂停时的实测寄存器/变量：
 
@@ -30,7 +30,7 @@ Statistics → Power 曾出现 `ADC Err 4`，`ADC HAL` 和
 
 ## Keil 定位流程
 
-1. 在 `PowerADC_Init()` 的 `HAL_ADCEx_Calibration_Start()` 调用之后
+1. 在 `PowerAlgo_Init()` 的 `HAL_ADCEx_Calibration_Start()` 调用之后
    设断点，Watch 中添加 `s_cal_failed`、`hadc1.State`、
    `hadc1.ErrorCode`、`ADC1->CR`。
 2. 若校准失败，打开

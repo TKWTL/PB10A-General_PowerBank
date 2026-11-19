@@ -60,12 +60,12 @@ The temporary boot-time hardware test, including forced FM auto-seek, has
 been removed. Startup now always runs the standard MiaoUI/coroOS
 scheduler; Radio starts only when its menu application is entered.
 
-The independent USB-A remains enabled at PA6. The ADC service is
-`APP/services/power_adc_algo.c`, driven only by the fifth coroOS thread:
-one software-triggered ADC1 four-rank scan (PA0, PA5, MCU temperature,
-VREFINT), DMA completion via IRQ, then `THRD_DELAY(500)` before repeating.
-Sampling remains active in RUN and UI_OFF and is paused around STOP1
-through the PM device hook. PA6 is unaffected by these hooks.
+The auxiliary USB-A power and ADC sampler are now unified in
+`APP/services/power_algo.c`, along with SW6306 PM policy. The fifth
+coroOS thread keeps its four-rank ADC1 DMA scan and `THRD_DELAY(500)`
+cadence. PA6/SUB_EN is HIGH at startup (CubeMX GPIO initial state) and
+during RUN/UI_OFF. Before STOP1, the PM hook stops DMA/ADC and sets
+SUB_EN LOW. Wake first restores SUB_EN HIGH, then ADC sampling resumes.
 
 The current CubeMX-generated configuration uses ADC1 HSI clock DIV1,
 39.5-cycle sampling for external channels and 79.5-cycle sampling for

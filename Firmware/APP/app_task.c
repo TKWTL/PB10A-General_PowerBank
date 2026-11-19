@@ -11,7 +11,6 @@
 #include "beep_algo.h"
 #include "system_algo.h"
 #include "sc7a20.h"
-#include "power_adc_algo.h"
 #include "power_algo.h"
 #include "sensor_algo.h"
 #include "radio_algo.h"
@@ -75,16 +74,16 @@ THRD_DECLARE(SystemServiceThread)
 /* Exactly one four-rank ADC1 scan per coroutine iteration. The ADC/DMA
  * IRQ signals completion while the coroutine yields to all other threads.
  * The 500ms delay runs regardless of success or failure, and also when the
- * display is off. Only a pending STOP1 suspends the ADC via the PM hook. */
+ * display is off. STOP1 stops ADC and disables SUB_EN via power_algo. */
 THRD_DECLARE(PowerADCThread)
 {
     THRD_BEGIN;
     for(;;)
     {
-        if(!PowerADC_IsSuspended())
+        if(!PowerAlgo_AdcIsSuspended())
         {
-            (void)PowerADC_BeginScan();
-            THRD_UNTIL(PowerADC_ScanSettled());
+            (void)PowerAlgo_AdcBeginScan();
+            THRD_UNTIL(PowerAlgo_AdcScanSettled());
         }
         THRD_DELAY(500u);
     }
@@ -103,8 +102,7 @@ void APP_TaskInit(void)
     /* PB02B SC7A20 initialization: WHO_AM_I + 25Hz/2g/BDU/HR.
      * PB10A INT is on PB5, independent from SW6306; no IRQ sharing. */
     SC7A20_Init();
-    PowerADC_Init(); /* PA6 stays on; 500ms one-shot ADC scan coroutine. */
-    PowerAlgo_Init();  /* SW6306 autonomous charging/PD remains independent. */
+    PowerAlgo_Init();  /* SW6306 and auxiliary A-port power/ADC. */
     SensorAlgo_Init(); /* SC7A20/MMC5603/BMP180 STOP policy. */
     RadioAlgo_Init();  /* RDA5807 powers down before UI_OFF. */
     RTC_UpdateTime();

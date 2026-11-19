@@ -853,11 +853,6 @@
               <FilePath>../APP/functions/radio_app.c</FilePath>
             </File>
             <File>
-              <FileName>power_adc_algo.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../APP/services/power_adc_algo.c</FilePath>
-            </File>
-            <File>
               <FileName>power_algo.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/services/power_algo.c</FilePath>
