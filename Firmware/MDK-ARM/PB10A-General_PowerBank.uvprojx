@@ -862,7 +862,11 @@
               <FileType>1</FileType>
               <FilePath>../APP/services/power_adc_algo.c</FilePath>
             </File>
-          <File><FileName>fault_record.c</FileName><FileType>1</FileType><FilePath>../APP/services/fault_record.c</FilePath></File>
+            <File>
+              <FileName>fault_record.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/services/fault_record.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
