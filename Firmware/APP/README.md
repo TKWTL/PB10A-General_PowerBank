@@ -150,6 +150,18 @@ Radio is explicitly restarted. I2C radio errors also stop MCO and
 release the sleep block. Background Radio Power Mode=ON retains MCO
 until it is explicitly stopped or the user requests root-menu sleep.
 
+### I2C scanner restoration (Collar-Radio visual compatibility)
+
+The original Collar-Radio I2C Scanner used a 1.5 s large-font
+`I2C`/`Scanner` splash, followed by 128 cells in 16 columns x 8 rows
+with `font_home_h6w4` (each address rendered as two 4px hex glyphs).
+PB10A now preserves that UI exactly with the source font restored from
+Collar-Radio. The inner blocking `while(1)` and 128-device tight loop
+have been replaced by one address probe per MiaoUI frame. CONF rescans,
+long CONF BACK exits, and rescan occurs automatically 5 seconds after
+completion. For I2C bus safety, addresses 0x00-0x07 and 0x78-0x7F
+are not probed; their visual matrix cells stay `--`.
+
 ### Radio MiaoUI WORD page (Collar-Radio five-item menu)
 
 Radio main view: physical UP/DOWN controls RDA5807 0-15 volume;

@@ -1,79 +1,108 @@
-/* Collar-Radio 128x64 I2C scanner rewritten for nonblocking coroOS.
- * One address probe per UI tick; ENTER rescans, PLUS/MINUS pages results,
- * BACK (long CONF) exits. Never use osDelay/vTaskDelay in a MiaoUI callback.
+/* Faithful Collar-Radio I2C Scanner visual port:
+ * - 1500ms splash using the 24px Spleen title font (I2C / Scanner)
+ * - 128x64 address matrix, 16 columns x 8 rows of 4px glyphs
+ * - one I2C address probe per UI frame rather than blocking all tasks
+ * - automatic scan again after 5 seconds, ENTER immediate rescan
+ * - long CONF/BACK exits MiaoUI WORD application
+ *
+ * Only the safe 7-bit addresses 0x08..0x77 are probed; reserved
+ * positions remain "--". This preserves the original 16x8 layout.
  */
 #include "i2c_scanner.h"
 #include "millis.h"
 #include "bsp_i2c.h"
 #include "display/dispDriver.h"
+#include "fonts/fonts.h"
 #include "pm_api.h"
 #include <stdio.h>
-#define SCAN_MIN_ADDR 0x08u
-#define SCAN_MAX_ADDR 0x77u
-#define SCAN_IDLE_MS 5000u
-#define PM_BLOCK_I2C_SCAN 0x02u
-static uint8_t s_scanning,s_next,s_count,s_page,s_active;
-static uint8_t s_found[SCAN_MAX_ADDR-SCAN_MIN_ADDR+1u];
-static uint32_t s_next_scan_ms;
-static void scanner_reset(void)
+#define SCANNER_SPLASH_MS 1500u
+#define SCANNER_RESCAN_MS 5000u
+#define SCANNER_FIRST 0x08u
+#define SCANNER_LAST  0x77u
+#define SCANNER_SLEEP_BLOCK 0x02u
+enum {SCANNER_TITLE=0,SCANNER_SCAN,SCANNER_HOLD};
+static uint8_t s_active,s_phase,s_next,s_ack[128];
+static uint32_t s_phase_at;
+static void scanner_start(uint32_t now,uint8_t title)
 {
-    s_next=SCAN_MIN_ADDR;s_count=0u;s_page=0u;s_scanning=1u;
+    uint8_t i;
+    for(i=0;i<128u;i++)s_ack[i]=0u;
+    s_next=SCANNER_FIRST;
+    s_phase=title?SCANNER_TITLE:SCANNER_SCAN;
+    s_phase_at=now;
 }
-void i2c_Scanner(ui_t *ui)
+static void scanner_clear(ui_t *ui)
 {
-    char line[24];
-    uint8_t fg,row,i;
-    uint32_t now=Millis();
-    if(!ui)return;
-    if(ui->action==UI_ACTION_BACK)
-    {
-        pm_api_set_sleep_block(PM_BLOCK_I2C_SCAN,0u);
-        s_active=0u;
-        return;
-    }
-    if(!s_active)
-    {
-        s_active=1u;
-        scanner_reset();
-        pm_api_set_sleep_block(PM_BLOCK_I2C_SCAN,1u);
-    }
-    if(ui->action==UI_ACTION_ENTER)
-        scanner_reset();
-    if(ui->action==UI_ACTION_MINUS && s_page>0u)--s_page;
-    if(ui->action==UI_ACTION_PLUS && (uint16_t)(s_page+1u)*8u<s_count)++s_page;
-    /* The WORD page callback must consume keys other than BACK. */
-    ui->action=UI_ACTION_NONE;
-    if(s_scanning)
-    {
-        if(I2C_IsReady((uint16_t)s_next<<1))
-            s_found[s_count++]=s_next;
-        if(s_next++>=SCAN_MAX_ADDR)
-        {
-            s_scanning=0u;s_next_scan_ms=now+SCAN_IDLE_MS;
-        }
-    }
-    else if((int32_t)(now-s_next_scan_ms)>=0)
-        scanner_reset();
+    uint8_t fg;
     Disp_SetMaxClipWindow();
     Disp_SetDrawColor(&ui->bgColor);
     Disp_DrawBox(0u,0u,UI_HOR_RES,UI_VER_RES);
     fg=(uint8_t)(ui->bgColor^1u);
     Disp_SetDrawColor(&fg);
-    Disp_SetFont(UI_FONT);
-    snprintf(line,sizeof(line),"I2C %s",s_scanning?"SCAN":"DONE");
-    Disp_DrawStr(0u,12u,line);
-    snprintf(line,sizeof(line),"%u found",s_count);
-    Disp_DrawStr(75u,12u,line);
-    for(row=0u;row<4u;row++)
+}
+void i2c_Scanner(ui_t *ui)
+{
+    uint8_t addr;
+    char buf[4];
+    uint32_t now=Millis();
+    if(!ui)return;
+    if(ui->action==UI_ACTION_BACK)
     {
-        i=(uint8_t)(s_page*8u+row);
-        if(i>=s_count)break;
-        snprintf(line,sizeof(line),"0x%02X",s_found[i]);
-        Disp_DrawStr(3u,(uint16_t)(26u+row*12u),line);
-        if((uint16_t)i+4u<s_count)
+        s_active=0u;
+        pm_api_set_sleep_block(SCANNER_SLEEP_BLOCK,0u);
+        return;
+    }
+    if(!s_active)
+    {
+        s_active=1u;
+        pm_api_set_sleep_block(SCANNER_SLEEP_BLOCK,1u);
+        scanner_start(now,1u);
+    }
+    else if(ui->action==UI_ACTION_ENTER)
+        scanner_start(now,0u);
+    /* MiaoUI WORD pages exit on any unconsumed action. */
+    ui->action=UI_ACTION_NONE;
+
+    if(s_phase==SCANNER_TITLE &&
+       (uint32_t)(now-s_phase_at)>=SCANNER_SPLASH_MS)
+    {
+        s_phase=SCANNER_SCAN;
+        s_phase_at=now;
+    }
+    if(s_phase==SCANNER_SCAN)
+    {
+        /* Probe exactly one safe address per visible frame. */
+        if(s_next<=SCANNER_LAST)
         {
-            snprintf(line,sizeof(line),"0x%02X",s_found[i+4u]);
-            Disp_DrawStr(66u,(uint16_t)(26u+row*12u),line);
+            s_ack[s_next]=I2C_IsReady((uint16_t)s_next<<1)?1u:0u;
+            ++s_next;
+        }
+        if(s_next>SCANNER_LAST)
+        {
+            s_phase=SCANNER_HOLD;
+            s_phase_at=now;
+        }
+    }
+    else if(s_phase==SCANNER_HOLD &&
+            (uint32_t)(now-s_phase_at)>=SCANNER_RESCAN_MS)
+        scanner_start(now,0u);
+
+    scanner_clear(ui);
+    if(s_phase==SCANNER_TITLE)
+    {
+        Disp_SetFont(font_radio_h24w12);
+        Disp_DrawStr(17u,24u,"I2C");
+        Disp_DrawStr(17u,50u,"Scanner");
+    }
+    else
+    {
+        Disp_SetFont(font_home_h6w4);
+        for(addr=0u;addr<128u;addr++)
+        {
+            if(s_ack[addr]) (void)snprintf(buf,sizeof(buf),"%02x",(unsigned)addr);
+            else {buf[0]='-';buf[1]='-';buf[2]='\0';}
+            Disp_DrawStr((uint16_t)(8u*(addr%16u)),
+                         (uint16_t)(8u*(addr/16u+1u)),buf);
         }
     }
     Disp_SendBuffer();

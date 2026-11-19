@@ -933,6 +933,11 @@
               <FilePath>../APP/MiaoUI/fonts/font_radio_h24w12.c</FilePath>
             </File>
             <File>
+              <FileName>font_home_h6w4.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/MiaoUI/fonts/font_home_h6w4.c</FilePath>
+            </File>
+            <File>
               <FileName>font_radio_h12w6.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/MiaoUI/fonts/font_radio_h12w6.c</FilePath>
