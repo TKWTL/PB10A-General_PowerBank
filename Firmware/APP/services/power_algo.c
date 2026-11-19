@@ -15,7 +15,7 @@
 #define SW_REINIT_DELAY_MS 5000u
 #define SW_MONITOR_STALE_MS 2500u
 static power_monitor_t s_monitor;
-static uint8_t s_sw_phase,s_capacity_div,s_idle_verified;
+static uint8_t s_sw_phase,s_capacity_div,s_idle_verified,s_status_fresh;
 static uint32_t s_retry_at;
 
 static uint8_t s_sw_low_power;
@@ -243,7 +243,7 @@ void PowerAlgo_Service100ms(void)
         SW6306_Init(); /* PB02B driver configuration, one attempt per retry */
         if(!SW6306_IsInitialized())return;
         s_sw_phase=0u;s_capacity_div=1u;
-        s_sw_low_power=0u;
+        s_status_fresh=0u;s_sw_low_power=0u;
         s_monitor.initialized=1u;
         return;
     }
@@ -255,8 +255,12 @@ void PowerAlgo_Service100ms(void)
         SW6306_ADCLoad(); /* BUS and battery voltage/current */
         break;
     case 1u:
+    {
+        uint32_t before=SW6306_StatusReadSequence();
         SW6306_StatusLoad(); /* charge/discharge direction */
+        s_status_fresh=(uint8_t)(SW6306_StatusReadSequence()!=before);
         break;
+    }
     case 2u:
         SW6306_PortStatusLoad(); /* C1/A1 live connection and port paths */
         s_idle_verified=SW6306_TransportPortsIdle();
@@ -290,7 +294,10 @@ void PowerAlgo_Service100ms(void)
         s_monitor.discharging=SW6306_IsDischarging()?1u:0u;
         s_monitor.protocol=SW6306_ReadProtocol();
         s_monitor.sample_ms=now;
-        s_monitor.valid=1u;
+        /* StatusLoad succeeded in this 500ms cycle. Legacy ADCLoad
+         * and PowerLoad return void, so per-group freshness is unknown. */
+        s_monitor.valid=s_status_fresh;
+        s_status_fresh=0u;
         break;
     }
     s_sw_phase=(uint8_t)((s_sw_phase+1u)%5u);
@@ -311,6 +318,7 @@ void PowerAlgo_Init(void)
     memset(&s_monitor,0,sizeof(s_monitor));
     s_monitor.protocol="--";
     s_sw_phase=0u;s_capacity_div=1u;s_idle_verified=0u;
+    s_status_fresh=0u;
     s_retry_at=Millis(); /* first service tick attempts SW6306_Init */
     s_sw_low_power=0u;
     pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK,1u); /* fail closed until idle proven */
