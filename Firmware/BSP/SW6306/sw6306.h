@@ -40,12 +40,25 @@ extern "C" {
 #endif
 
 
-/* 电池端感测电阻（单位:mΩ）
- *  - SW_BATT_RSHUNT            ：实际硬件值（校准变量初值）
- *  - SW6306_BATT_RSHUNT_NOMINAL：芯片内部标定基准（IBAT ADC 5mA/LSB 对应 5mΩ，勿改）
- * 输出端（VBUS）因高压与协议限流的准确性固定用 5mΩ，不做校准。 */
-#define SW_BATT_RSHUNT                  5.0f          //电池电流路径上的感测电阻值（实际硬件）
-#define SW6306_BATT_RSHUNT_NOMINAL      5.0f          //芯片内部电池端标定基准（mΩ）
+/* PB10A-only fixed-point current calibration (unsigned rational NUM/DEN).
+ * No run-time float shunt adaptation. Battery 5mOhm matches reference:
+ * 5mOhm/5mOhm = 1/1.
+ *
+ * BUS gain is TEMPORARY MEASUREMENT compensation, NOT the hardware
+ * resistor calibration or a change to the SW6306 internal current limit.
+ * Measured 15.017V/3.423A PD input vs SW6306 14.672V/1.652A BUS:
+ * a ~2.07 discrepancy. Use 2/1 provisionally, verify at multiple
+ * loads before treating it as calibrated. Datasheet raw IBUS=4mA/LSB.
+ * No factors here affect charger current-limit register writes.
+ */
+#define SW6306_BATT_CURRENT_NUM         1U
+#define SW6306_BATT_CURRENT_DEN         1U
+#define SW6306_BUS_CURRENT_NUM          2U
+#define SW6306_BUS_CURRENT_DEN          1U
+#if (SW6306_BATT_CURRENT_NUM == 0U) || (SW6306_BATT_CURRENT_DEN == 0U) || \
+    (SW6306_BUS_CURRENT_NUM == 0U) || (SW6306_BUS_CURRENT_DEN == 0U)
+#error "SW6306 current calibration ratios must be nonzero"
+#endif
     
 /* 按实际 NTC 改这三个参数：
  *  - SW6306_NTC_R25_OHM    ：25°C 时阻值（常见 10k / 100k）
@@ -1330,8 +1343,8 @@ float SW6306_ReadNTCTemp(void);                 //读取句柄中的 NTC 温度�
 SW6306_RET SW6306_NTCTempLoad(SW6306_NOARG);    //计算并缓存 NTC 温度到句柄（须先 ADCLoad+StatusLoad）
 /* 电池端感测电阻校准（芯片按 SW6306_BATT_RSHUNT_NOMINAL 标定，实际硬件不同时用本 API 重新校准）：
  * 影响 IBAT 读数/电池限流读数/库仑计能量读数（× NOMINAL/实际）与下次 Init 写入的电池限流值（× 实际/NOMINAL）。 */
-SW6306_RET SW6306_SetBattRShunt(SW6306_ARGS(float rshunt_mohm));  //设置实际电池端感测电阻（mΩ，拒绝≤0.1）
-float SW6306_GetBattRShunt(void);                                 //读取当前校准值（mΩ）
+  //设置实际电池端感测电阻（mΩ，拒绝≤0.1）
+                                 //读取当前校准值（mΩ）
 //状态相关操作
 SW6306_RET SW6306_StatusLoad(SW6306_NOARG);   //将SW6306的各种状态读取到镜像寄存器(0x12,0x14,0x15,0x18,0x1A,0x2A,0x2B,0x2C)
 uint8_t SW6306_IsWLEDON(void);                  //SW6306 WLED是否打开

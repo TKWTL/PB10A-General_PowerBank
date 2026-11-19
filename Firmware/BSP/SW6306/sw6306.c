@@ -26,24 +26,26 @@ static uint8_t s_pomax_target = SW6306_OUTPUT_POWER_MAX;   // 运行时最大输
 static SW6306_RET SW6306_PDCurrentSet(SW6306_NOARG);
 static SW6306_RET SW6306_UFCSCurrentSet(SW6306_NOARG);
 
-/* 电池端感测电阻校准值（mΩ）：初值 = SW_BATT_RSHUNT（实际硬件值），可由 SW6306_SetBattRShunt 重新校准。
- * 芯片按 SW6306_BATT_RSHUNT_NOMINAL(5mΩ) 标定，实际电阻不同时按比例换算：
- *  - 电流/能量读数 × (NOMINAL / s_batt_rshunt)
- *  - 电池限流设置值 × (s_batt_rshunt / NOMINAL)
- * 输出端（VBUS）固定 5mΩ，不参与校准。 */
-static float s_batt_rshunt = SW_BATT_RSHUNT;
-
-/* 读数换算系数（电流/能量：放大）与限流设置系数（写入值：缩小） */
-static float sw6306_batt_scale_read(void)
+/* PB10A static rational factors: no float calibration state in RAM.
+ * ADC step conversion stays at datasheet 4mA/LSB (BUS) and 5mA/LSB
+ * (BAT). Optional BUS display factor must not modify hardware limits.
+ */
+static uint16_t sw6306_scale_current(uint16_t raw,uint32_t num,uint32_t den)
 {
-    return (s_batt_rshunt > 0.1f) ? (SW6306_BATT_RSHUNT_NOMINAL / s_batt_rshunt) : 1.0f;
+    uint32_t value=((uint32_t)raw*num+den/2U)/den;
+    if(value>65535U)value=65535U;
+    return (uint16_t)value;
 }
-static float sw6306_batt_scale_set(void)
+/* BAT current setting register unit = 100mA; writing must use the
+ * reciprocal of BAT's read gain. Round to the nearest 100mA. */
+static uint8_t sw6306_batt_limit_register(uint32_t current_ma)
 {
-    return (s_batt_rshunt > 0.1f) ? (s_batt_rshunt / SW6306_BATT_RSHUNT_NOMINAL) : 1.0f;
+    const uint32_t n=SW6306_BATT_CURRENT_NUM;
+    const uint32_t d=SW6306_BATT_CURRENT_DEN;
+    uint32_t reg=(current_ma*d+(n*50U))/(n*100U);
+    if(reg>255U)reg=255U;
+    return (uint8_t)reg;
 }
-
-
 /*******************************基本操作区*************************************/
 SW6306_RET SW6306_ByteWrite(SW6306_ARGS(uint16_t reg, uint8_t data))
 {
@@ -181,37 +183,23 @@ uint16_t SW6306_ReadVBUS(void)//读取BUS电压
 {
     return SW6306_Status.vbus;
 }
-uint16_t SW6306_ReadIBUS(void)//读取BUS电流
+uint16_t SW6306_ReadIBUS(void)//BUS显示校准；原始镜像仍是4mA/LSB
 {
-    return SW6306_Status.ibus;
+    return sw6306_scale_current(SW6306_Status.ibus,
+                                 SW6306_BUS_CURRENT_NUM,
+                                 SW6306_BUS_CURRENT_DEN);
 }
 uint16_t SW6306_ReadVBAT(void)//读取BAT电压
 {
     return SW6306_Status.vbat;
 }
-uint16_t SW6306_ReadIBAT(void)//读取BAT电流（已按电池端感测电阻校准）
+uint16_t SW6306_ReadIBAT(void)//BAT固定整数比例；PB10A当前1:1
 {
-    return (uint16_t)((float)SW6306_Status.ibat * sw6306_batt_scale_read());
+    return sw6306_scale_current(SW6306_Status.ibat,
+                                 SW6306_BATT_CURRENT_NUM,
+                                 SW6306_BATT_CURRENT_DEN);
 }
 
-/* 设置电池端感测电阻（mΩ）：硬件改动后重新校准。
- * 拒绝 ≤0.1 的非法值（避免除零/异常缩放）。
- * 注意：本函数仅改校准值；要让芯片内电池限流寄存器按新值重写，
- * 需触发一次重新初始化（如调 SW6306_MarkUninitialized()）。 */
-SW6306_RET SW6306_SetBattRShunt(SW6306_ARGS(float rshunt_mohm))
-{
-    SW6306_FUNC_BEGIN;
-    if(rshunt_mohm > 0.1f)
-    {
-        s_batt_rshunt = rshunt_mohm;
-    }
-    SW6306_FUNC_END;
-}
-
-float SW6306_GetBattRShunt(void)//读取当前电池端感测电阻校准值（mΩ）
-{
-    return s_batt_rshunt;
-}
 int16_t SW6306_ReadTNTC(void)//读取并转换NTC温度
 {
     return (SW6306_Status.tntc- 16)* 5;
@@ -370,7 +358,9 @@ uint16_t SW6306_ReadIPortLimit(void)//读取充电时端口限流实时值（单
 }
 uint16_t SW6306_ReadIBattLimit(void)//读取充电时电池限流实时值（单位：mA，已按感测电阻校准）
 {
-    return (uint16_t)((float)(SW6306_Status.ibatlim_chg * 100 + 100) * sw6306_batt_scale_read());
+    return sw6306_scale_current((uint16_t)(SW6306_Status.ibatlim_chg*100U+100U),
+                                 SW6306_BATT_CURRENT_NUM,
+                                 SW6306_BATT_CURRENT_DEN);
 }
 uint8_t SW6306_ReadMaxOutputPower(void)//读取最大输出功率（单位：W）
 {
@@ -639,11 +629,15 @@ uint8_t SW6306_ReadCapacity(void)//读取SW6306显示电量
  * 例：2S1P 30Q 充满后 maxcap=65 → 65×326.22 ≈ 21203 mWh ≈ 21.2 Wh（≈7.2V×3.0Ah）。 */
 float SW6306_ReadMaxEnergy_mWh(void)//读取库仑计最大能量（单位：mWh，已按感测电阻校准）
 {
-    return SW6306_Status.maxcap * 326.2236f * sw6306_batt_scale_read();
+    /* Energy unit is fractional mWh; only its fixed shunt ratio is
+     * compile-time rational rather than a mutable float value. */
+    return SW6306_Status.maxcap * 326.2236f *
+           (float)SW6306_BATT_CURRENT_NUM / (float)SW6306_BATT_CURRENT_DEN;
 }
 float SW6306_ReadRemainEnergy_mWh(void)//读取库仑计当前（剩余）能量（单位：mWh，已按感测电阻校准）
 {
-    return SW6306_Status.presentcap * 0.07964f * sw6306_batt_scale_read();
+    return SW6306_Status.presentcap * 0.07964f *
+           (float)SW6306_BATT_CURRENT_NUM / (float)SW6306_BATT_CURRENT_DEN;
 }
 sw6306_learn_state_t SW6306_ReadLearnState(void)//读取容量学习状态（0xA2 镜像，3 态 + Unknown）
 {
@@ -1369,11 +1363,11 @@ SW6306_RET SW6306_Init(SW6306_NOARG)
     //强制控制输入输出功率和电池电流
     SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_FORCECTL, SW6306_FORCECTL_POUT|SW6306_FORCECTL_PIN|SW6306_FORCECTL_IBAT);
     //设置放电电池端限流值（按实际感测电阻缩放写入值）
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_DCHG_IBAT, (uint8_t)((float)SW6306_BAT_DCHG_CURR_MAX * sw6306_batt_scale_set() / 100.0f + 0.5f));
+    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_DCHG_IBAT, sw6306_batt_limit_register(SW6306_BAT_DCHG_CURR_MAX));
     //输入功率设置
     SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PISET, SW6306_INPUT_POWER_MAX);
     //设置充电电池端限流值（按实际感测电阻缩放写入值）
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_CHG_IBAT, (uint8_t)((float)SW6306_BAT_CHG_CURR_MAX * sw6306_batt_scale_set() / 100.0f + 0.5f));
+    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_CHG_IBAT, sw6306_batt_limit_register(SW6306_BAT_CHG_CURR_MAX));
     //输出功率设置（写入运行时目标，默认 SW6306_OUTPUT_POWER_MAX）
     SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_POSET, s_pomax_target);
     //LEARN_END 由算法在消费 DONE 后 re-arm 时清除；Init 不得破坏历史完成状态。
@@ -1416,8 +1410,11 @@ SW6306_RET SW6306_Init(SW6306_NOARG)
     SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_INDET3, SW6306_INDET3_A1_20|SW6306_INDET3_A2_60);
     //端口快充全部使能
     SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_PORTQC, SW6306_PORTQC_MSK, 0x00);
-    //输入快充申请的电压跟随根据电池电压设置优先级，输入快充最高申请15V电压
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_VCHG, SW6306_VCHG_MSK, SW6306_VCHG_BATT_VRSQ|SW6306_VCHG_MVRSQ_15V);
+    /* PISET=100W is not sufficient if VCHG caps sink requests at 15V.
+     * Enable 20V request for capable PD chargers (20V/5A needs a
+     * certified 5A e-marked cable). Keep battery-voltage priority. */
+    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_VCHG,
+        SW6306_VCHG_MSK, SW6306_VCHG_BATT_VRSQ|SW6306_VCHG_MVRSQ_20V);
     //高压快充协议功率跟随系统设置
     SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_P_DPDM0, SW6306_P_DPDM0_MSK, SW6306_P_DPDM0_PSYS);
     //QC3+协议最大功率45W,QC2协议最大电压20V
