@@ -858,6 +858,21 @@
               <FilePath>../APP/services/power_adc_algo.c</FilePath>
             </File>
             <File>
+              <FileName>power_algo.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/services/power_algo.c</FilePath>
+            </File>
+            <File>
+              <FileName>sensor_algo.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/services/sensor_algo.c</FilePath>
+            </File>
+            <File>
+              <FileName>radio_algo.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/services/radio_algo.c</FilePath>
+            </File>
+            <File>
               <FileName>fault_record.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/services/fault_record.c</FilePath>

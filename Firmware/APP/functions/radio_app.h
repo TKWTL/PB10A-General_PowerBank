@@ -7,6 +7,7 @@ void Radio_AppStart(void);
 void Radio_AppStop(void);
 void Radio_AppPoll(void);
 void Radio_AppDraw(ui_t *ui);
+uint8_t Radio_AppIsActive(void);
 uint8_t Radio_AppIsReady(void);
 uint8_t Radio_AppIsSearching(void);
 #endif

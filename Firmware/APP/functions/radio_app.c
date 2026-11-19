@@ -201,6 +201,8 @@ void Radio_AppPoll(void)
             radio_fail(6u);
     }
 }
+uint8_t Radio_AppIsActive(void)
+{return s_state!=RADIO_OFF;}
 uint8_t Radio_AppIsReady(void)
 {return s_state==RADIO_READY || s_state==RADIO_SEARCH;}
 uint8_t Radio_AppIsSearching(void)

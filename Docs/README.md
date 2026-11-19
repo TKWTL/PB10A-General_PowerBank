@@ -12,7 +12,7 @@
 | `Protocol/` | 通信协议、寄存器映射、时序约定 |
 | `Interface/` | 硬件接口、引脚分配、上下电时序 |
 | `Bringup/` | 首次上电与硬件台架验证记录 |
-| [`Debug/`](Debug/README.md) | 可复用的故障现象、Keil 定位路径、修复与验证记录 |
+| [`Debug/`](Debug/README.md) | 可复用的故障现象、Keil 定位路径、低功耗时序、修复与验证记录 |
 
 约定：
 

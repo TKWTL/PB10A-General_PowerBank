@@ -16,7 +16,16 @@
 
 ### PB10A low-power framework
 
-The PB02B/IH01A cooperative PM state machine limits depth to `PM_SLEEP_DEPTH_DEEPSLEEP` (STM32G070 STOP1, not Standby). Automatic idle timeout defaults to 60s; `pm_api_set_sleep_timeout(0)` disables it. Five keypad EXTI lines can wake STOP1. The registered MCU device saves and disables ADC internal VREFEN and TSEN, suspends SysTick, enters STOP1, restores the generated clock tree and ADC paths, then resumes SysTick. No external peripheral power hooks are present; board-level STOP current and wake reliability are untested.
+The PB02B/IH01A PM controller supports cooperative device callbacks:
+`PM_HOOK_DONE`, `PM_HOOK_PENDING`, `PM_HOOK_ERROR`. STOP1 is entered
+only after every suspend operation finishes; errors cancel sleep and resume
+devices. Default idle timeout is 60 s, `pm_api_set_sleep_timeout(0)`
+disables it, and keypad EXTI can wake STOP1. External nodes reside in
+`APP/services/power_algo.c`, `sensor_algo.c`, `radio_algo.c`;
+OLED and STM32 platform nodes reside in `pm_device_builtin.c`.
+Power sequencing, callback order and hardware caveats are recorded in
+[`Docs/Debug/2026-11-19_pm_callbacks.md`](../../Docs/Debug/2026-11-19_pm_callbacks.md).
+Board-level current and wake reliability still require measurement.
 
 
 ### Devices, RTC and scanning

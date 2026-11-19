@@ -12,6 +12,9 @@
 #include "system_algo.h"
 #include "sc7a20.h"
 #include "power_adc_algo.h"
+#include "power_algo.h"
+#include "sensor_algo.h"
+#include "radio_algo.h"
 
 static ui_t s_ui;
 static uint32_t s_last_time_update_ms;
@@ -101,6 +104,9 @@ void APP_TaskInit(void)
      * PB10A INT is on PB5, independent from SW6306; no IRQ sharing. */
     SC7A20_Init();
     PowerADC_Init(); /* PA6 stays on; 500ms one-shot ADC scan coroutine. */
+    PowerAlgo_Init();  /* SW6306 autonomous charging/PD remains independent. */
+    SensorAlgo_Init(); /* SC7A20/MMC5603/BMP180 STOP policy. */
+    RadioAlgo_Init();  /* RDA5807 powers down before UI_OFF. */
     RTC_UpdateTime();
     MiaoUi_Setup(&s_ui);
     pm_api_init();
