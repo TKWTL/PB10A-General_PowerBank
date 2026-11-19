@@ -1,9 +1,10 @@
 /* Faithful Collar-Radio I2C Scanner visual port:
  * - 1500ms splash using the 24px Spleen title font (I2C / Scanner)
  * - 128x64 address matrix, 16 columns x 8 rows of 4px glyphs
- * - one I2C address probe per UI frame rather than blocking all tasks
+ * - one address grid position reveals each UI frame (including --),
+ *   probing only valid 7-bit I2C addresses without blocking other tasks
  * - automatic scan again after 5 seconds, ENTER immediate rescan
- * - long CONF/BACK exits MiaoUI WORD application
+ * - CONF long/BACK or any directional key exits MiaoUI WORD application
  *
  * Only the safe 7-bit addresses 0x08..0x77 are probed; reserved
  * positions remain "--". This preserves the original 16x8 layout.
@@ -27,7 +28,7 @@ static void scanner_start(uint32_t now,uint8_t title)
 {
     uint8_t i;
     for(i=0;i<128u;i++)s_ack[i]=0u;
-    s_next=SCANNER_FIRST;
+    s_next=0u; /* reveal the original 128-cell grid from 0x00 onward */
     s_phase=title?SCANNER_TITLE:SCANNER_SCAN;
     s_phase_at=now;
 }
@@ -46,10 +47,13 @@ void i2c_Scanner(ui_t *ui)
     char buf[4];
     uint32_t now=Millis();
     if(!ui)return;
-    if(ui->action==UI_ACTION_BACK)
+    if(ui->action!=UI_ACTION_NONE && ui->action!=UI_ACTION_ENTER)
     {
+        /* Physical LEFT/RIGHT/UP/DOWN map to UP/DOWN/MINUS/PLUS
+         * on a MiaoUI ICON WORD page. All four exit like long CONF. */
         s_active=0u;
         pm_api_set_sleep_block(SCANNER_SLEEP_BLOCK,0u);
+        ui->action=UI_ACTION_BACK;
         return;
     }
     if(!s_active)
@@ -71,13 +75,15 @@ void i2c_Scanner(ui_t *ui)
     }
     if(s_phase==SCANNER_SCAN)
     {
-        /* Probe exactly one safe address per visible frame. */
-        if(s_next<=SCANNER_LAST)
+        /* One visible cell per frame. Reserved cells are marked as
+         * scanned "--" but are not sent on the I2C bus. */
+        if(s_next<128u)
         {
-            s_ack[s_next]=I2C_IsReady((uint16_t)s_next<<1)?1u:0u;
+            if(s_next>=SCANNER_FIRST && s_next<=SCANNER_LAST)
+                s_ack[s_next]=I2C_IsReady((uint16_t)s_next<<1)?1u:0u;
             ++s_next;
         }
-        if(s_next>SCANNER_LAST)
+        if(s_next>=128u)
         {
             s_phase=SCANNER_HOLD;
             s_phase_at=now;
@@ -97,7 +103,9 @@ void i2c_Scanner(ui_t *ui)
     else
     {
         Disp_SetFont(font_home_h6w4);
-        for(addr=0u;addr<128u;addr++)
+        /* Unscanned cells remain blank; -- appears progressively
+         * as each position has been processed, Collar-Radio style. */
+        for(addr=0u;addr<s_next;addr++)
         {
             if(s_ack[addr]) (void)snprintf(buf,sizeof(buf),"%02x",(unsigned)addr);
             else {buf[0]='-';buf[1]='-';buf[2]='\0';}
