@@ -114,6 +114,25 @@ high-resolution BDU setup is unchanged. The PB10A sensor interrupt is PB5,
 not PB02B's PB8 shared interrupt. The experimental temperature-ADC
 compatibility register is not yet board-verified.
 
+### Radio MiaoUI WORD page (Collar-Radio five-item menu)
+
+Radio main view: physical UP/DOWN controls RDA5807 0-15 volume;
+LEFT/RIGHT selects lower/higher frequency according to Radio Mode:
+Search (seek), Preset (saved stations, wraps), Frequency (100 kHz step).
+CONF short release enters the five-row settings menu. In that menu
+physical UP/DOWN selects items, CONF short release activates them:
+Return, Power Mode (AUTO / ON / OFF), Radio Mode
+(Search / Preset / Frequency), Clear + Full Seek (Preset) or
+Save/Remove station (other modes), Exit Radio Page.
+
+Power Mode AUTO stops the radio when leaving its page; ON keeps audio
+and the MCO running in background (thus keeps the PM sleep-block
+until an explicit root BACK or another stop); OFF powers down the
+receiver but leaves the menu reachable. CONF long BACK leaves the Radio
+WORD page, even from its settings menu. The entire app is cooperative:
+the 100ms system service periodically polls active radio state,
+including while the Radio page is not visible.
+
 ### Fatal exception snapshot and reset
 
 `APP/services/fault_record.c` defines `g_fault_record` in the 256-byte

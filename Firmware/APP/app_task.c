@@ -15,6 +15,7 @@
 #include "power_algo.h"
 #include "sensor_algo.h"
 #include "radio_algo.h"
+#include "radio_app.h"
 
 static ui_t s_ui;
 static uint32_t s_last_time_update_ms;
@@ -61,7 +62,7 @@ THRD_DECLARE(PowerManagerThread)
     for(;;){pm_api_poll();THRD_DELAY(50u);}
     THRD_END;
 }
-static uint32_t s_last_key_tick;
+static uint32_t s_last_key_tick,s_last_radio_poll;
 THRD_DECLARE(SystemServiceThread)
 {
     THRD_BEGIN;
@@ -72,6 +73,14 @@ THRD_DECLARE(SystemServiceThread)
         {
             s_last_key_tick=now;
             indevService_10ms();
+        }
+        /* Keep Radio Power Mode=ON playing and polling after leaving its
+         * WORD page, without a blocking radio task. */
+        if((uint32_t)(now-s_last_radio_poll)>=100u)
+        {
+            s_last_radio_poll=now;
+            if(Radio_AppIsActive() && !pm_api_ui_should_block())
+                Radio_AppPoll();
         }
         beep_poll(now);
         System_Poll();
@@ -108,6 +117,7 @@ void APP_TaskInit(void)
     beep_init(); /* one-shot hardware/queue init */
     indevInit();
     s_last_key_tick=Millis();
+    s_last_radio_poll=Millis();
     Time_Init(); /* one-shot uptime baseline */
     /* PB02B SC7A20 initialization: WHO_AM_I + 25Hz/2g/BDU/HR.
      * PB10A INT is on PB5, independent from SW6306; no IRQ sharing. */

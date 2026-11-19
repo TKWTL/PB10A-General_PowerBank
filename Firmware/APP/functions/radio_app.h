@@ -1,7 +1,7 @@
 #ifndef PB10A_RADIO_APP_H
 #define PB10A_RADIO_APP_H
 #include "ui_conf.h"
-/* Fixed seek mode (Collar-Radio-derived), first entry auto-search. */
+/* Nonblocking Collar-Radio-style five-item menu and FM control. */
 void Radio_AppRun(ui_t *ui);
 void Radio_AppStart(void);
 void Radio_AppStop(void);

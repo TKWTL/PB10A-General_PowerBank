@@ -1,11 +1,8 @@
-/* PB10A FM bring-up (fixed search mode). Derived from the operational
- * flow in Collar-Radio Application/Applications/radio.c, retaining its
- * RDA5807 driver register model. No nested while(1) and no FreeRTOS APIs.
- *
- * Enter: wake radio, initialize and start ONE seek automatically.
- * UP/DOWN: seek lower/higher; BACK: power off. No extra settings.
- * Bus transfers remain IRQ-driven by BSP/I2C and foreground-completion
- * waited; no long software delay is used in this MiaoUI callback.
+/* PB10A non-blocking FM app, adapted from Collar-Radio's radio.c.
+ * Default main view: physical UP/DOWN adjust volume, LEFT/RIGHT
+ * tune/search lower/higher. CONF release opens the five-row radio menu.
+ * The global long-CONF BACK leaves this MiaoUI WORD application.
+ * Background radio in ON mode is polled by the system coroOS thread.
  */
 #include "radio_app.h"
 #include "rda5807m.h"
@@ -23,9 +20,15 @@ enum { RADIO_OFF=0, RADIO_RESET_WAIT, RADIO_POWER_WAIT, RADIO_TUNE_WAIT,
 #define RADIO_PM_BLOCK 0x04u
 #define RADIO_QUERY_MS 180u
 #define RADIO_SEEK_TIMEOUT_MS 8000u
-#define RADIO_DEFAULT_VOLUME 0u /* existing lowest register gain, not mute */
+#define RADIO_DEFAULT_VOLUME 0u /* lowest register gain, not mute */
+enum { RADIO_MODE_SEARCH=0, RADIO_MODE_PRESET, RADIO_MODE_FREQ };
+enum { RADIO_POWER_AUTO=0, RADIO_POWER_ON, RADIO_POWER_OFF };
+#define RADIO_MENU_COUNT 5u
 static uint8_t s_state, s_first_seek_pending, s_search_failed;
 static uint8_t s_volume, s_stereo, s_rssi;
+static uint8_t s_mode=RADIO_MODE_PRESET,s_power_policy=RADIO_POWER_AUTO;
+static uint8_t s_menu_open,s_menu_index,s_full_scan;
+static uint16_t s_scan_last_freq;
 /* Collar-Radio radio.c: original XBM status icons (7x9, 6x9, 16x8). */
 static const uint8_t s_signal_icon[]={
     0x7f,0x49,0x2a,0x1c,0x08,0x08,0x08,0x08,0x08
@@ -109,10 +112,106 @@ static void radio_seek(uint8_t upward)
     s_search_failed=0u;
     s_first_seek_pending=0u;
 }
+
+/* Manual frequency tuning uses 100 kHz steps (4 x 25 kHz units). */
+static void radio_tune(uint16_t freq)
+{
+    uint8_t ok=I2C_ERROR;
+    if(s_state!=RADIO_READY && s_state!=RADIO_SEARCH &&
+       s_state!=RADIO_TUNE_WAIT)return;
+    if(freq<3480u)freq=4320u;
+    if(freq>4320u)freq=3480u;
+    if(I2C_TransactionBegin()!=I2C_OK){radio_fail(4u);return;}
+    Register[0]&=(uint16_t)~RDA5807_REG02_SEEK;
+    Register[1]=RDA5807_FreqToReg(freq,TUNE);
+    if(radio_write16(RDA5807_REG02,Register[0])==I2C_OK &&
+       radio_write16(RDA5807_REG03,Register[1])==I2C_OK)ok=I2C_OK;
+    I2C_TransactionEnd();
+    if(ok!=I2C_OK){radio_fail(4u);return;}
+    s_freq_units=freq;
+    s_state=RADIO_TUNE_WAIT;
+    s_state_at=Millis();
+    s_last_query=s_state_at-RADIO_QUERY_MS;
+    s_first_seek_pending=0u;
+}
+static void radio_volume_step(uint8_t up)
+{
+    uint8_t v;
+    uint16_t reg;
+    if(s_state!=RADIO_READY)return;
+    v=up?(s_volume<15u?s_volume+1u:15u):
+         (s_volume>0u?s_volume-1u:0u);
+    if(v==s_volume)return;
+    reg=(uint16_t)((Register[3]&~RDA5807_REG05_VOL_MSK)|v);
+    if(radio_write16(RDA5807_REG05,reg)!=I2C_OK)
+    {radio_fail(4u);return;}
+    Register[3]=reg;s_volume=v;
+}
+static uint8_t radio_has_station(uint16_t freq)
+{
+    uint8_t i;
+    for(i=0;i<s_station_count;i++)if(s_stations[i]==freq)return 1u;
+    return 0u;
+}
+static void radio_toggle_station(uint16_t freq)
+{
+    uint8_t i,j;
+    for(i=0;i<s_station_count;i++)
+    {
+        if(s_stations[i]==freq)
+        {
+            for(j=i;j+1u<s_station_count;j++)s_stations[j]=s_stations[j+1u];
+            --s_station_count;
+            return;
+        }
+    }
+    radio_save_station(freq);
+}
+static void radio_move_station(uint8_t up)
+{
+    uint8_t i;
+    if(s_station_count==0u){radio_seek(up);return;}
+    if(up)
+    {
+        for(i=0u;i<s_station_count;i++)
+            if(s_stations[i]>s_freq_units){radio_tune(s_stations[i]);return;}
+        radio_tune(s_stations[0]);
+    }
+    else
+    {
+        for(i=s_station_count;i>0u;i--)
+            if(s_stations[i-1u]<s_freq_units)
+            {radio_tune(s_stations[i-1u]);return;}
+        radio_tune(s_stations[s_station_count-1u]);
+    }
+}
+static void radio_main_frequency(uint8_t up)
+{
+    if(s_state!=RADIO_READY)return;
+    if(s_mode==RADIO_MODE_FREQ)
+    {
+        uint16_t target;
+        if(up)target=(s_freq_units>=4320u)?3480u:s_freq_units+4u;
+        else target=(s_freq_units<=3480u)?4320u:s_freq_units-4u;
+        radio_tune(target);
+    }
+    else if(s_mode==RADIO_MODE_PRESET)radio_move_station(up);
+    else radio_seek(up);
+}
+static void radio_start_full_scan(void)
+{
+    if(s_state==RADIO_OFF || s_state==RADIO_ERROR)return;
+    s_station_count=0u;
+    s_full_scan=1u;
+    s_scan_last_freq=0u;
+    radio_tune(3480u);
+    s_first_seek_pending=1u; /* after tune completes, start SEEK_UP */
+}
 void Radio_AppStart(void)
 {
     if(s_state!=RADIO_OFF)return;
     s_error_code=0u;s_search_failed=0u;s_first_seek_pending=1u;
+    s_full_scan=0u;s_scan_last_freq=0u;
     s_volume=RADIO_DEFAULT_VOLUME;s_stereo=0u;s_rssi=0u;
     s_freq_units=3480u;s_station_count=0u;
     s_last_rtc=Millis();
@@ -133,6 +232,7 @@ void Radio_AppStop(void)
     LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_NOCLOCK,LL_RCC_MCO1_DIV_1);
     pm_api_set_sleep_block(RADIO_PM_BLOCK,0u);
     s_first_seek_pending=1u;
+    s_full_scan=0u;
     s_state=RADIO_OFF;
 }
 void Radio_AppPoll(void)
@@ -196,9 +296,25 @@ void Radio_AppPoll(void)
             s_search_failed=(uint8_t)((status&RDA5807_REG0A_SF)!=0u);
             if(!s_search_failed)radio_save_station(s_freq_units);
             s_state=RADIO_READY;
+            if(s_full_scan)
+            {
+                /* Stop when the band wraps, seek fails or list is full. */
+                if(s_search_failed || s_station_count>=RADIO_MAX_STATIONS ||
+                   s_freq_units>=4320u ||
+                   (s_scan_last_freq && s_freq_units<=s_scan_last_freq))
+                    s_full_scan=0u;
+                else
+                {
+                    s_scan_last_freq=s_freq_units;
+                    radio_seek(1u);
+                }
+            }
         }
         else if((uint32_t)(now-s_state_at)>RADIO_SEEK_TIMEOUT_MS)
+        {
+            s_full_scan=0u;
             radio_fail(6u);
+        }
     }
 }
 uint8_t Radio_AppIsActive(void)
@@ -292,21 +408,121 @@ void Radio_AppDraw(ui_t *ui)
     Disp_DrawStr(68u,63u,buf);
     Disp_SendBuffer();
 }
+/* Collar-Radio 5-row settings menu; no blocking while(1). */
+static void radio_draw_menu(ui_t *ui)
+{
+    uint8_t i,fg;
+    char row[40];
+    const char *mode=s_mode==RADIO_MODE_SEARCH?"Search":
+                     s_mode==RADIO_MODE_FREQ?"Frequency":"Preset";
+    const char *power=s_power_policy==RADIO_POWER_ON?"ON":
+                      s_power_policy==RADIO_POWER_OFF?"OFF":"AUTO";
+    if(!ui)return;
+    Disp_SetMaxClipWindow();
+    Disp_SetDrawColor(&ui->bgColor);
+    Disp_DrawBox(0u,0u,UI_HOR_RES,UI_VER_RES);
+    fg=(uint8_t)(ui->bgColor^1u);
+    Disp_SetDrawColor(&fg);
+    Disp_SetFont(font_radio_h12w6);
+    Disp_DrawStr(18u,10u,"-Radio Setting-");
+    Disp_DrawLine(0u,12u,127u,12u);
+    for(i=0u;i<RADIO_MENU_COUNT;i++)
+    {
+        const uint8_t y=(uint8_t)(22u+i*10u);
+        switch(i)
+        {
+        case 0u:(void)snprintf(row,sizeof(row),"Return");break;
+        case 1u:(void)snprintf(row,sizeof(row),"Power Mode: %s",power);break;
+        case 2u:(void)snprintf(row,sizeof(row),"Radio Mode: %s",mode);break;
+        case 3u:
+            if(s_mode==RADIO_MODE_PRESET)
+                (void)snprintf(row,sizeof(row),"Clear + Full Seek");
+            else
+                (void)snprintf(row,sizeof(row),"%s station",
+                   radio_has_station(s_freq_units)?"Remove":"Save");
+            break;
+        default:(void)snprintf(row,sizeof(row),"Exit Radio Page");break;
+        }
+        Disp_DrawStr(2u,y,row);
+        if(i==s_menu_index)Disp_DrawFrame(0u,(uint16_t)(y-9u),128u,10u);
+    }
+    Disp_SendBuffer();
+}
+static uint8_t radio_handle_menu(UI_ACTION action)
+{
+    if(action==UI_ACTION_MINUS)
+        s_menu_index=s_menu_index? (uint8_t)(s_menu_index-1u):
+                        (RADIO_MENU_COUNT-1u);
+    else if(action==UI_ACTION_PLUS)
+        s_menu_index=(uint8_t)((s_menu_index+1u)%RADIO_MENU_COUNT);
+    else if(action==UI_ACTION_ENTER)
+    {
+        switch(s_menu_index)
+        {
+        case 0u:s_menu_open=0u;break;
+        case 1u:
+            s_power_policy=(uint8_t)((s_power_policy+1u)%3u);
+            if(s_power_policy==RADIO_POWER_OFF)Radio_AppStop();
+            else if(s_state==RADIO_OFF)Radio_AppStart();
+            break;
+        case 2u:s_mode=(uint8_t)((s_mode+1u)%3u);break;
+        case 3u:
+            if(s_state==RADIO_READY)
+            {
+                if(s_mode==RADIO_MODE_PRESET)
+                {radio_start_full_scan();s_menu_open=0u;}
+                else radio_toggle_station(s_freq_units);
+            }
+            break;
+        case 4u:return 1u; /* leave MiaoUI WORD page */
+        }
+    }
+    return 0u;
+}
 void Radio_AppRun(ui_t *ui)
 {
+    UI_ACTION action;
     if(!ui)return;
-    if(ui->action==UI_ACTION_BACK)
+    action=ui->action;
+    if(action==UI_ACTION_BACK)
     {
-        Radio_AppStop();
-        return; /* Preserve BACK so MiaoUI exits the WORD function page. */
+        /* Long CONF is global BACK. In Radio ON mode the radio may keep
+         * playing until the platform powers off, exactly like Collar's
+         * background listening mode. */
+        s_menu_open=0u;
+        if(s_power_policy!=RADIO_POWER_ON)Radio_AppStop();
+        return; /* Preserve BACK so MiaoUI leaves the WORD page. */
     }
-    if(s_state==RADIO_OFF)Radio_AppStart();
-    else if(s_state==RADIO_READY)
+
+    if(s_state==RADIO_OFF && s_power_policy!=RADIO_POWER_OFF)
+        Radio_AppStart();
+    if(s_menu_open)
     {
-        if(ui->action==UI_ACTION_MINUS)radio_seek(0u);
-        else if(ui->action==UI_ACTION_PLUS)radio_seek(1u);
+        if(radio_handle_menu(action))
+        {
+            s_menu_open=0u;
+            if(s_power_policy!=RADIO_POWER_ON)Radio_AppStop();
+            ui->action=UI_ACTION_BACK; /* request MiaoUI WORD exit */
+            return;
+        }
+        ui->action=UI_ACTION_NONE;
+        Radio_AppPoll();
+        radio_draw_menu(ui);
+        return;
     }
-    /* MiaoUI WORD pages leave automatically on any unconsumed key. */
+    if(action==UI_ACTION_ENTER)
+    {
+        s_menu_index=0u;s_menu_open=1u;
+        ui->action=UI_ACTION_NONE;
+        radio_draw_menu(ui);
+        return;
+    }
+    if(action==UI_ACTION_MINUS)radio_volume_step(0u);  /* physical UP */
+    else if(action==UI_ACTION_PLUS)radio_volume_step(1u); /* physical DOWN */
+    else if(action==UI_ACTION_UP)radio_main_frequency(0u); /* LEFT */
+    else if(action==UI_ACTION_DOWN)radio_main_frequency(1u); /* RIGHT */
+
+    /* Only BACK/explicit Exit should leave a MiaoUI WORD application. */
     ui->action=UI_ACTION_NONE;
     Radio_AppPoll();
     Radio_AppDraw(ui);
