@@ -2,6 +2,7 @@
 #include "app_task.h"
 #include "coroOS.h"
 #include "core/ui.h"
+#include "indev/indevDriver.h"
 #include "display/dispDriver.h"
 #include "ssd1306_display.h"
 #include "pm_api.h"
@@ -60,12 +61,19 @@ THRD_DECLARE(PowerManagerThread)
     for(;;){pm_api_poll();THRD_DELAY(50u);}
     THRD_END;
 }
+static uint32_t s_last_key_tick;
 THRD_DECLARE(SystemServiceThread)
 {
     THRD_BEGIN;
     for(;;)
     {
-        beep_poll(Millis());
+        const uint32_t now=Millis();
+        if((uint32_t)(now-s_last_key_tick)>=10u)
+        {
+            s_last_key_tick=now;
+            indevService_10ms();
+        }
+        beep_poll(now);
         System_Poll();
         THRD_DELAY(1u);
     }
@@ -98,6 +106,8 @@ void APP_TaskInit(void)
 {
     if(!diapInit()) return;
     beep_init(); /* one-shot hardware/queue init */
+    indevInit();
+    s_last_key_tick=Millis();
     Time_Init(); /* one-shot uptime baseline */
     /* PB02B SC7A20 initialization: WHO_AM_I + 25Hz/2g/BDU/HR.
      * PB10A INT is on PB5, independent from SW6306; no IRQ sharing. */

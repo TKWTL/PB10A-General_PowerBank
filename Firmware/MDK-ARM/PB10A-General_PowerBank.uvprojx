@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_FULL_LL_DRIVER,USE_HAL_DRIVER,STM32G070xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G0xx/Include;../Drivers/CMSIS/Include;../APP;../Scheduler;../APP/framework;../APP/services;../APP/functions;../APP/MiaoUI;../BSP/Display;../BSP/Time;../BSP/u8g2;../BSP/I2C;../BSP/SW6306;../BSP/SC7A20;../BSP/RDA5807;../BSP/BMP180;../BSP/MMC5603</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G0xx/Include;../Drivers/CMSIS/Include;../APP;../Scheduler;../APP/framework;../APP/services;../APP/functions;../APP/MiaoUI;../BSP/Display;../BSP/Time;../BSP/u8g2;../BSP/I2C;../BSP/SW6306;../BSP/SC7A20;../BSP/RDA5807;../BSP/BMP180;../BSP/MMC5603;../BSP/Buttons</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -871,6 +871,16 @@
               <FileName>fault_record.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/services/fault_record.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>BSP/Buttons</GroupName>
+          <Files>
+            <File>
+              <FileName>buttons.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../BSP/Buttons/buttons.c</FilePath>
             </File>
           </Files>
         </Group>

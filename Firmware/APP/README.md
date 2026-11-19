@@ -86,15 +86,19 @@ The reproduced G0 calibration failure (`hadc1.State=0x13`,
 CubeMX clock adjustment are documented in
 [`Docs/Debug/2026-11-19_stm32g0_adc_calibration.md`](../../Docs/Debug/2026-11-19_stm32g0_adc_calibration.md).
 
-### Key input (Collar-Radio-style page mapping)
+### Key input (Collar-Radio Buttons DAS)
 
-Keys are active-low and debounced for 25 ms. On ICON pages physical
-LEFT/RIGHT navigate previous/next and UP/DOWN emit MINUS/PLUS.
-On TEXT pages UP/DOWN navigate previous/next and LEFT/RIGHT emit
-MINUS/PLUS. The data widget uses MINUS/PLUS to decrement/increment
-editable integers (and scaled-integer float parameters). CONF short
-press/release is ENTER, while holding CONF for at least 700 ms is BACK;
-BACK is required for exiting WORD applications and parameter widgets.
+The four direction keys use the adapted `BSP/Buttons/buttons.c/.h`:
+10 ms scans, 30 ms debounce, 1 s initial DAS hold and 200 ms repeat.
+Inputs are enqueued for MiaoUI; OLED DMA busy frames do not lose events.
+CONF does not repeat. A short press triggers ENTER **on release**; holding
+for 700 ms produces one BACK with no ENTER on release. Presses begun
+during the PM wake guard are suppressed until the key is released.
+
+ICON pages map LEFT/RIGHT to item selection, UP/DOWN to MINUS/PLUS.
+TEXT pages map UP/DOWN to item selection, LEFT/RIGHT to MINUS/PLUS.
+Root BACK invokes `pm_api_force_sleep()` (UI_OFF / STOP1), following
+IH01A/DPC27A.
 
 `Vout~ mV` uses an assumed 3.3V analog reference and the netlist's
 R39=680k / R41=220k divider; confirm voltage with a multimeter.

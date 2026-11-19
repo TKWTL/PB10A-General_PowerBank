@@ -1,114 +1,95 @@
-/* PB10A five-key active-low adapter. Map physical directions by page type,
- * as in Collar-Radio's page-dependent key mapping table.
- *
- * ICON: LEFT/RIGHT = previous/next; UP/DOWN = minus/plus.
- * TEXT: UP/DOWN = previous/next; LEFT/RIGHT = minus/plus.
- * CONF short release = ENTER; hold >=700 ms = BACK (no sixth physical key).
- * The same mapping applies while a page's WORD/DATA widget is running.
+/* 5-key PB10A adapter; Collar-Radio Buttons drives the 10ms scan.
+ * A short CONF release emits ENTER; CONF held 700ms emits BACK once.
+ * Repeating directions are queued until MiaoUI can draw a new frame.
  */
 #include "indev/indevDriver.h"
-#include "main.h"
-#include "millis.h"
+#include "buttons.h"
 #include "pm_api.h"
 #include "beep_algo.h"
-
-#define KEY_DEBOUNCE_MS 25u
-#define KEY_BACK_HOLD_MS 700u
-
-enum {
-    KEY_UP_BIT    = 1u << 0,
-    KEY_DOWN_BIT  = 1u << 1,
-    KEY_LEFT_BIT  = 1u << 2,
-    KEY_RIGHT_BIT = 1u << 3,
-    KEY_CONF_BIT  = 1u << 4
-};
-
-static uint8_t key_read_mask(void)
+#define KEY_QUEUE_SIZE 16u
+#define KEY_EVENT_ENTER ((uint8_t)KeyIndex_Max)
+#define KEY_EVENT_BACK ((uint8_t)(KeyIndex_Max+1u))
+static uint8_t queue[KEY_QUEUE_SIZE],head,tail;
+static uint8_t conf_valid,conf_long,suppressed;
+static void clear_events(void){head=0u;tail=0u;}
+static void queue_event(uint8_t ev)
 {
-    uint8_t mask = 0u;
-    if(!LL_GPIO_IsInputPinSet(UP_GPIO_Port, UP_Pin)) mask |= KEY_UP_BIT;
-    if(!LL_GPIO_IsInputPinSet(DOWN_GPIO_Port, DOWN_Pin)) mask |= KEY_DOWN_BIT;
-    if(!LL_GPIO_IsInputPinSet(LEFT_GPIO_Port, LEFT_Pin)) mask |= KEY_LEFT_BIT;
-    if(!LL_GPIO_IsInputPinSet(RIGHT_GPIO_Port, RIGHT_Pin)) mask |= KEY_RIGHT_BIT;
-    if(!LL_GPIO_IsInputPinSet(CONF_GPIO_Port, CONF_Pin)) mask |= KEY_CONF_BIT;
-    return mask;
+ uint8_t next=(uint8_t)((head+1u)%KEY_QUEUE_SIZE);
+ if(next==tail)tail=(uint8_t)((tail+1u)%KEY_QUEUE_SIZE);
+ queue[head]=ev;head=next;
 }
-
-static UI_ACTION key_map_direction(uint8_t pressed, const ui_t *ui)
+void indevInit(void)
 {
-    const uint8_t text_page = (uint8_t)(ui != NULL &&
-        ui->nowItem != NULL &&
-        ui->nowItem->page.location != NULL &&
-        ui->nowItem->page.location->type == UI_PAGE_TEXT);
-
-    if(pressed & KEY_LEFT_BIT) return text_page ? UI_ACTION_MINUS : UI_ACTION_UP;
-    if(pressed & KEY_RIGHT_BIT) return text_page ? UI_ACTION_PLUS : UI_ACTION_DOWN;
-    if(pressed & KEY_UP_BIT) return text_page ? UI_ACTION_UP : UI_ACTION_MINUS;
-    if(pressed & KEY_DOWN_BIT) return text_page ? UI_ACTION_DOWN : UI_ACTION_PLUS;
-    return UI_ACTION_NONE;
+ Key_Init();clear_events();
+ conf_valid=0u;conf_long=0u;suppressed=0u;
 }
-
+void indevService_10ms(void)
+{
+ uint8_t i,blocked;
+ KeyEdge_t edge;
+ Key_DebounceService_10ms();Key_Scand();
+ blocked=(uint8_t)(pm_api_ui_should_block() || pm_api_is_unstable_wake());
+ if(blocked)clear_events();
+ for(i=0u;i<KeyIndex_Max;i++)
+ {
+  uint8_t bit=(uint8_t)(1u<<i);
+  KeyState_t state=KEY_GetState((KeyIndex_t)i);
+  edge=Key_EdgeDetect((KeyIndex_t)i);
+  if(state==KeyState_Release || state==KeyState_None)
+   suppressed&=(uint8_t)~bit;
+  else if(blocked)suppressed|=bit;
+  if(i==KeyIndex_CONF)
+  {
+   if(edge==KeyEdge_Rising)
+   {conf_valid=(uint8_t)(!blocked && !(suppressed&bit));conf_long=0u;}
+   else if(edge==KeyEdge_Holding && conf_valid && !blocked)
+   {
+    clear_events();queue_event(KEY_EVENT_BACK);
+    conf_long=1u;pm_api_refresh_idle();
+   }
+   else if(edge==KeyEdge_Falling)
+   {
+    if(conf_valid && !conf_long && !blocked)
+    {
+     clear_events();queue_event(KEY_EVENT_ENTER);
+     pm_api_refresh_idle();
+    }
+    conf_valid=0u;conf_long=0u;
+   }
+  }
+  else
+  {
+   uint8_t repeat=KEY_GetDASClick((KeyIndex_t)i);
+   if(repeat && !blocked && !(suppressed&bit))
+   {queue_event(i);pm_api_refresh_idle();}
+  }
+ }
+ if(blocked)conf_valid=0u;
+}
+static UI_ACTION translate(uint8_t event,const ui_t *ui)
+{
+ uint8_t is_text=(uint8_t)(ui && ui->nowItem && ui->nowItem->page.location &&
+                   ui->nowItem->page.location->type==UI_PAGE_TEXT);
+ if(event==KEY_EVENT_ENTER)return UI_ACTION_ENTER;
+ if(event==KEY_EVENT_BACK)return UI_ACTION_BACK;
+ switch(event)
+ {
+ case KeyIndex_LEFT:return is_text?UI_ACTION_MINUS:UI_ACTION_UP;
+ case KeyIndex_RIGHT:return is_text?UI_ACTION_PLUS:UI_ACTION_DOWN;
+ case KeyIndex_UP:return is_text?UI_ACTION_UP:UI_ACTION_MINUS;
+ case KeyIndex_DOWN:return is_text?UI_ACTION_DOWN:UI_ACTION_PLUS;
+ default:return UI_ACTION_NONE;
+ }
+}
 UI_ACTION indevScan(const ui_t *ui)
 {
-    static uint8_t raw_last, stable, conf_armed, conf_back_sent;
-    static uint32_t changed_at, conf_pressed_at;
-    const uint8_t raw = key_read_mask();
-    const uint32_t now = Millis();
-
-    if(raw != raw_last)
-    {
-        raw_last = raw;
-        changed_at = now;
-    }
-
-    if((uint32_t)(now - changed_at) >= KEY_DEBOUNCE_MS && raw != stable)
-    {
-        const uint8_t pressed = (uint8_t)(raw & (uint8_t)~stable);
-        const uint8_t released = (uint8_t)(stable & (uint8_t)~raw);
-        UI_ACTION action;
-        stable = raw;
-
-        if(pressed) pm_api_refresh_idle();
-
-        if(pressed & KEY_CONF_BIT)
-        {
-            conf_pressed_at = now;
-            conf_armed = (uint8_t)!pm_api_is_unstable_wake();
-            conf_back_sent = 0u;
-        }
-        if(released & KEY_CONF_BIT)
-        {
-            const uint8_t enter = (uint8_t)(conf_armed &&
-                !conf_back_sent && !pm_api_is_unstable_wake());
-            conf_armed = 0u;
-            conf_back_sent = 0u;
-            if(enter)
-            {
-                beep_key_click();
-                return UI_ACTION_ENTER;
-            }
-        }
-
-        if(pm_api_is_unstable_wake()) return UI_ACTION_NONE;
-
-        action = key_map_direction(pressed, ui);
-        if(action != UI_ACTION_NONE)
-        {
-            beep_key_click();
-            return action;
-        }
-    }
-
-    /* A long CONF emits BACK once; release must not also emit ENTER.
-     * Suppress presses that started during the unstable STOP1 wake period. */
-    if((stable & KEY_CONF_BIT) && conf_armed && !conf_back_sent &&
-       !pm_api_is_unstable_wake() &&
-       (uint32_t)(now - conf_pressed_at) >= KEY_BACK_HOLD_MS)
-    {
-        conf_back_sent = 1u;
-        pm_api_refresh_idle();
-        beep_key_click();
-        return UI_ACTION_BACK;
-    }
-    return UI_ACTION_NONE;
+ UI_ACTION result;
+ uint8_t ev;
+ if(pm_api_ui_should_block() || pm_api_is_unstable_wake())
+ {clear_events();return UI_ACTION_NONE;}
+ if(head==tail)return UI_ACTION_NONE;
+ ev=queue[tail];tail=(uint8_t)((tail+1u)%KEY_QUEUE_SIZE);
+ result=translate(ev,ui);
+ if(result!=UI_ACTION_NONE)beep_key_click();
+ return result;
 }

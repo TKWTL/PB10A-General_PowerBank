@@ -30,6 +30,7 @@
 #include "images/image.h"
 #include "widget/parameter.h"
 #include "widget/text.h"
+#include "pm_api.h"
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
@@ -1100,7 +1101,7 @@ static void Process_UI_Run(ui_t *ui, UI_ACTION Action)
                          * task will enter UI_OFF at its next 50ms poll, even
                          * if automatic sleep is blocked by active hardware. */
                         if(ui->nowItem->page.location->parentPage == NULL){
-                            /* PB10A bring-up: no power management; root BACK does nothing. */
+                            pm_api_force_sleep(); /* Root BACK -> UI_OFF/STOP1. */
                             break;
                         }
                         // 避免重复状态改变
