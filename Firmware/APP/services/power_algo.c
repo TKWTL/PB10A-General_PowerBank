@@ -88,7 +88,7 @@ static const pm_device_node_t s_power_adc_pm={
     "power-adc",0,power_adc_suspend,power_adc_resume,0,200u,0,0
 };
 
-void power_adc_init(void)
+static void power_adc_init(void)
 {
     LL_GPIO_SetOutputPin(SUB_EN_GPIO_Port,SUB_EN_Pin);
     s_active=0u;s_suspended=0u;s_transfer_result=0u;
