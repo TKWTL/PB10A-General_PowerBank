@@ -86,6 +86,27 @@ The reproduced G0 calibration failure (`hadc1.State=0x13`,
 CubeMX clock adjustment are documented in
 [`Docs/Debug/2026-11-19_stm32g0_adc_calibration.md`](../../Docs/Debug/2026-11-19_stm32g0_adc_calibration.md).
 
+### SW6306 20V input request and integer SHUNT calibration
+
+After raising PISET to 100W, PB10A still requested at most **15V**
+through VCHG 0x120. The latest driver permits up to **20V**
+(`SW6306_VCHG_MVRSQ_20V`) while retaining battery-voltage-based
+priority. Real 100W needs a compatible 20V/5A source, rated cable
+and verified battery/thermal margins; setting PISET alone cannot
+guarantee it.
+
+The old runtime floating-point battery SHUNT configuration
+(`SetBattRShunt(float)` / `GetBattRShunt()`) was removed from
+PB10A. Current scale uses four compile-time integers in
+`BSP/SW6306/sw6306.h`: BAT numerator/denominator **1/1** and
+BUS readout numerator/denominator provisionally **2/1**. The BUS
+ratio only modifies the **reported current**; it is based on one
+instrument comparison and must be checked against several load
+points. Internal SW6306 BUS current limits are unaffected. The
+separate energy calculation still uses float for fractional mWh,
+not for a mutable SHUNT coefficient. See the
+[SW6306 debug note](../../Docs/Debug/2026-11-19_sw6306_monitor.md).
+
 ### SW6306 staged polling and sleep guard (2026-11-19)
 
 The sixth coroOS thread initializes SW6306 on its first service tick,

@@ -94,15 +94,15 @@ extern "C" {
 #define SW6306_PD_9V_FIX_CURR           5000U       //PD 9V Fix电流（必须是10的倍数）
 #define SW6306_PD_12V_FIX_CURR          5000U       //PD 12V Fix电流（必须是10的倍数）
 #define SW6306_PD_15V_FIX_CURR          5000U       //PD 15V Fix电流（必须是10的倍数）
-#define SW6306_PD_20V_FIX_CURR          5000U       //PD 20V Fix绝对上限2A；运行时还随POSET降低
+#define SW6306_PD_20V_FIX_CURR          5000U       //PD 20V Fix最高5A；需e-marker线缆，运行时仍受POSET限制
 #define SW6306_PD_PPS0_CURR             5000U       //PD PPS0电流（最大6V）（必须是50的倍数）（单位：mA）（最大5000）
 #define SW6306_PD_PPS1_CURR             5000U       //PD PPS1电流（最大11V）（必须是50的倍数）
 #define SW6306_PD_PPS2_CURR             5000U       //PD PPS2电流（最大16V）（必须是50的倍数）
-#define SW6306_PD_PPS3_CURR             5000U       //PD PPS3(21V)绝对上限2A；运行时还随POSET降低
+#define SW6306_PD_PPS3_CURR             5000U       //PD PPS3(21V)最高5A；实际协商需兼容5A线缆
 //UFCS各电流挡位设置
 #define SW6306_UFCS_5V_MAX_MA           5000U       //UFCS source 5V可编程档位最大电流（必须是50的倍数）
 #define SW6306_UFCS_10V_MAX_MA          5000U       //UFCS source 10V可编程档位最大电流（必须是50的倍数）
-#define SW6306_UFCS_20V_MAX_MA          5000U       //UFCS高压(约21V)绝对上限2A；运行时还随POSET降低
+#define SW6306_UFCS_20V_MAX_MA          5000U       //UFCS高压(约21V)最高5A；需匹配适配器能力
 
 /******************************用户设置区结束**********************************/
 //操作语法宏，方便添加freeRTOS之类的支持
@@ -1410,7 +1410,7 @@ typedef enum {
 } sw6306_pps_t;
 SW6306_RET SW6306_PPSEnable(SW6306_ARGS(sw6306_pps_t pps, uint8_t enable)); //使能/禁止指定 PPS 档位（0x134 PD1）
 SW6306_RET SW6306_SetLowCurrentMode(SW6306_ARGS(uint8_t enable));       //0x11B register-owned low-current, 4h backup
-SW6306_RET SW6306_SetMaxInputPower(SW6306_ARGS(uint8_t watt));              //设置最大输入功率（单位W，如30/18；写 PISET 0x45）
+SW6306_RET SW6306_SetMaxInputPower(SW6306_ARGS(uint8_t watt));              //设置最大输入功率（单位W，如100/65；写 PISET 0x45）
 SW6306_RET SW6306_PPSBroadcast(SW6306_NOARG);   //手动触发 PD/PPS 电流能力播发（Source Capability 重播）
 SW6306_RET SW6306_UFCSBroadcast(SW6306_NOARG);  //手动触发 UFCS 电流能力播发（Source Capability 重播）
 //容量与库仑计相关操作
