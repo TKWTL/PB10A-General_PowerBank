@@ -8,6 +8,15 @@
 #include "main.h"
 #include "millis.h"
 #include "core/ui.h"
+#include "pm_api.h"
+#include <string.h>
+
+#define POWER_SW_SLEEP_BLOCK 0x08u /* separate from scanner (0x02) and radio (0x04) */
+#define SW_REINIT_DELAY_MS 5000u
+#define SW_MONITOR_STALE_MS 2500u
+static power_monitor_t s_monitor;
+static uint8_t s_sw_phase,s_capacity_div,s_idle_verified;
+static uint32_t s_retry_at;
 
 static uint8_t s_sw_low_power;
 static pm_hook_result_t sw_prepare(void *ctx)
@@ -17,24 +26,30 @@ static pm_hook_result_t sw_prepare(void *ctx)
 }
 static pm_hook_result_t sw_suspend(void *ctx)
 {
- (void)ctx;
- if(s_sw_low_power || !SW6306_IsInitialized())return PM_HOOK_DONE;
- /* Failure/unknown status is treated as 'active': do not touch charge path.
-  * SW6306 can keep its standalone charging/PD logic while MCU is in STOP1. */
- if(SW6306_TransportPortsIdle())
- {
-  SW6306_LPSet(); /* 0x23 = 0; chip returns to autonomous low-power mode */
-  s_sw_low_power=1u;
- }
- return PM_HOOK_DONE;
+    (void)ctx;
+    if(s_sw_low_power)return PM_HOOK_DONE;
+    /* Never enter STOP if chip is offline, any port is active, or I2C
+     * cannot verify the live CC/port status. This is a fresh read, not
+     * the potentially stale 500ms cache. */
+    if(!SW6306_IsInitialized() || !SW6306_TransportPortsIdle())
+    {
+        s_idle_verified=0u;
+        pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK,1u);
+        return PM_HOOK_ERROR;
+    }
+    s_idle_verified=1u;
+    SW6306_LPSet();
+    s_sw_low_power=1u;
+    return PM_HOOK_DONE;
 }
 static pm_hook_result_t sw_resume(void *ctx)
 {
- (void)ctx;
- if(!s_sw_low_power)return PM_HOOK_DONE;
- if(!SW6306_WakeAndUnlock())return PM_HOOK_ERROR;
- s_sw_low_power=0u;
- return PM_HOOK_DONE;
+    (void)ctx;
+    if(!s_sw_low_power)return PM_HOOK_DONE;
+    if(!SW6306_WakeAndUnlock())return PM_HOOK_ERROR;
+    s_sw_low_power=0u;
+    s_idle_verified=0u; /* next service cycle rechecks live connections */
+    return PM_HOOK_DONE;
 }
 static const pm_device_node_t s_node={
  "sw6306",sw_prepare,sw_suspend,sw_resume,0,90u,0,0
@@ -206,9 +221,99 @@ void PowerAlgo_AddStatisticsItems(ui_page_t *page)
 }
 
 
+
+/* SW6306 read-only monitor policy. One group per 100ms, yielding between
+ * groups; avoid dumping every I2C transaction into a single UI frame.
+ * Initialization is attempted on the first service tick and then every 5s
+ * if the driver is uninitialized. SW6306_Init() itself uses legacy IRQ-I2C
+ * synchronous waits: it is NOT a truly asynchronous coroutine operation. */
+void PowerAlgo_Service100ms(void)
+{
+    uint32_t now=Millis();
+    if(pm_api_ui_should_block())return;
+    if(!SW6306_IsInitialized())
+    {
+        s_monitor.initialized=0u;
+        s_monitor.valid=0u;
+        s_monitor.capacity_valid=0u;
+        s_idle_verified=0u;
+        pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK,1u); /* fail safe */
+        if((int32_t)(now-s_retry_at)<0)return;
+        s_retry_at=now+SW_REINIT_DELAY_MS;
+        SW6306_Init(); /* PB02B driver configuration, one attempt per retry */
+        if(!SW6306_IsInitialized())return;
+        s_sw_phase=0u;s_capacity_div=1u;
+        s_sw_low_power=0u;
+        s_monitor.initialized=1u;
+        return;
+    }
+
+    /* Successful refreshes populate a single RAM-only UI snapshot. */
+    switch(s_sw_phase)
+    {
+    case 0u:
+        SW6306_ADCLoad(); /* BUS and battery voltage/current */
+        break;
+    case 1u:
+        SW6306_StatusLoad(); /* charge/discharge direction */
+        break;
+    case 2u:
+        SW6306_PortStatusLoad(); /* C1/A1 live connection and port paths */
+        s_idle_verified=SW6306_TransportPortsIdle();
+        s_monitor.port_busy=(uint8_t)!s_idle_verified;
+        pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK,!s_idle_verified);
+        if(!s_idle_verified)pm_api_refresh_idle();
+        break;
+    case 3u:
+        break; /* preserve PB02B's port -> power spacing */
+    default:
+        SW6306_PowerLoad(); /* fast-charge protocol and limits */
+        if(++s_capacity_div>=2u)
+        {
+            s_capacity_div=0u;
+            SW6306_CapacityLoad();
+            if(SW6306_CapacityLoadOK())
+            {
+                s_monitor.capacity_pct=SW6306_ReadCapacity();
+                if(s_monitor.capacity_pct>100u)s_monitor.capacity_pct=100u;
+                s_monitor.capacity_valid=1u;
+            }
+        }
+        s_monitor.initialized=1u;
+        s_monitor.vbus_mv=SW6306_ReadVBUS();
+        s_monitor.ibus_ma=SW6306_ReadIBUS();
+        s_monitor.vbat_mv=SW6306_ReadVBAT();
+        s_monitor.ibat_ma=SW6306_ReadIBAT();
+        s_monitor.c1_on=SW6306_IsPortC1ON()?1u:0u;
+        s_monitor.a1_on=SW6306_IsPortA1ON()?1u:0u;
+        s_monitor.charging=SW6306_IsCharging()?1u:0u;
+        s_monitor.discharging=SW6306_IsDischarging()?1u:0u;
+        s_monitor.protocol=SW6306_ReadProtocol();
+        s_monitor.sample_ms=now;
+        s_monitor.valid=1u;
+        break;
+    }
+    s_sw_phase=(uint8_t)((s_sw_phase+1u)%5u);
+}
+
+void PowerAlgo_GetMonitor(power_monitor_t *out)
+{
+    if(!out)return;
+    *out=s_monitor; /* foreground coroOS only; no interrupt writer */
+    if(!SW6306_IsInitialized())out->initialized=out->valid=0u;
+    if((uint32_t)(Millis()-out->sample_ms)>SW_MONITOR_STALE_MS)
+        out->valid=0u;
+}
+
 void PowerAlgo_Init(void)
 {
     power_adc_init(); /* assert PA6 and calibrate ADC1 */
+    memset(&s_monitor,0,sizeof(s_monitor));
+    s_monitor.protocol="--";
+    s_sw_phase=0u;s_capacity_div=1u;s_idle_verified=0u;
+    s_retry_at=Millis(); /* first service tick attempts SW6306_Init */
+    s_sw_low_power=0u;
+    pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK,1u); /* fail closed until idle proven */
     (void)pm_device_register(&s_node);         /* SW6306 / order 90 */
     (void)pm_device_register(&s_power_adc_pm); /* SUB_EN + ADC / order 200 */
 }

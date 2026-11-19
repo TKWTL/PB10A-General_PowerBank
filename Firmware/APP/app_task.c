@@ -20,7 +20,7 @@
 static ui_t s_ui;
 static uint32_t s_last_time_update_ms;
 static coro_scheduler_t s_scheduler;
-static coro_pt_t s_states[5];
+static coro_pt_t s_states[6];
 
 THRD_DECLARE(OledServiceThread)
 {
@@ -106,9 +106,21 @@ THRD_DECLARE(PowerADCThread)
     }
     THRD_END;
 }
+/* PB02B-derived 100ms staggered SW6306 read groups, independent of UI. */
+THRD_DECLARE(SW6306ServiceThread)
+{
+    THRD_BEGIN;
+    for(;;)
+    {
+        if(!pm_api_ui_should_block())
+            PowerAlgo_Service100ms();
+        THRD_DELAY(100u);
+    }
+    THRD_END;
+}
 static const coro_thread_fn_t s_threads[] = {
     OledServiceThread, MiaoUiThread, PowerManagerThread,
-    SystemServiceThread, PowerADCThread
+    SystemServiceThread, PowerADCThread, SW6306ServiceThread
 };
 
 void APP_TaskInit(void)
@@ -122,7 +134,7 @@ void APP_TaskInit(void)
     /* PB02B SC7A20 initialization: WHO_AM_I + 25Hz/2g/BDU/HR.
      * PB10A INT is on PB5, independent from SW6306; no IRQ sharing. */
     SC7A20_Init();
-    PowerAlgo_Init();  /* SW6306 and auxiliary A-port power/ADC. */
+    PowerAlgo_Init();  /* SW6306 monitor, sleep gating, auxiliary A ADC. */
     SensorAlgo_Init(); /* SC7A20/MMC5603/BMP180 STOP policy. */
     RadioAlgo_Init();  /* RDA5807 powers down before UI_OFF. */
     RTC_UpdateTime();
