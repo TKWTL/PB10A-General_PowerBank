@@ -37,15 +37,21 @@ static ui_element_t s_elements[6];
 
 static pm_hook_result_t power_adc_suspend(void *ctx)
 {
+    HAL_StatusTypeDef result;
     (void)ctx;
     s_suspended=1u;
+    /* A completed NORMAL DMA scan can leave ADEN asserted even though
+     * s_active is 0. Disable ADC also between scans, before STM32 clears
+     * TSEN/VREFEN and enters STOP1. Never report DONE on HAL failure. */
     if(s_active)
     {
-        (void)HAL_ADC_Stop_DMA(&hadc1);
+        result=HAL_ADC_Stop_DMA(&hadc1);
         s_active=0u;
         s_transfer_result=0u;
     }
-    return PM_HOOK_DONE;
+    else
+        result=HAL_ADC_Stop(&hadc1);
+    return result==HAL_OK?PM_HOOK_DONE:PM_HOOK_ERROR;
 }
 static pm_hook_result_t power_adc_resume(void *ctx)
 {

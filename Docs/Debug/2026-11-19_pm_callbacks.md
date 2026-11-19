@@ -19,7 +19,7 @@ MiaoUI 绘图。仅平台节点在所有 suspend 回调结束后进入 WFI。
 | 80 | sensors | `APP/services/sensor_algo.c` | SC7A20 ODR=0、MMC5603 待机，BMP180 保持空闲；恢复原配置 |
 | 90 | sw6306 | `APP/services/power_algo.c` | 仅实时确认端口全部空闲才请求 LP；不关闭充/放电 |
 | 110 | rda5807 | `APP/services/radio_algo.c` | UI_OFF 前关闭运行中 FM，关闭 MCO；唤醒由应用决定是否启动 |
-| 200 | power-adc | `APP/services/power_adc_algo.c` | STOP1 前停止 ADC DMA，恢复后继续采样 |
+| 200 | power-adc | `APP/services/power_adc_algo.c` | STOP1 前停止活动 DMA 或空闲 ADC（确保 ADEN=0），失败时取消休眠；恢复后继续采样 |
 | 230 | oled | `APP/framework/pm_device_builtin.c` | 等待 DMA 序列完成 |
 | 250 | stm32g070 | `APP/framework/pm_device_builtin.c` | STOP1 中暂停 Tick/关闭内部测量路径；唤醒后恢复 |
 
