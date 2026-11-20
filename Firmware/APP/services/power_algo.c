@@ -16,38 +16,109 @@
 #define SW_MONITOR_STALE_MS 2500u
 static power_monitor_t s_monitor;
 static uint8_t s_sw_phase,s_capacity_div,s_idle_verified,s_status_fresh;
+static uint8_t s_sw_owner_busy,s_cycle_ok;
+static uint32_t s_sw_seq_before;
 static uint32_t s_retry_at;
 
 /*************************** SW6306 低功耗回调 ***************************/
 static uint8_t s_sw_low_power;
+/* Suspend and resume are repeatable PM callbacks, not blocking threads.
+ * PM must never overlap an in-progress SW6306 operation owned by coroOS.
+ * If a transition is aborted while I2C is active, finish its HAL transfer
+ * before reusing the child PT. */
+static coro_pt_t s_sw_suspend_pt,s_sw_resume_pt;
+static uint8_t s_sw_suspend_stage,s_sw_resume_started;
+static uint32_t s_sw_verify_before;
+
 static pm_hook_result_t sw_prepare(void *ctx) {
     (void)ctx;
-    return PM_HOOK_DONE; /* UI_OFF does not stop SW6306 */
+    return s_sw_owner_busy ? PM_HOOK_PENDING : PM_HOOK_DONE;
 }
 
 static pm_hook_result_t sw_suspend(void *ctx) {
+    char result;
     (void)ctx;
-    if(s_sw_low_power)return PM_HOOK_DONE;
-    /* Never enter STOP if chip is offline, any port is active, or I2C
-     * cannot verify the live CC/port status. This is a fresh read, not
-     * the potentially stale 500ms cache. */
-    if(!SW6306_IsInitialized() || !SW6306_TransportPortsIdle()) {
-        s_idle_verified=0u;
+    if(s_sw_low_power) return PM_HOOK_DONE;
+    if(s_sw_owner_busy) return PM_HOOK_PENDING;
+    if(!SW6306_IsInitialized()) {
         pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK,1u);
         return PM_HOOK_ERROR;
     }
-    s_idle_verified=1u;
-    SW6306_LPSet();
-    s_sw_low_power=1u;
+
+    if(s_sw_suspend_stage==0u) {
+        SW6306_OperationReset();
+        s_sw_verify_before=SW6306_PortReadSequence();
+        PT_INIT(&s_sw_suspend_pt);
+        s_sw_suspend_stage=1u;
+    }
+    if(s_sw_suspend_stage==1u) {
+        result=SW6306_PortStatusLoad(&s_sw_suspend_pt);
+        if(PT_SCHEDULE(result)) return PM_HOOK_PENDING;
+        s_sw_suspend_stage=0u;
+        s_idle_verified=(uint8_t)(SW6306_LastOperationOK() &&
+            SW6306_PortReadSequence()!=s_sw_verify_before &&
+            SW6306_TransportPortsIdle());
+        if(!s_idle_verified) {
+            pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK,1u);
+            return PM_HOOK_ERROR;
+        }
+        SW6306_OperationReset();
+        PT_INIT(&s_sw_suspend_pt);
+        s_sw_suspend_stage=2u;
+    }
+    if(s_sw_suspend_stage==2u) {
+        result=SW6306_LPSet(&s_sw_suspend_pt);
+        if(PT_SCHEDULE(result))return PM_HOOK_PENDING;
+        s_sw_suspend_stage=0u;
+        if(!SW6306_LastOperationOK()) {
+            SW6306_Invalidate();
+            return PM_HOOK_ERROR;
+        }
+        s_sw_low_power=1u;
+    }
     return PM_HOOK_DONE;
 }
 
 static pm_hook_result_t sw_resume(void *ctx) {
+    char result;
     (void)ctx;
-    if(!s_sw_low_power)return PM_HOOK_DONE;
-    if(!SW6306_WakeAndUnlock())return PM_HOOK_ERROR;
+    if(s_sw_owner_busy)return PM_HOOK_PENDING;
+
+    /* A key wake may abort prepare/suspend while SW I2C is in flight.
+     * Drain the previous child to completion; do not start another
+     * transaction on the same static child PT before it settles. */
+    if(s_sw_suspend_stage==1u) {
+        result=SW6306_PortStatusLoad(&s_sw_suspend_pt);
+        if(PT_SCHEDULE(result))return PM_HOOK_PENDING;
+        s_sw_suspend_stage=0u; /* do NOT start LPSET after cancellation */
+    }
+    else if(s_sw_suspend_stage==2u) {
+        result=SW6306_LPSet(&s_sw_suspend_pt);
+        if(PT_SCHEDULE(result))return PM_HOOK_PENDING;
+        s_sw_low_power=SW6306_LastOperationOK()?1u:0u;
+        s_sw_suspend_stage=0u;
+        if(!s_sw_low_power)SW6306_Invalidate();
+    }
+
+    if(!s_sw_low_power) {
+        s_sw_resume_started=0u;
+        return PM_HOOK_DONE;
+    }
+    if(!s_sw_resume_started) {
+        SW6306_OperationReset();
+        PT_INIT(&s_sw_resume_pt);
+        s_sw_resume_started=1u;
+    }
+    result=SW6306_Unlock(&s_sw_resume_pt);
+    if(PT_SCHEDULE(result))return PM_HOOK_PENDING;
+    s_sw_resume_started=0u;
     s_sw_low_power=0u;
-    s_idle_verified=0u; /* next service cycle rechecks live connections */
+    s_idle_verified=0u;
+    s_monitor.valid=0u;
+    if(!SW6306_LastOperationOK()) {
+        SW6306_Invalidate();
+        return PM_HOOK_ERROR;
+    }
     return PM_HOOK_DONE;
 }
 
@@ -211,80 +282,116 @@ void PowerAlgo_AddStatisticsItems(ui_page_t *page) {
 }
 
 /************************ SW6306 定期采样与缓存 ************************/
-/* SW6306 read-only monitor policy. One group per 100ms, yielding between
- * groups; avoid dumping every I2C transaction into a single UI frame.
- * Initialization is attempted on the first service tick and then every 5s
- * if the driver is uninitialized. SW6306_Init() itself uses legacy IRQ-I2C
- * synchronous waits: it is NOT a truly asynchronous coroutine operation. */
-void PowerAlgo_Service100ms(void) {
-    uint32_t now=Millis();
-    if(pm_api_ui_should_block())return;
-    if(!SW6306_IsInitialized()) {
-        s_monitor.initialized=0u;
-        s_monitor.valid=0u;
-        s_monitor.capacity_valid=0u;
-        s_idle_verified=0u;
-        pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK,1u); /* fail safe */
-        if((int32_t)(now-s_retry_at)<0)return;
-        s_retry_at=now+SW_REINIT_DELAY_MS;
-        SW6306_Init(); /* PB02B driver configuration, one attempt per retry */
-        if(!SW6306_IsInitialized())return;
-        s_sw_phase=0u;s_capacity_div=1u;
-        s_status_fresh=0u;s_sw_low_power=0u;
-        s_monitor.initialized=1u;
-        return;
-    }
-
-    /* Successful refreshes populate a single RAM-only UI snapshot. */
-    switch(s_sw_phase) {
-    case 0u:
-        SW6306_ADCLoad(); /* BUS and battery voltage/current */
-        break;
-    case 1u:
-        {
-            uint32_t before=SW6306_StatusReadSequence();
-            SW6306_StatusLoad(); /* charge/discharge direction */
-            s_status_fresh=(uint8_t)(SW6306_StatusReadSequence()!=before);
-            break;
+/* One actor owns the SW6306 PT call tree. Every I2C operation now
+ * submits through HAL IRQ and yields only this coroutine while waiting.
+ * Allow already-started transfers to finish during UI_OFF preparation;
+ * never start new background transactions until RUN is restored. */
+char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
+    THRD_BEGIN;
+    for(;;) {
+        if(s_sw_low_power || pm_api_ui_should_block()) {
+            THRD_DELAY(20u);
+            continue;
         }
-    case 2u:
-        SW6306_PortStatusLoad(); /* C1/A1 live connection and port paths */
-        s_idle_verified=SW6306_TransportPortsIdle();
-        s_monitor.port_busy=(uint8_t)!s_idle_verified;
-        pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK,!s_idle_verified);
-        if(!s_idle_verified)pm_api_refresh_idle();
-        break;
-    case 3u:
-        break; /* preserve PB02B's port -> power spacing */
-default:
-        SW6306_PowerLoad(); /* fast-charge protocol and limits */
-        if(++s_capacity_div>=2u) {
-            s_capacity_div=0u;
-            SW6306_CapacityLoad();
-            if(SW6306_CapacityLoadOK()) {
-                s_monitor.capacity_pct=SW6306_ReadCapacity();
-                if(s_monitor.capacity_pct>100u)s_monitor.capacity_pct=100u;
-                s_monitor.capacity_valid=1u;
+        if(!SW6306_IsInitialized()) {
+            s_monitor.initialized=0u;
+            s_monitor.valid=0u;
+            s_monitor.capacity_valid=0u;
+            s_idle_verified=0u;
+            pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK,1u);
+            if((int32_t)(Millis()-s_retry_at)<0) {
+                THRD_DELAY(100u);
+                continue;
             }
+            s_retry_at=Millis()+SW_REINIT_DELAY_MS;
+            s_sw_owner_busy=1u;
+            SW6306_OperationReset();
+            THRD_SPAWN_NOARG(SW6306_Init);
+            s_sw_owner_busy=0u;
+            if(!SW6306_IsInitialized() || !SW6306_LastOperationOK()) {
+                SW6306_Invalidate();
+                THRD_DELAY(100u);
+                continue;
+            }
+            s_sw_low_power=0u;
+            s_sw_phase=0u;
+            s_capacity_div=1u;
+            s_status_fresh=0u;
+            s_cycle_ok=1u;
+            s_monitor.initialized=1u;
+            THRD_DELAY(100u);
+            continue;
         }
-        s_monitor.initialized=1u;
-        s_monitor.vbus_mv=SW6306_ReadVBUS();
-        s_monitor.ibus_ma=SW6306_ReadIBUS();
-        s_monitor.vbat_mv=SW6306_ReadVBAT();
-        s_monitor.ibat_ma=SW6306_ReadIBAT();
-        s_monitor.c1_on=SW6306_IsPortC1ON()?1u:0u;
-        s_monitor.a1_on=SW6306_IsPortA1ON()?1u:0u;
-        s_monitor.charging=SW6306_IsCharging()?1u:0u;
-        s_monitor.discharging=SW6306_IsDischarging()?1u:0u;
-        s_monitor.protocol=SW6306_ReadProtocol();
-        s_monitor.sample_ms=now;
-        /* StatusLoad succeeded in this 500ms cycle. Legacy ADCLoad
-         * and PowerLoad return void, so per-group freshness is unknown. */
-        s_monitor.valid=s_status_fresh;
-        s_status_fresh=0u;
-        break;
+
+        if(s_sw_phase==0u) {
+            s_cycle_ok=1u;
+            s_sw_owner_busy=1u;
+            SW6306_OperationReset();
+            THRD_SPAWN_NOARG(SW6306_ADCLoad);
+            s_sw_owner_busy=0u;
+            if(!SW6306_LastOperationOK())s_cycle_ok=0u;
+        }
+        else if(s_sw_phase==1u) {
+            s_sw_seq_before=SW6306_StatusReadSequence();
+            s_sw_owner_busy=1u;
+            SW6306_OperationReset();
+            THRD_SPAWN_NOARG(SW6306_StatusLoad);
+            s_sw_owner_busy=0u;
+            s_status_fresh=(uint8_t)(SW6306_LastOperationOK() &&
+                SW6306_StatusReadSequence()!=s_sw_seq_before);
+            if(!s_status_fresh)s_cycle_ok=0u;
+        }
+        else if(s_sw_phase==2u) {
+            s_sw_seq_before=SW6306_PortReadSequence();
+            s_sw_owner_busy=1u;
+            SW6306_OperationReset();
+            THRD_SPAWN_NOARG(SW6306_PortStatusLoad);
+            s_sw_owner_busy=0u;
+            s_idle_verified=(uint8_t)(SW6306_LastOperationOK() &&
+                SW6306_PortReadSequence()!=s_sw_seq_before &&
+                SW6306_TransportPortsIdle());
+            s_monitor.port_busy=(uint8_t)!s_idle_verified;
+            if(!SW6306_LastOperationOK())s_cycle_ok=0u;
+            pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK,!s_idle_verified);
+            if(!s_idle_verified)pm_api_refresh_idle();
+        }
+        else if(s_sw_phase==4u) {
+            s_sw_owner_busy=1u;
+            SW6306_OperationReset();
+            THRD_SPAWN_NOARG(SW6306_PowerLoad);
+            s_sw_owner_busy=0u;
+            if(!SW6306_LastOperationOK())s_cycle_ok=0u;
+            if(++s_capacity_div>=2u) {
+                s_capacity_div=0u;
+                s_sw_owner_busy=1u;
+                SW6306_OperationReset();
+                THRD_SPAWN_NOARG(SW6306_CapacityLoad);
+                s_sw_owner_busy=0u;
+                s_monitor.capacity_valid=(uint8_t)(SW6306_LastOperationOK() && SW6306_CapacityLoadOK());
+                if(s_monitor.capacity_valid) {
+                    s_monitor.capacity_pct=SW6306_ReadCapacity();
+                    if(s_monitor.capacity_pct>100u)s_monitor.capacity_pct=100u;
+                }
+            }
+            s_monitor.initialized=1u;
+            s_monitor.vbus_mv=SW6306_ReadVBUS();
+            s_monitor.ibus_ma=SW6306_ReadIBUS();
+            s_monitor.vbat_mv=SW6306_ReadVBAT();
+            s_monitor.ibat_ma=SW6306_ReadIBAT();
+            s_monitor.c1_on=SW6306_IsPortC1ON()?1u:0u;
+            s_monitor.a1_on=SW6306_IsPortA1ON()?1u:0u;
+            s_monitor.charging=SW6306_IsCharging()?1u:0u;
+            s_monitor.discharging=SW6306_IsDischarging()?1u:0u;
+            s_monitor.protocol=SW6306_ReadProtocol();
+            s_monitor.sample_ms=Millis();
+            s_monitor.valid=(uint8_t)(s_status_fresh && s_cycle_ok);
+            s_status_fresh=0u;
+        }
+        /* Phase 3 intentionally leaves an idle gap on the shared bus. */
+        s_sw_phase=(uint8_t)((s_sw_phase+1u)%5u);
+        THRD_DELAY(100u);
     }
-    s_sw_phase=(uint8_t)((s_sw_phase+1u)%5u);
+    THRD_END;
 }
 
 void PowerAlgo_GetMonitor(power_monitor_t *out) {
@@ -303,7 +410,9 @@ void PowerAlgo_Init(void) {
     s_sw_phase=0u;s_capacity_div=1u;s_idle_verified=0u;
     s_status_fresh=0u;
     s_retry_at=Millis(); /* first service tick attempts SW6306_Init */
-    s_sw_low_power=0u;
+    s_sw_low_power=0u;s_sw_owner_busy=0u;
+    s_sw_suspend_stage=0u;s_sw_resume_started=0u;
+    s_cycle_ok=0u;
     pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK,1u); /* fail closed until idle proven */
     (void)pm_device_register(&s_node);         /* SW6306 / order 90 */
     (void)pm_device_register(&s_power_adc_pm); /* SUB_EN + ADC / order 200 */
