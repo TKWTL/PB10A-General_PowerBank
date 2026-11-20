@@ -7,6 +7,7 @@
 #include "ssd1306_display.h"
 #include "pm_api.h"
 #include "millis.h"
+#include "i2c.h"
 #include "time_service.h"
 #include "time_algo.h"
 #include "beep_algo.h"
@@ -132,5 +133,7 @@ void APP_TaskInit(void) {
 }
 
 void APP_TaskRunOnce(void) {
+    /* IRQ continues I2C, this watchdog only bounds a stalled request. */
+    I2C_AsyncService();
     CoroOS_RunOnce(&s_scheduler);
 }

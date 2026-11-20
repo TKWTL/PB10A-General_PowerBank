@@ -23,6 +23,8 @@
 #define SCANNER_SLEEP_BLOCK 0x02u
 enum {SCANNER_TITLE=0,SCANNER_SCAN,SCANNER_HOLD};
 static uint8_t s_active,s_phase,s_next,s_ack[128];
+static uint8_t s_probe_addr,s_probe_pending;
+static uint8_t s_probe_flag; /* stable IRQ completion storage */
 static uint32_t s_phase_at;
 static void scanner_start(uint32_t now,uint8_t title) {
     uint8_t i;
@@ -69,13 +71,24 @@ void i2c_Scanner(ui_t *ui) {
         s_phase=SCANNER_SCAN;
         s_phase_at=now;
     }
-    if(s_phase==SCANNER_SCAN) {
-        /* One visible cell per frame. Reserved cells are marked as
-         * scanned "--" but are not sent on the I2C bus. */
-        if(s_next<128u) {
-            if(s_next>=SCANNER_FIRST && s_next<=SCANNER_LAST)
-                s_ack[s_next]=I2C_IsReady((uint16_t)s_next<<1)?1u:0u;
+    if(s_probe_pending && s_probe_flag!=I2C_ASYNC_PENDING) {
+        /* A former scan may finish after re-entering or pressing CONF:
+         * never apply a completion belonging to a previous address. */
+        if(s_phase==SCANNER_SCAN && s_next==s_probe_addr) {
+            s_ack[s_next]=(uint8_t)(s_probe_flag==I2C_ASYNC_DONE);
             ++s_next;
+        }
+        s_probe_pending=0u;
+    }
+    if(s_phase==SCANNER_SCAN && !s_probe_pending) {
+        /* Exactly one address grid cell advances per visible frame.
+         * Only safe addresses cause an asynchronous I2C transaction. */
+        if(s_next<128u) {
+            if(s_next<SCANNER_FIRST || s_next>SCANNER_LAST) ++s_next;
+            else if(I2C_AsyncProbe((uint16_t)s_next<<1,&s_probe_flag)) {
+                s_probe_addr=s_next;
+                s_probe_pending=1u;
+            }
         }
         if(s_next>=128u) {
             s_phase=SCANNER_HOLD;

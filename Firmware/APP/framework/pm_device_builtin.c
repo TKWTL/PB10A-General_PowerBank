@@ -1,7 +1,7 @@
 /* OLED SPI DMA power sequencing and STM32 STOP1 clock/tick restore. */
 #include "pm_device.h"
 #include "ssd1306_display.h"
-#include "bsp_i2c.h"
+#include "i2c.h"
 #include "spi.h"
 #include "millis.h"
 #include "main.h"
