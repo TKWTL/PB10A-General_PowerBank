@@ -40,29 +40,14 @@ CubeMX 生成的外设配置没有手动修改。
   自身协程中同步等待，期间其他 coroOS 线程无法运行**。
   本次工作不能描述为“所有 I²C 访问均非阻塞”。
 
-## 为什么 SW6306_USE_PROTOTHREAD 暂不打开
+## 更新：SW6306_USE_PROTOTHREAD 已启用
 
-原 SW6306 驱动的 protothread 条件编译不能直接使用。
-具体有三个独立错误类别：
+原文分析的三项风险已在后续 SW6306 驱动提交中处理：
+使用持久缓冲区、HAL DONE/ERROR 完成标志，以及专属
+SW6306 操作所有者替代不能嵌套的 PT 信号量。
 
-1. `SW6306_I2C_Receive()` 在异步分支返回的是“是否接受
-   事务”（成功为 1），旧同步分支 `I2C_OK` 是 0。
-   `ADCLoad/StatusLoad/PortStatusLoad/CapacityLoad` 中的
-   `!= I2C_OK` 不能直接沿用；必须改成
-   “提交 → 协程等待完成标志 → 判断错误码”。
-2. `ADCLoad`、`StatusLoad` 等存在自动数组、计数变量，
-   `THRD_SPAWN` 后不能保证其值仍在有效栈帧。
-   必须迁移为持久静态/实例数据，并消除对重入的依赖。
-3. `SW6306_RegsetSwitch` 和 `SW6306_ByteModify` 都
-   试图在外层函数已持有 `PT_SEM_WAIT` 时重新获取同一
-   信号量，普通 Protothreads 计数信号量并不支持递归获取，
-   必须明确单一 SW6306 服务所有权或重构锁边界。
-
-强行定义 `SW6306_USE_PROTOTHREAD` 会造成编译失败、死锁
-或读写缓冲区失效，因此目前宏**保持未定义**。
-完成驱动转换时需要同步改造 `PowerAlgo_Service100ms()`、
-SW6306 服务线程与 PM 的 `PENDING` 回调，确保 STOP1 不会
-切断半途中的 I²C 事务。
+迁移记录见 [SW6306 协程化](2026-11-20_sw6306_pt.md)。
+此前禁止开启宏的结论仅适用于旧版本，不再代表当前代码。
 
 ## 105W POSET 的硬件限制
 
