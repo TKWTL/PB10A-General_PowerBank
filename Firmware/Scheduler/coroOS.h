@@ -9,44 +9,44 @@
 extern "C" {
 #endif
 
-    /*
-    * Inspired by Adam Dunkels' Protothreads (stackless cooperative threads).
-    * Tiny cooperative scheduler derived from the Protothreads/coroOS model used
-    * in TKWTL/3S1P-21700-Power-Bank.
-    *
-    * - no task stack and no preemption;
-    * - each thread stores only a 16-bit continuation plus its explicit static
-    *   state;
-    * - delays use the board's 1 ms SysTick tick and are rollover-safe.
-    *
-    * IMPORTANT: an automatic local variable does not survive THRD_DELAY/YIELD.
-    * Any value needed after a yield point must be static or live outside the
-    * thread function.
-    */
+/*
+ * Inspired by Adam Dunkels' Protothreads (stackless cooperative threads).
+ * Tiny cooperative scheduler derived from the Protothreads/coroOS model used
+ * in TKWTL/3S1P-21700-Power-Bank.
+ *
+ * - no task stack and no preemption;
+ * - each thread stores only a 16-bit continuation plus its explicit static
+ *   state;
+ * - delays use the board's 1 ms SysTick tick and are rollover-safe.
+ *
+ * IMPORTANT: an automatic local variable does not survive THRD_DELAY/YIELD.
+ * Any value needed after a yield point must be static or live outside the
+ * thread function.
+ */
 
-    typedef struct {
-        uint16_t line;
-    } coro_pt_t;
+typedef struct {
+    uint16_t line;
+} coro_pt_t;
 
-    typedef uint8_t (*coro_thread_fn_t)(coro_pt_t *pt);
+typedef uint8_t (*coro_thread_fn_t)(coro_pt_t *pt);
 
-    typedef struct {
-        const coro_thread_fn_t *threads;
-        coro_pt_t *states;
-        uint8_t count;
-    } coro_scheduler_t;
+typedef struct {
+    const coro_thread_fn_t *threads;
+    coro_pt_t *states;
+    uint8_t count;
+} coro_scheduler_t;
 
-    enum {
-        CORO_WAITING = 0u,
-        CORO_YIELDED = 1u,
-        CORO_ENDED   = 2u
-    };
+enum {
+    CORO_WAITING = 0u,
+    CORO_YIELDED = 1u,
+    CORO_ENDED   = 2u
+};
 
-    void CoroOS_Init(coro_scheduler_t *scheduler,
-        const coro_thread_fn_t *threads,
-        coro_pt_t *states,
-        uint8_t count);
-    void CoroOS_RunOnce(coro_scheduler_t *scheduler);
+void CoroOS_Init(coro_scheduler_t *scheduler,
+    const coro_thread_fn_t *threads,
+    coro_pt_t *states,
+    uint8_t count);
+void CoroOS_RunOnce(coro_scheduler_t *scheduler);
 
 #define CORO_INIT(pt)              do { (pt)->line = 0u; } while(0)
 #define CORO_BEGIN(pt)             switch((pt)->line) { case 0:

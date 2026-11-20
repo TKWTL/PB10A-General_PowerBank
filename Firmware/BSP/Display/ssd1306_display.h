@@ -8,7 +8,7 @@
 typedef enum {SSD1306_INIT_PENDING=0,SSD1306_INIT_READY,
     SSD1306_INIT_FAILED} SSD1306_InitState;
 /* Begin always returns immediately; display becomes ready asynchronously
-* after SSD1306_Display_Service() completes the SPI DMA init sequence. */
+ * after SSD1306_Display_Service() completes the SPI DMA init sequence. */
 uint8_t SSD1306_Display_Begin(u8g2_t *screen);
 SSD1306_InitState SSD1306_Display_InitState(void);
 void SSD1306_Display_RequestFlush(const uint8_t *framebuffer);

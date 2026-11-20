@@ -5,7 +5,7 @@
 #include <stddef.h>
 
 /* RTC-based time and uptime; RTC calendar is retained across reset by
-* PB10A backup-domain validity marker. No timezone/DST synchronization. */
+ * PB10A backup-domain validity marker. No timezone/DST synchronization. */
 typedef struct {
     uint32_t year;     /* 2000..2099 */
     uint32_t month;    /* 1..12 */

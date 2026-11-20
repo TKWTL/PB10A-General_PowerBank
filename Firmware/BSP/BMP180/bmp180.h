@@ -21,6 +21,6 @@ void BMP180_GetTemprature(void); /* requires 5 ms after start */
 void BMP180_GetPressure(void);  /* requires 26 ms after OSS3 start */
 void BMP180_CalcAltitude(void);
 /* Atomic multi-step sample, holds one I2C bus lock through both conversions.
-* Synchronous, blocking: not for IRQ or a running PM STOP transition. */
+ * Synchronous, blocking: not for IRQ or a running PM STOP transition. */
 uint8_t BMP180_ReadSample(void);
 #endif

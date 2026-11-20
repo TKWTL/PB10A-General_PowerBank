@@ -1,6 +1,6 @@
 /*SW6306操作库 V1.0
-/TKWTL 2026/04/12
-*/
+ /TKWTL 2026/04/12
+ */
 #ifndef __SW6306_H__
 #define __SW6306_H__
 
@@ -10,27 +10,27 @@ extern "C" {
 
 #include "stdint.h"
 
-    /******************************用户设置区开始**********************************/
-    // 定义 SW6306_USE_PROTOTHREAD 以启用协作式挂起（protothread + coroOS）。
-    //  - 未定义：阻塞式 API（返回类型为 void）。
-    //  - 已定义：协作式 API（返回类型为 char，并额外带 struct pt *pt 参数）。
-    //#define SW6306_USE_PROTOTHREAD
+/******************************用户设置区开始**********************************/
+// 定义 SW6306_USE_PROTOTHREAD 以启用协作式挂起（protothread + coroOS）。
+//  - 未定义：阻塞式 API（返回类型为 void）。
+//  - 已定义：协作式 API（返回类型为 char，并额外带 struct pt *pt 参数）。
+//#define SW6306_USE_PROTOTHREAD
 
-    /* 连续I²C失败保护：整组寄存器读取失败5次才重初始化；
-    * 成功一次整组读取即清零。ADC单通道失败保留旧镜像。 */
+/* 连续I²C失败保护：整组寄存器读取失败5次才重初始化；
+ * 成功一次整组读取即清零。ADC单通道失败保留旧镜像。 */
 #ifndef SW6306_I2C_FAILURE_LIMIT
 #define SW6306_I2C_FAILURE_LIMIT 5U
 #endif
 
-    /*包含自己的I2C驱动库*/
+/*包含自己的I2C驱动库*/
 #include "bsp_i2c.h"
 
-    /* SW6306将0x000~0x0FF与0x100~0x1FF映射到同一个8位I2C寄存器地址空间，
-    * 由0x24[7]/0x1FF寄存器切换页。驱动内部保留16位逻辑地址，用于判断页；
-    * 只有最终提交I2C事务时才显式提取低8位（0x1FF在高页对应总线地址0xFF）。 */
+/* SW6306将0x000~0x0FF与0x100~0x1FF映射到同一个8位I2C寄存器地址空间，
+ * 由0x24[7]/0x1FF寄存器切换页。驱动内部保留16位逻辑地址，用于判断页；
+ * 只有最终提交I2C事务时才显式提取低8位（0x1FF在高页对应总线地址0xFF）。 */
 #define SW6306_I2C_REG8(reg)    ((uint8_t)((uint16_t)(reg) & 0x00FFU))
 
-    //外部库给出的I2C读写函数
+//外部库给出的I2C读写函数
 #ifdef SW6306_USE_PROTOTHREAD   //允许挂起
 #define SW6306_I2C_Transmit(addr,reg,pdata,len,pflag)   ASYNC_I2C_Transmit(addr,SW6306_I2C_REG8(reg),pdata,len,0,pflag)
 #define SW6306_I2C_Receive(addr,reg,pdata,len,pflag)    ASYNC_I2C_Receive(addr,SW6306_I2C_REG8(reg),pdata,len,0,pflag)
@@ -39,17 +39,17 @@ extern "C" {
 #define SW6306_I2C_Receive(addr,reg,pdata,len,pflag)    I2C_RegRead(addr, SW6306_I2C_REG8(reg), pdata, len)
 #endif
 
-    /* PB10A-only fixed-point current calibration (unsigned rational NUM/DEN).
-    * No run-time float shunt adaptation. Battery 5mOhm matches reference:
-    * 5mOhm/5mOhm = 1/1.
-    *
-    * BUS gain is TEMPORARY MEASUREMENT compensation, NOT the hardware
-    * resistor calibration or a change to the SW6306 internal current limit.
-    * Measured 15.017V/3.423A PD input vs SW6306 14.672V/1.652A BUS:
-    * a ~2.07 discrepancy. Use 2/1 provisionally, verify at multiple
-    * loads before treating it as calibrated. Datasheet raw IBUS=4mA/LSB.
-    * No factors here affect charger current-limit register writes.
-    */
+/* PB10A-only fixed-point current calibration (unsigned rational NUM/DEN).
+ * No run-time float shunt adaptation. Battery 5mOhm matches reference:
+ * 5mOhm/5mOhm = 1/1.
+ *
+ * BUS gain is TEMPORARY MEASUREMENT compensation, NOT the hardware
+ * resistor calibration or a change to the SW6306 internal current limit.
+ * Measured 15.017V/3.423A PD input vs SW6306 14.672V/1.652A BUS:
+ * a ~2.07 discrepancy. Use 2/1 provisionally, verify at multiple
+ * loads before treating it as calibrated. Datasheet raw IBUS=4mA/LSB.
+ * No factors here affect charger current-limit register writes.
+ */
 #define SW6306_BATT_CURRENT_NUM         1U
 #define SW6306_BATT_CURRENT_DEN         1U
 #define SW6306_BUS_CURRENT_NUM          2U
@@ -59,11 +59,11 @@ extern "C" {
 #error "SW6306 current calibration ratios must be nonzero"
 #endif
 
-    /* 按实际 NTC 改这三个参数：
-    *  - SW6306_NTC_R25_OHM    ：25°C 时阻值（常见 10k / 100k）
-    *  - SW6306_NTC_T0_C       ：标称温度（一般 25°C）
-    *  - SW6306_NTC_B          ：B值（如 3435 / 3950）
-    */
+/* 按实际 NTC 改这三个参数：
+ *  - SW6306_NTC_R25_OHM    ：25°C 时阻值（常见 10k / 100k）
+ *  - SW6306_NTC_T0_C       ：标称温度（一般 25°C）
+ *  - SW6306_NTC_B          ：B值（如 3435 / 3950）
+ */
 #ifndef SW6306_NTC_R25_OHM
 #define SW6306_NTC_R25_OHM              10000.0f
 #endif
@@ -74,21 +74,21 @@ extern "C" {
 #define SW6306_NTC_B                    3380
 #endif
 
-    /* NTC 温度计算使能：1=启用（需 FPU/浮点 logf，SW6306_CalcNTCTemp_C/NTCTempLoad 会计算）。
-    * 无 FPU MCU 置 0 裁剪计算（不链接浮点代码；读取 API SW6306_ReadNTCTemp 仍可用，句柄不更新） */
+/* NTC 温度计算使能：1=启用（需 FPU/浮点 logf，SW6306_CalcNTCTemp_C/NTCTempLoad 会计算）。
+ * 无 FPU MCU 置 0 裁剪计算（不链接浮点代码；读取 API SW6306_ReadNTCTemp 仍可用，句柄不更新） */
 #ifndef SW6306_NTC_TEMP_CALC_EN
 #define SW6306_NTC_TEMP_CALC_EN         1
 #endif
 
-    //输入输出最大功率设定，最大100W
+//输入输出最大功率设定，最大100W
 #define SW6306_INPUT_POWER_MAX          100U        //输入/充电功率，单位1W
 #define SW6306_OUTPUT_POWER_MAX         100U        //输出/放电功率，单位1W
 
-    //电池端输入输出最大电流设定，最大100W
+//电池端输入输出最大电流设定，最大100W
 #define SW6306_BAT_DCHG_CURR_MAX        12000U      //设置放电电池端限流值（单位:mA，范围：100~12000）
 #define SW6306_BAT_CHG_CURR_MAX         6000U       //设置充电电池端限流值（单位:mA，范围：100~12000）
 
-    //PD各电流挡位设置
+//PD各电流挡位设置
 #define SW6306_PD_5V_FIX_CURR           5000U       //PD 5V Fix电流（必须是10的倍数）（单位：mA）（最大5000）
 #define SW6306_PD_9V_FIX_CURR           5000U       //PD 9V Fix电流（必须是10的倍数）
 #define SW6306_PD_12V_FIX_CURR          5000U       //PD 12V Fix电流（必须是10的倍数）
@@ -98,13 +98,13 @@ extern "C" {
 #define SW6306_PD_PPS1_CURR             5000U       //PD PPS1电流（最大11V）（必须是50的倍数）
 #define SW6306_PD_PPS2_CURR             5000U       //PD PPS2电流（最大16V）（必须是50的倍数）
 #define SW6306_PD_PPS3_CURR             5000U       //PD PPS3(21V)最高5A；实际协商需兼容5A线缆
-    //UFCS各电流挡位设置
+//UFCS各电流挡位设置
 #define SW6306_UFCS_5V_MAX_MA           5000U       //UFCS source 5V可编程档位最大电流（必须是50的倍数）
 #define SW6306_UFCS_10V_MAX_MA          5000U       //UFCS source 10V可编程档位最大电流（必须是50的倍数）
 #define SW6306_UFCS_20V_MAX_MA          5000U       //UFCS高压(约21V)最高5A；需匹配适配器能力
 
-    /******************************用户设置区结束**********************************/
-    //操作语法宏，方便添加freeRTOS之类的支持
+/******************************用户设置区结束**********************************/
+//操作语法宏，方便添加freeRTOS之类的支持
 #ifdef SW6306_USE_PROTOTHREAD
 #define SW6306_RET          char
 #define SW6306_NOARG        struct pt *pt
@@ -135,61 +135,61 @@ func(__VA_ARGS__)
 #define SW6306_MUTEX_GIVE   I2C_TransactionEnd()
 #endif    
 
-    struct SW6306_StatusTypedef {
-        uint8_t initialized;                                                        //SW6306已初始化，当SW6306失去连接时自动回到未初始化状态
-        uint8_t unlocked;                                                           //SW6306已解锁，此时可以对寄存器进行写入
-        uint8_t flag;                                                               //标识传输完成与传输状态用变量
-        uint8_t sendbuf[4];                                                         //传输缓冲用变量
+struct SW6306_StatusTypedef {
+    uint8_t initialized;                                                        //SW6306已初始化，当SW6306失去连接时自动回到未初始化状态
+    uint8_t unlocked;                                                           //SW6306已解锁，此时可以对寄存器进行写入
+    uint8_t flag;                                                               //标识传输完成与传输状态用变量
+    uint8_t sendbuf[4];                                                         //传输缓冲用变量
 
-        /***************************寄存器内存镜像声明*********************************/
-        //ADC读取数据区
-        uint16_t vbus;                  //BUS电压
-        uint16_t ibus;                  //BUS电流
-        uint16_t vbat;                  //BAT电压
-        uint16_t ibat;                  //BAT电流
-        uint16_t tntc;                  //NTC温度（精度太低，不建议使用）
-        uint16_t tchip;                 //芯片温度
-        uint16_t vntc;                  //NTC电压
-        float ntc_temp;                 //NTC温度（°C，由 VNTC/INTC Beta 公式计算；SW6306_NTCTempLoad 更新）
-        //以上为原始数据，需要经过对应的Read()函数转换才有意义
+    /***************************寄存器内存镜像声明*********************************/
+    //ADC读取数据区
+    uint16_t vbus;                  //BUS电压
+    uint16_t ibus;                  //BUS电流
+    uint16_t vbat;                  //BAT电压
+    uint16_t ibat;                  //BAT电流
+    uint16_t tntc;                  //NTC温度（精度太低，不建议使用）
+    uint16_t tchip;                 //芯片温度
+    uint16_t vntc;                  //NTC电压
+    float ntc_temp;                 //NTC温度（°C，由 VNTC/INTC Beta 公式计算；SW6306_NTCTempLoad 更新）
+    //以上为原始数据，需要经过对应的Read()函数转换才有意义
 
-        //状态寄存器区
-        uint8_t vbus_chg;               //0x0E 充电电压状态
-        uint8_t qcstat;                 //0x0F 充放电快充与种类指示
-        uint8_t ibuslim_chg;            //0x10 充电时接口端实时限流值
-        uint8_t ibatlim_chg;            //0x11 充电时电池端实时限流值
-        uint8_t mode;                   //0x12 模式与状态指示
-        uint8_t noload;                 //0x13 端口空载指示
-        uint8_t display;                //0x14 LED与显示状态指示
-        uint8_t fault0;                 //0x15 事件指示
-        uint8_t sys_stat;               //0x18 系统状态指示
-        uint8_t typec_stat;             //0x19 Type-C口状态
-        uint8_t intc;                   //0x1A NTC电流挡位
-        uint8_t typea_qcin;             //0x1C A口存在与快充电压挡位
-        uint8_t port_stat;              //0x1D 端口状态指示
-        uint8_t fault1;                 //0x2A 异常事件指示0
-        uint8_t fault2;                 //0x2B 异常事件指示1
-        uint8_t fault3;                 //0x2C 异常事件指示2
-        uint8_t pomax;                  //0x51 最大输出功率
-        uint8_t pimax;                  //0x52 最大输入功率
-        uint16_t maxcap;                //0x86~0x87 库仑计最大容量
-        uint32_t presentcap;            //0x88~0x8A 库伦计当前容量
-        uint8_t capacity;               //0x99 显示电量
-        uint8_t learn_stat;             //0xA2 容量学习状态指示
-        uint8_t capacity_load_ok;       //最近一次 CapacityLoad 是否完整成功
+    //状态寄存器区
+    uint8_t vbus_chg;               //0x0E 充电电压状态
+    uint8_t qcstat;                 //0x0F 充放电快充与种类指示
+    uint8_t ibuslim_chg;            //0x10 充电时接口端实时限流值
+    uint8_t ibatlim_chg;            //0x11 充电时电池端实时限流值
+    uint8_t mode;                   //0x12 模式与状态指示
+    uint8_t noload;                 //0x13 端口空载指示
+    uint8_t display;                //0x14 LED与显示状态指示
+    uint8_t fault0;                 //0x15 事件指示
+    uint8_t sys_stat;               //0x18 系统状态指示
+    uint8_t typec_stat;             //0x19 Type-C口状态
+    uint8_t intc;                   //0x1A NTC电流挡位
+    uint8_t typea_qcin;             //0x1C A口存在与快充电压挡位
+    uint8_t port_stat;              //0x1D 端口状态指示
+    uint8_t fault1;                 //0x2A 异常事件指示0
+    uint8_t fault2;                 //0x2B 异常事件指示1
+    uint8_t fault3;                 //0x2C 异常事件指示2
+    uint8_t pomax;                  //0x51 最大输出功率
+    uint8_t pimax;                  //0x52 最大输入功率
+    uint16_t maxcap;                //0x86~0x87 库仑计最大容量
+    uint32_t presentcap;            //0x88~0x8A 库伦计当前容量
+    uint8_t capacity;               //0x99 显示电量
+    uint8_t learn_stat;             //0xA2 容量学习状态指示
+    uint8_t capacity_load_ok;       //最近一次 CapacityLoad 是否完整成功
 
-        //设置寄存器存档
-        uint8_t pimax_set;              //0x45 最大输入功率
-        uint8_t pomax_set;              //0x4F 最大输入功率
-    };
+    //设置寄存器存档
+    uint8_t pimax_set;              //0x45 最大输入功率
+    uint8_t pomax_set;              //0x4F 最大输入功率
+};
 
-    //SW6306 I2C 地址，为0x3C左移一位，最低位为0
+//SW6306 I2C 地址，为0x3C左移一位，最低位为0
 #ifndef SW6306_I2C_ADDR
 #define SW6306_I2C_ADDR                 0x78U
 #endif
 
-    /**************************SW6306 寄存器地址定义*******************************/
-    //命名规则：固定前缀(SW6306)_状态(ST)/控制(CT)+寄存器(RG)_(功能描述)
+/**************************SW6306 寄存器地址定义*******************************/
+//命名规则：固定前缀(SW6306)_状态(ST)/控制(CT)+寄存器(RG)_(功能描述)
 #define SW6306_STRG_REV                 0x01U//版本号
 #define SW6306_STRG_VBUS_CHG            0x0EU//充电电压状态
 #define SW6306_STRG_QCSTAT              0x0FU//充放电快充与种类指示
@@ -257,7 +257,7 @@ func(__VA_ARGS__)
 #define SW6306_STRG_BATLVL_DISPLAY      0x99U//显示电量（百分比单位）
 #define SW6306_STRG_LEARN               0xA2U//容量学习状态指示
 
-    //外部系统区，使能后在此处实时更新电流值，使库仑计可以统计其他电路的电流，以便计算电池电量
+//外部系统区，使能后在此处实时更新电流值，使库仑计可以统计其他电路的电流，以便计算电池电量
 #define SW6306_CTRG_EXTSYS_STA          0xA4U//外部系统状态标志
 #define SW6306_CTRG_EXTSYS_IBATL        0xA5U//外部系统电池电流低8位
 #define SW6306_CTRG_EXTSYS_IBATH        0xA6U//外部系统电池电流高4位
@@ -266,7 +266,7 @@ func(__VA_ARGS__)
 #define SW6306_CTRG_EXTSYS_IBUSL        0xABU//外部系统端口电流低8位
 #define SW6306_CTRG_EXTSYS_IBUSH        0xACU//外部系统端口电流高4位
 
-    //0x100~0x1FF区，全为控制寄存器
+//0x100~0x1FF区，全为控制寄存器
 #define SW6306_CTRG_DCHG0               0x100U//放电配置0
 #define SW6306_CTRG_DCHG1               0x101U//放电配置1
 #define SW6306_CTRG_DCHG2               0x102U//放电配置2
@@ -358,9 +358,9 @@ func(__VA_ARGS__)
 
 #define SW6306_CTRG_LREGSET             0x1FFU//写0切换低位寄存器地址
 
-    /******************************寄存器位定义************************************/
+/******************************寄存器位定义************************************/
 
-    //0x0E  SW6306_STRG_VBUS_CHG        充电电压状态
+//0x0E  SW6306_STRG_VBUS_CHG        充电电压状态
 #define SW6306_VBUS_CHG_REAL_MSK    0x70U//多口输入输出
 #define SW6306_VBUS_CHG_REAL_20V    0x50U//VBUS实际电压20V
 #define SW6306_VBUS_CHG_REAL_15V    0x40U//VBUS实际电压15V
@@ -376,7 +376,7 @@ func(__VA_ARGS__)
 #define SW6306_VBUS_CHG_RQST_9V     0x01U//VBUS请求电压9V
 #define SW6306_VBUS_CHG_RQST_5V     0x00U//VBUS请求电压5V
 
-    //0x0F  SW6306_STRG_QCSTAT          充放电快充与种类指示
+//0x0F  SW6306_STRG_QCSTAT          充放电快充与种类指示
 #define SW6306_QCSTAT_VQC           0x20U//处于快充电压
 #define SW6306_QCSTAT_PQC           0x10U//处于快充协议
 #define SW6306_QCSTAT_UFCS          0x0FU//UFCS协议
@@ -396,25 +396,25 @@ func(__VA_ARGS__)
 #define SW6306_QCSTAT_QC2           0x01U//QC2协议
 #define SW6306_QCSTAT_NONE          0x00U//无协议
 
-    //0x12  SW6306_STRG_MODE            模式与状态指示
+//0x12  SW6306_STRG_MODE            模式与状态指示
 #define SW6306_MODE_WLSS_DISPL      0x08U//无线充工作指示灯显示
 #define SW6306_MODE_WLSS_DISPA      0x04U//无线充异常指示灯显示
 #define SW6306_MODE_BLUTH           0x02U//处于小电流模式
 #define SW6306_MODE_MPPTCHG         0x01U//MPPT充电状态 
 
-    //0x13  SW6306_STRG_NOLOAD          端口空载指示
+//0x13  SW6306_STRG_NOLOAD          端口空载指示
 #define SW6306_NOLOAD_MSK           0x0FU//空载指示寄存器有效位
 #define SW6306_A1_NOLOAD            0x08U//A1口处于空载
 #define SW6306_A2_NOLOAD            0x04U//A2口处于空载
 #define SW6306_C1_NOLOAD            0x02U//C1口处于空载
 #define SW6306_C2_NOLOAD            0x01U//C2口处于空载
 
-    //0x14  SW6306_STRG_DISPLAY         LED与显示状态指示
+//0x14  SW6306_STRG_DISPLAY         LED与显示状态指示
 #define SW6306_STRG_DISPLAY_MSK     0x30U//LED与显示状态指示有效位
 #define SW6306_STRG_DISPLAY_WLED    0x20U//WLED打开
 #define SW6306_STRG_DISPLAY_LED     0x10U//LED显示打开
 
-    //0x15  SW6306_STRG_FAULT0          事件指示
+//0x15  SW6306_STRG_FAULT0          事件指示
 #define SW6306_FAULT0_MSK           0x3FU//事件指示寄存器有效位
 #define SW6306_FAULT0_LEARNEND      0x20U//电量计量完成，写1清零
 #define SW6306_FAULT0_UVLO          0x10U//电压欠压/UVLO事件指示，写1清零
@@ -423,7 +423,7 @@ func(__VA_ARGS__)
 #define SW6306_FAULT0_KEY           0x02U//按键事件指示，写1清零
 #define SW6306_FAULT0_SCENE         0x01U//场景变化事件指示，写1清零
 
-    //0x18  SW6306_STRG_SYS_STAT        系统状态指示
+//0x18  SW6306_STRG_SYS_STAT        系统状态指示
 #define SW6306_SYS_STAT_CHGERR      0x80U//异常导致充电关闭
 #define SW6306_SYS_STAT_DISCHGERR   0x40U//异常导致放电关闭
 #define SW6306_SYS_STAT_CHGING      0x20U//充电中
@@ -433,7 +433,7 @@ func(__VA_ARGS__)
 #define SW6306_SYS_STAT_A1ON        0x02U//A1通路打开
 #define SW6306_SYS_STAT_A2ON        0x01U//A2通路打开
 
-    //0x19  SW6306_STRG_TYPEC           Type C口状态
+//0x19  SW6306_STRG_TYPEC           Type C口状态
 #define SW6306_TYPEC_C1MSK          0xC0U//C1口状态有效位
 #define SW6306_TYPEC_C1SRC          0x80U//C1口作为source
 #define SW6306_TYPEC_C1SNK          0x40U//C1口作为sink
@@ -445,13 +445,13 @@ func(__VA_ARGS__)
 #define SW6306_TYPEC_C2_CC1         0x02U//C2口CC1连接
 #define SW6306_TYPEC_C2_CC2         0x01U//C2口CC2连接
 
-    //0x1A  SW6306_STRG_NTC_CURR        NTC电流指示
+//0x1A  SW6306_STRG_NTC_CURR        NTC电流指示
 #define SW6306_NTC_CURR_MSK         0xC0U//NTC电流指示寄存器有效位
 #define SW6306_NTC_CURR_20U         0x80U//NTC电流20uA
 #define SW6306_NTC_CURR_40U         0x40U//NTC电流40uA
 #define SW6306_NTC_CURR_80U         0x00U//NTC电流80uA
 
-    //0x1C  SW6306_STRG_TYPEA_QCIN      A口存在与快充电压挡位
+//0x1C  SW6306_STRG_TYPEA_QCIN      A口存在与快充电压挡位
 #define SW6306_TYPEA_QCIN_MSK       0x7FU//A口存在与快充电压挡位寄存器有效位
 #define SW6306_TYPEA_QCIN_A2EXIST   0x40U//A2口存在
 #define SW6306_TYPEA_QCIN_A1EXIST   0x20U//A1口存在
@@ -461,7 +461,7 @@ func(__VA_ARGS__)
 #define SW6306_TYPEA_QCIN_15VEN     0x02U//当前协议支持15V挡位快充
 #define SW6306_TYPEA_QCIN_20VEN     0x01U//当前协议支持20V挡位快充
 
-    //0x1D  SW6306_STRG_PORT_STA        端口状态指示
+//0x1D  SW6306_STRG_PORT_STA        端口状态指示
 #define SW6306_PORT_STA_C1SRC       0x80U//C1端口作为source连接
 #define SW6306_PORT_STA_C1SNK       0x40U//C1端口作为sink连接
 #define SW6306_PORT_STA_C2SRC       0x20U//C2端口作为source连接
@@ -471,13 +471,13 @@ func(__VA_ARGS__)
 #define SW6306_PORT_STA_C1OL        0x02U//C1端口在线
 #define SW6306_PORT_STA_C2OL        0x01U//C2端口在线
 
-    //0x20  SW6306_CTRG_CLICK           短按键事件触发
+//0x20  SW6306_CTRG_CLICK           短按键事件触发
 #define SW6306_CLICK                0x01U//触发一次短按键事件
 
-    //0x21  SW6306_CTRG_DISCHG_OFF      关闭放电
+//0x21  SW6306_CTRG_DISCHG_OFF      关闭放电
 #define SW6306_DISCHG_OFF           0x20U//写1关闭放电，自动清零
 
-    //0x22  SW6306_CTRG_PORTEVT         端口事件触发（对于C口仅在其为source状态时生效）
+//0x22  SW6306_CTRG_PORTEVT         端口事件触发（对于C口仅在其为source状态时生效）
 #define SW6306_PORTEVT_C1_RMV       0x80U//触发C1口的负载拔出
 #define SW6306_PORTEVT_C1_INS       0x40U//触发C1口的负载插入
 #define SW6306_PORTEVT_C2_RMV       0x20U//触发C2口的负载拔出
@@ -487,10 +487,10 @@ func(__VA_ARGS__)
 #define SW6306_PORTEVT_A2_RMV       0x02U//触发A2口的负载拔出
 #define SW6306_PORTEVT_A2_INS       0x01U//触发A2口的负载插入
 
-    //0x23  SW6306_CTRG_LPSET           低功耗设置
+//0x23  SW6306_CTRG_LPSET           低功耗设置
 #define SW6306_LPSET_EN             0x01U//低功耗关闭
 
-    //0x25  SW6306_CTRG_INT_EN          中断源使能
+//0x25  SW6306_CTRG_INT_EN          中断源使能
 #define SW6306_LEARNED_INT_EN       0x20U//电量计量完成中断使能
 #define SW6306_UVLO_INT_EN          0x10U//UVLO中断使能
 #define SW6306_CHGERR_INT_EN        0x08U//充电异常中断使能
@@ -498,21 +498,21 @@ func(__VA_ARGS__)
 #define SW6306_KEY_INT_EN           0x02U//按键事件中断使能
 #define SW6306_SCENE_INT_EN         0x01U//场景变化中断使能
 
-    //0x28  SW6306_CTRG_MODE            模式设置
+//0x28  SW6306_CTRG_MODE            模式设置
 #define SW6306_MODE_WLEDON          0x10U//打开WLED
 #define SW6306_MODE_DISABLEOUTPUT   0x08U//强制关闭输出
 #define SW6306_MODE_DISABLECHARGE   0x04U//强制关闭充电
 #define SW6306_MODE_BLUTHON         0x02U//进入小电流模式（先写0再写1）
 #define SW6306_MODE_MPPTON          0x01U//打开MPPT充电
 
-    //0x29  SW6306_CTRG_IOCTL           IO0与IRQ脚模式控制
+//0x29  SW6306_CTRG_IOCTL           IO0与IRQ脚模式控制
 #define SW6306_IO1ON                0x04U//IO0脚控制
 #define SW6306_IRQ0                 0x00U//IRQ脚模式控制：LED/数码管工作时持续拉低
 #define SW6306_IRQ1                 0x01U//IRQ脚模式控制：中断事件使能且发生后，发送10mS低电平脉冲
 #define SW6306_IRQ2                 0x02U//IRQ脚模式控制：中断事件使能且发生后，持续拉低直到对应中断标志位清除 
 #define SW6306_IRQ3                 0x03U//IRQ脚模式控制：无动作
 
-    //0x2A  SW6306_STRG_FAULT1          异常事件指示0（放电指示）
+//0x2A  SW6306_STRG_FAULT1          异常事件指示0（放电指示）
 #define SW6306_FAULT1_MSK           0x7FU//异常事件指示0有效位
 #define SW6306_FAULT1_OV_BAT        0x40U//放电时电池过压异常
 #define SW6306_FAULT1_OT_CHIP       0x20U//放电时芯片过温
@@ -522,7 +522,7 @@ func(__VA_ARGS__)
 #define SW6306_FAULT1_SOV_BUS       0x02U//放电时VBUS慢速过压
 #define SW6306_FAULT1_FOV_BUS       0x01U//放电时VBUS快速过压
 
-    //0x2B  SW6306_STRG_FAULT2          异常事件指示1（充电指示）
+//0x2B  SW6306_STRG_FAULT2          异常事件指示1（充电指示）
 #define SW6306_FAULT2_BATLOW        0x80U//电池电压低于1.5V
 #define SW6306_FAULT2_OT            0x40U//充电超时
 #define SW6306_FAULT2_FULL          0x20U//已充满
@@ -532,7 +532,7 @@ func(__VA_ARGS__)
 #define SW6306_FAULT2_SOV_BUS       0x02U//充电时VBUS慢速过压
 #define SW6306_FAULT2_FOV_BUS       0x01U//充电时VBUS快速过压
 
-    //0x2C  SW6306_STRG_FAULT3          异常事件指示2
+//0x2C  SW6306_STRG_FAULT3          异常事件指示2
 #define SW6306_FAULT3_MSK           0xDFU//异常事件指示2有效位
 #define SW6306_FAULT3_LONGPRESS     0xC0U//发生长按
 #define SW6306_FAULT3_DOUBLECLICK   0x80U//发生双击
@@ -544,21 +544,21 @@ func(__VA_ARGS__)
 #define SW6306_FAULT3_OV_DPDM       0x02U//放电时发生DPDM 5.5V过压
 #define SW6306_FAULT3_OV_CC         0x01U//放电时发生CC 5.5V过压
 
-    //0x2D  SW6306_CTRG_CCDRV           CC驱动控制
+//0x2D  SW6306_CTRG_CCDRV           CC驱动控制
 #define SW6306_CCDRV_MSK            0x03U//CC驱动控制有效位
 #define SW6306_CCDRV_C1OFF          0x02U//暂时关闭C1口的CC驱动
 #define SW6306_CCDRV_C2OFF          0x01U//暂时关闭C2口的CC驱动
 
-    //0x2E  SW6306_CTRG_PD_CMD          发送PD指令
+//0x2E  SW6306_CTRG_PD_CMD          发送PD指令
 #define SW6306_PD_CMD_MSK           0x0FU//发送PD指令寄存器有效位
 #define SW6306_PD_CMD_HARDRST       0x02U//启动发送hard reset的流程
 #define SW6306_PD_CMD_SRCCAP        0x01U//重新发送source cap
 #define SW6306_PD_CMD_NONE          0x00U//无影响
 
-    //0x2F  SW6306_CTRG_UFCS_CMD        发送UFCS指令
+//0x2F  SW6306_CTRG_UFCS_CMD        发送UFCS指令
 #define SW6306_UFCS_CMD_SRCCAP      0x01U//重新发送source cap
 
-    //0x30  SW6306_CTRG_ADC_SET         ADC通道选择
+//0x30  SW6306_CTRG_ADC_SET         ADC通道选择
 #define SW6306_ADC_SET_VBUS         0x00U//ADC通道选择输入输出电压（8mV）
 #define SW6306_ADC_SET_IBUS         0x01U//ADC通道选择输入/输出IBUS电流（4mA）
 #define SW6306_ADC_SET_VBAT         0x02U//ADC通道选择电池电压（7mV）
@@ -567,7 +567,7 @@ func(__VA_ARGS__)
 #define SW6306_ADC_SET_TCHIP        0x09U//ADC通道选择芯片温度(1/6.82℃) 
 #define SW6306_ADC_SET_VNTC         0x0AU//ADC通道选择NTC电压（1.1mV）
 
-    //0x40  SW6306_CTRG_FORCECTL        强制控制使能
+//0x40  SW6306_CTRG_FORCECTL        强制控制使能
 #define SW6306_FORCECTL_POUT        0x80U//使能I2C强制控制输出功率(0x4F寄存器)
 #define SW6306_FORCECTL_IBUS        0x40U//使能I2C强制控制BUS限流(0x43 0x49寄存器)
 #define SW6306_FORCECTL_IBAT        0x20U//使能I2C强制控制BAT限流(0x44 0x4A寄存器)
@@ -576,19 +576,19 @@ func(__VA_ARGS__)
 #define SW6306_FORCECTL_VBAT        0x02U//使能I2C强制控制BUS电压(0x46 0x47寄存器)
 #define SW6306_FORCECTL_VBUS        0x01U//使能I2C强制控制BAT目标电压(0x41 0x42寄存器)
 
-    //0x4B  SW6306_CTRG_STADISP         外部显示控制
+//0x4B  SW6306_CTRG_STADISP         外部显示控制
 #define SW6306_STADISP_MSK          0x0FU//灯显控制寄存器有效位
 #define SW6306_STADISP_FAULT        0x08U//异常灯显
 #define SW6306_STADISP_QC           0x04U//快充灯显
 #define SW6306_STADISP_BLUTH        0x02U//小电流灯显
 #define SW6306_STADISP_WLSS         0x01U//无线充灯显
 
-    //0x4C  SW6306_CTRG_WLSS_SET        无线充模式电压设置
+//0x4C  SW6306_CTRG_WLSS_SET        无线充模式电压设置
 #define SW6306_WLSS_SET_MSK         0x0CU//无线充模式电压设置寄存器有效位
 #define SW6306_WLSS_VINREGSET       0x08U//无线充模式下申请输入的电压由寄存器0x50设置
 #define SW6306_WLSS_VOUTREGSET      0x04U//无线充模式下输出的电压由寄存器0x41 0x42设置
 
-    //0x50  SW6306_CTRG_QCIN            输入快充控制
+//0x50  SW6306_CTRG_QCIN            输入快充控制
 #define SW6306_QCIN_VINREGSET       0x08U//输入快充申请电压由该寄存器控制
 #define SW6306_QCIN_20VRSQ          0x05U//输入快充申请20V电压
 #define SW6306_QCIN_15VRSQ          0x04U//输入快充申请15V电压
@@ -597,19 +597,19 @@ func(__VA_ARGS__)
 #define SW6306_QCIN_9VRSQ           0x01U//输入快充申请9V电压
 #define SW6306_QCIN_5VRSQ           0x00U//输入快充申请5V电压
 
-    //0xA2  SW6306_STRG_LEARN           容量学习状态指示
+//0xA2  SW6306_STRG_LEARN           容量学习状态指示
 #define SW6306_LEARN_MSK            0x60U//容量学习状态指示寄存器有效位
 #define SW6306_LEARN_ING            0x40U//容量学习进行中（只读）
 #define SW6306_LEARN_END            0x20U//容量学习已完成标志（R/W，写0可清历史完成标志，非W1C）
 
-    //0xA4  SW6306_CTRG_EXTSYS_STA      外部系统状态标志
+//0xA4  SW6306_CTRG_EXTSYS_STA      外部系统状态标志
 #define SW6306_EXTSYS_STA_MSK       0x0FU//外部系统状态标志寄存器有效位
 #define SW6306_EXTSYS_STA_EN        0x08U//外部系统写入数据有效
 #define SW6306_EXTSYS_STA_DIS       0x04U//外部系统放电中
 #define SW6306_EXTSYS_STA_FULL      0x02U//外部系统已充满
 #define SW6306_EXTSYS_STA_LOW       0x01U//外部系统低电量
 
-    //0x100 SW6306_CTRG_DCHG0           放电配置0
+//0x100 SW6306_CTRG_DCHG0           放电配置0
 #define SW6306_DCHG0_NOCT           0x80U//禁止放电恒温环
 #define SW6306_DCHG0_130CT          0x70U//放电恒温环130°C
 #define SW6306_DCHG0_120CT          0x60U//放电恒温环120°C
@@ -628,7 +628,7 @@ func(__VA_ARGS__)
 #define SW6306_DCHG0_PO30W          0x01U//输出最大功率30W
 #define SW6306_DCHG0_PO27W          0x00U//输出最大功率27W
 
-    //0x101 SW6306_CTRG_DCHG1           放电配置1
+//0x101 SW6306_CTRG_DCHG1           放电配置1
 #define SW6306_DCHG1_MOUT_6A2       0xC0U//多口输出总限流6.2A
 #define SW6306_DCHG1_MOUT_5A2       0x80U//多口输出总限流5.2A
 #define SW6306_DCHG1_MOUT_3A        0x40U//多口输出总限流3.0A
@@ -646,11 +646,11 @@ func(__VA_ARGS__)
 #define SW6306_DCHG1_COMP_0M        0x01U//无线损补偿
 #define SW6306_DCHG1_COMP_60M       0x00U//线损补偿60mV/A
 
-    //0x102 SW6306_CTRG_DCHG2           放电配置2
+//0x102 SW6306_CTRG_DCHG2           放电配置2
 #define SW6306_DCHG2_NOCOMP         0x80U//禁止快充线损补偿
 #define SW6306_DCHG2_NOFOVP         0x04U//禁止VBUS快速过压保护
 
-    //0x103 SW6306_CTRG_DCHG3           放电配置3
+//0x103 SW6306_CTRG_DCHG3           放电配置3
 #define SW6306_DCHG3_IBATLIM_NO     0xC0U//放电BAT限流不生效
 #define SW6306_DCHG3_IBATLIM_8A     0x80U//放电BAT限流8A
 #define SW6306_DCHG3_IBATLIM_10A    0x40U//放电BAT限流10A
@@ -669,7 +669,7 @@ func(__VA_ARGS__)
 #define SW6306_DCHG3_LFP_1V9        0x01U//磷酸铁锂单节1.9V欠压
 #define SW6306_DCHG3_LFP_2V75       0x00U//磷酸铁锂单节2.75V欠压
 
-    //0x104 SW6306_CTRG_DCHG4           放电配置4
+//0x104 SW6306_CTRG_DCHG4           放电配置4
 #define SW6306_DCHG4_MSK            0x77U//放电配置4寄存器有效位
 #define SW6306_DCHG4_UVLOHYS_V8     0x70U//放电UVLO单节迟滞电压0.8V
 #define SW6306_DCHG4_UVLOHYS_V0     0x60U//放电UVLO单节迟滞电压0V
@@ -688,7 +688,7 @@ func(__VA_ARGS__)
 #define SW6306_DCHG4_UVLO_2V6       0x01U//放电UVLO单节电压2.6V
 #define SW6306_DCHG4_UVLO_3V0       0x00U//放电UVLO单节电压3.0V
 
-    //0x106 SW6306_CTRG_DCHG5           放电配置5
+//0x106 SW6306_CTRG_DCHG5           放电配置5
 #define SW6306_DCHG5_L10U           0x80U//电感10uH
 #define SW6306_DCHG5_L4U7           0x00U//电感4.7uH
 #define SW6306_DCHG5_NTCOTP_65C     0x30U//放电NTC高温限制65°C
@@ -704,7 +704,7 @@ func(__VA_ARGS__)
 #define SW6306_DCHG5_NTCUTP_M15C    0x01U//放电NTC低温限制-15°C
 #define SW6306_DCHG5_NTCUTP_M20C    0x00U//放电NTC低温限制-20°C
 
-    //0x107 SW6306_CTRG_CHG0            充电配置0
+//0x107 SW6306_CTRG_CHG0            充电配置0
 #define SW6306_CHG0_PFIX            0x10U//快充按照固定功率充电
 #define SW6306_CHG0_ILIM            0x00U//快充按照允许的最大电流充电
 #define SW6306_CHG0_PIREGSET        0x08U//输入最大功率由该寄存器控制（0x40寄存器对应的强制控制位使能时不生效）
@@ -716,7 +716,7 @@ func(__VA_ARGS__)
 #define SW6306_CHG0_PI30W           0x01U//输入最大功率30W
 #define SW6306_CHG0_PI27W           0x00U//输入最大功率27W
 
-    //0x108 SW6306_CTRG_CHG1            充电配置1
+//0x108 SW6306_CTRG_CHG1            充电配置1
 #define SW6306_CHG1_BTYPE_REGSET    0x80U//电池最大电压由该寄存器设置
 #define SW6306_CHG1_BTYPE_3V65      0x60U//电池充电限制电压3.65V
 #define SW6306_CHG1_BTYPE_3V6       0x50U//电池充电限制电压3.6V
@@ -733,7 +733,7 @@ func(__VA_ARGS__)
 #define SW6306_CHG1_3S              0x03U//3串电池
 #define SW6306_CHG1_2S              0x02U//2串电池
 
-    //0x109 SW6306_CTRG_CHG2            充电配置2
+//0x109 SW6306_CTRG_CHG2            充电配置2
 #define SW6306_CHG2_NOU1V5          0x80U//电池电压1.5V以下不允许充电
 #define SW6306_CHG2_ENU1V5          0x00U//电池电压1.5V以下允许充电
 #define SW6306_CHG2_4V9             0x70U//5V低压限压4.9V
@@ -755,7 +755,7 @@ func(__VA_ARGS__)
 #define SW6306_CHG2_8V3             0x01U//9V低压限压8.3V
 #define SW6306_CHG2_8V2             0x00U//9V低压限压8.2V
 
-    //0x10A SW6306_CTRG_CHG3            充电配置3
+//0x10A SW6306_CTRG_CHG3            充电配置3
 #define SW6306_CHG3_NOADP           0x80U//无适配器拉挂保护
 #define SW6306_CHG3_ENADP           0x00U//适配器拉挂保护使能
 #define SW6306_CHG3_9V9             0x70U//9V高压限压9.9V
@@ -777,7 +777,7 @@ func(__VA_ARGS__)
 #define SW6306_CHG3_11V3            0x01U//12V低压限压11.3V
 #define SW6306_CHG3_11V2            0x00U//12V低压限压11.2V
 
-    //0x10B SW6306_CTRG_CHG4            充电配置4
+//0x10B SW6306_CTRG_CHG4            充电配置4
 #define SW6306_CHG4_NOEXTNOLD       0x80U//边充边放时输入欠压不变
 #define SW6306_CHG4_ENEXTNOLD       0x00U//边充边放时输入欠压提高到4.8V
 #define SW6306_CHG4_14V5            0x70U//15V低压限压14.5V（默认）
@@ -797,11 +797,11 @@ func(__VA_ARGS__)
 #define SW6306_CHG4_18V9            0x01U//20V低压限压18.9V
 #define SW6306_CHG4_18V8            0x00U//20V低压限压18.8V
 
-    //0x10C SW6306_CTRG_CHG5            充电配置5
+//0x10C SW6306_CTRG_CHG5            充电配置5
 #define SW6306_CHG5_NOLOWHOLD       0x08U//充电电流大于3A时不降低欠压门限
 #define SW6306_CHG5_ENLOWHOLD       0x00U//充电电流大于3A时降低欠压门限到当前挡位最小值
 
-    //0x10D SW6306_CTRG_CHG6            充电配置6（涓流充电）
+//0x10D SW6306_CTRG_CHG6            充电配置6（涓流充电）
 #define SW6306_CHG6_TCHG_2V8        0xC0U//磷酸铁锂涓流充电门限2.8V
 #define SW6306_CHG6_TCHG_2V5        0x80U//磷酸铁锂涓流充电门限2.5V
 #define SW6306_CHG6_TCHG_2V1        0x40U//磷酸铁锂涓流充电门限2.1V
@@ -819,7 +819,7 @@ func(__VA_ARGS__)
 #define SW6306_CHG6_TCHG_33H        0x01U//涓流充电33H超时
 #define SW6306_CHG6_TCHG_22H        0x00U//涓流充电22H超时
 
-    //0x10E SW6306_CTRG_CHG7            充电配置7
+//0x10E SW6306_CTRG_CHG7            充电配置7
 #define SW6306_CHG7_MSK             0xCFU//充电配置7寄存器有效位
 #define SW6306_CHG7_CHGEND_400M     0xC0U//充电截止电流400mA
 #define SW6306_CHG7_CHGEND_300M     0x80U//充电截止电流300mA
@@ -842,7 +842,7 @@ func(__VA_ARGS__)
 #define SW6306_CHG7_C_1A8           0x01U//C口5V充电电流1.8A
 #define SW6306_CHG7_C_3A0           0x00U//C口5V充电电流3.0A
 
-    //0x10F SW6306_CTRG_CHG8            充电配置8
+//0x10F SW6306_CTRG_CHG8            充电配置8
 #define SW6306_CHG8_B_2A3           0xE0U//B口5V充电电流2.3A
 #define SW6306_CHG8_B_2A2           0xC0U//B口5V充电电流2.2A
 #define SW6306_CHG8_B_2A1           0xA0U//B口5V充电电流2.1A
@@ -864,7 +864,7 @@ func(__VA_ARGS__)
 #define SW6306_CHG8_NTCOTP_55C      0x01U//NTC55°C高温保护
 #define SW6306_CHG8_NTCOTP_45C      0x00U//NTC45°C高温保护
 
-    //0x110 SW6306_CTRG_CHG9            充电配置9
+//0x110 SW6306_CTRG_CHG9            充电配置9
 #define SW6306_CHG9_LIBAT           0x80U//触发62368保护时减小IBAT限流值
 #define SW6306_CHG9_LPOWER          0x00U//触发62368保护时减小功率
 #define SW6306_CHG9_UT_7DIV8        0x70U//触发62368低温保护时减小功率/电流为原来的7/8（输入功率）
@@ -885,7 +885,7 @@ func(__VA_ARGS__)
 #define SW6306_CHG9_TR_10C          0x01U//62368充电高温范围10°C
 #define SW6306_CHG9_TR_0C           0x00U//62368充电高温范围0°C
 
-    //0x111 SW6306_CTRG_CHG10           充电配置10
+//0x111 SW6306_CTRG_CHG10           充电配置10
 #define SW6306_CHG10_NOCHG_62368    0x80U//禁止充电时的62368功能
 #define SW6306_CHG10_VL_0V35        0x70U//62368高温保护触发时每节充电电压降低0.35V
 #define SW6306_CHG10_VL_0V3         0x60U//62368高温保护触发时每节充电电压降低0.3V
@@ -905,7 +905,7 @@ func(__VA_ARGS__)
 #define SW6306_CHG10_TN_5C          0x01U//62368充电常温上限5°C
 #define SW6306_CHG10_TN_20C         0x00U//62368充电常温上限20°C
 
-    //0x112 SW6306_CTRG_CHG11           充电配置11
+//0x112 SW6306_CTRG_CHG11           充电配置11
 #define SW6306_CHG11_UT_0D7         0xC0U//触发62368低温保护时减小功率/电流为原来的0.7（输出功率）
 #define SW6306_CHG11_UT_0D5         0x80U//触发62368低温保护时减小功率/电流为原来的0.5
 #define SW6306_CHG11_UT_0D2         0x40U//触发62368低温保护时减小功率/电流为原来的0.2
@@ -919,7 +919,7 @@ func(__VA_ARGS__)
 #define SW6306_CHG11_TR_60C         0x01U//62368放电常温范围60°C
 #define SW6306_CHG11_TR_45C         0x00U//62368放电常温范围45°C
 
-    //0x113 SW6306_CTRG_CHG12           充电配置12
+//0x113 SW6306_CTRG_CHG12           充电配置12
 #define SW6306_CHG12_MSK            0xF0U//充电配置12寄存器有效位
 #define SW6306_CHG12_NOCT           0x80U//禁止充电恒温环
 #define SW6306_CHG12_ENCT           0x00U//使能充电恒温环
@@ -932,7 +932,7 @@ func(__VA_ARGS__)
 #define SW6306_CHG12_CT_7C          0x10U//芯片充电恒温环阈值70°C
 #define SW6306_CHG12_CT_6C          0x00U//芯片充电恒温环阈值60°C
 
-    //0x114 SW6306_CTRG_DCDC0           BUCK-BOOST变换器设置0
+//0x114 SW6306_CTRG_DCDC0           BUCK-BOOST变换器设置0
 #define SW6306_DCDC0_MSK            0xFCU//BUCK-BOOST设置0有效位：频率[7:6]/峰值限流[5:4]/过温[3:2]
 #define SW6306_DCDC0_F500K          0xC0U//开关频率500K
 #define SW6306_DCDC0_F400K          0x80U//开关频率400K
@@ -947,14 +947,14 @@ func(__VA_ARGS__)
 #define SW6306_DCDC0_130C           0x04U//芯片130°C过温保护
 #define SW6306_DCDC0_120C           0x00U//芯片120°C过温保护
 
-    //0x115 SW6306_CTRG_DCDC1           BUCK-BOOST变换器设置1
+//0x115 SW6306_CTRG_DCDC1           BUCK-BOOST变换器设置1
 #define SW6306_DCDC1_MSK            0xC0U//BUCK-BOOST变换器设置1寄存器有效位
 #define SW6306_DCDC1_10R            0xC0U//BUS端下管Rdson 10mR
 #define SW6306_DCDC1_7R5            0x80U//BUS端下管Rdson 7.5mR
 #define SW6306_DCDC1_5R             0x40U//BUS端下管Rdson 5mR
 #define SW6306_DCDC1_2R5            0x00U//BUS端下管Rdson 2.5mR
 
-    //0x116 SW6306_CTRG_DCDC2           BUCK-BOOST变换器设置2
+//0x116 SW6306_CTRG_DCDC2           BUCK-BOOST变换器设置2
 #define SW6306_DCDC2_MSK            0x5EU//BUCK-BOOST变换器设置2寄存器有效位
 #define SW6306_DCDC2_FPWM           0x40U//轻载强制运行在PWM模式
 #define SW6306_DCDC2_NONTC          0x10U//禁止NTC保护
@@ -962,14 +962,14 @@ func(__VA_ARGS__)
 #define SW6306_DCDC2_62368_REGSET   0x04U//充放电62368功能由寄存器控制
 #define SW6306_DCDC2_CT_REGSET      0x02U//充放电恒温环由寄存器控制
 
-    //0x117 SW6306_CTRG_INDET0          插拔检测设置0
+//0x117 SW6306_CTRG_INDET0          插拔检测设置0
 #define SW6306_INDET0_MSK           0xC0U//插拔检测设置0寄存器有效位
 #define SW6306_INDET0_NOA1VBUS      0x80U//禁止A1口VBUS接入检测
 #define SW6306_INDET0_ENA1VBUS      0x00U//使能A1口VBUS接入检测
 #define SW6306_INDET0_NOA2VBUS      0x40U//禁止A2口VBUS接入检测
 #define SW6306_INDET0_ENA2VBUS      0x00U//使能A2口VBUS接入检测
 
-    //0x118 SW6306_CTRG_INDET1          插拔检测设置1
+//0x118 SW6306_CTRG_INDET1          插拔检测设置1
 #define SW6306_INDET1_MSK           0x3CU//插拔检测设置1寄存器有效位
 #define SW6306_INDET1_NOA1NL        0x20U//禁止A1口空载
 #define SW6306_INDET1_ENA1NL        0x00U//使能A1口空载
@@ -980,7 +980,7 @@ func(__VA_ARGS__)
 #define SW6306_INDET1_NOC2NL        0x04U//禁止C2口空载
 #define SW6306_INDET1_ENC2NL        0x00U//使能C2口空载
 
-    //0x119 SW6306_CTRG_INDET2          插拔检测设置2
+//0x119 SW6306_CTRG_INDET2          插拔检测设置2
 #define SW6306_INDET2_MPNL_64S      0xC0U//多口空载时间64s
 #define SW6306_INDET2_MPNL_16S      0x80U//多口空载时间16s
 #define SW6306_INDET2_MPNL_8S       0x40U//多口空载时间8s
@@ -998,7 +998,7 @@ func(__VA_ARGS__)
 #define SW6306_INDET2_SPNL_8S       0x01U//单口空载时间8s
 #define SW6306_INDET2_SPNL_32S      0x00U//单口空载时间32s
 
-    //0x11A SW6306_CTRG_INDET3          插拔检测设置3
+//0x11A SW6306_CTRG_INDET3          插拔检测设置3
 #define SW6306_INDET3_A1_160        0xF0U//A1口拔出电流检测门限160mA（若设置了高压电流减半，则>7.65V时以下对应的电流将减半）
 #define SW6306_INDET3_A1_150        0xE0U//A1口拔出电流检测门限150mA
 #define SW6306_INDET3_A1_140        0xD0U//A1口拔出电流检测门限140mA
@@ -1032,7 +1032,7 @@ func(__VA_ARGS__)
 #define SW6306_INDET3_A2_10         0x01U//A2口拔出电流检测门限10mA
 #define SW6306_INDET3_A2_60         0x00U//A2口拔出电流检测门限80mA
 
-    //0x11B SW6306_CTRG_INDET4          插拔检测设置4
+//0x11B SW6306_CTRG_INDET4          插拔检测设置4
 #define SW6306_INDET4_MSK           0xFCU//插拔检测设置4寄存器有效位
 #define SW6306_INDET4_WLSSREGSET    0x80U//无线充模式由该寄存器设置
 #define SW6306_INDET4_WLSSEN        0x40U//无线充模式使能
@@ -1043,10 +1043,10 @@ func(__VA_ARGS__)
 #define SW6306_INDET4_BLUTH1H       0x04U//小电流模式1H内屏蔽空载检测
 #define SW6306_INDET4_BLUTH2H       0x00U//小电流模式2H内屏蔽空载检测
 
-    //0x11D SW6306_CTRG_INDET5          插拔检测设置5
+//0x11D SW6306_CTRG_INDET5          插拔检测设置5
 #define SW6306_INDET5_AUTOICHG      0x10U//边冲边放时打开1个输出口，充电电流减小为原来的1/2；2个时为1/3
 
-    //0x11E SW6306_CTRG_MODEWLSS        无线充场景配置
+//0x11E SW6306_CTRG_MODEWLSS        无线充场景配置
 #define SW6306_MODEWLSS_MSK         0x77U//无线充场景配置寄存器有效位
 #define SW6306_MODEWLSS_A2QC        0x40U//无线充模式下，使能只包含A2口的快充边充边放
 #define SW6306_MODEWLSS_A2_20V      0x30U//无线充模式下，只包含A2口的快充边充边放最高申请20V
@@ -1059,7 +1059,7 @@ func(__VA_ARGS__)
 #define SW6306_MODEWLSS_A2O_12V     0x01U//无线充模式下，A2口输出12V
 #define SW6306_MODEWLSS_A2O_9V      0x00U//无线充模式下，A2口输出9V
 
-    //0x11F SW6306_CTRG_PORTQC          端口快充配置
+//0x11F SW6306_CTRG_PORTQC          端口快充配置
 #define SW6306_PORTQC_MSK           0x3FU//端口快充配置寄存器有效位
 #define SW6306_PORTQC_NOA1          0x20U//禁止A1端口快充输出
 #define SW6306_PORTQC_NOA2          0x10U//禁止A2端口快充输出
@@ -1068,7 +1068,7 @@ func(__VA_ARGS__)
 #define SW6306_PORTQC_NOC2IN        0x02U//禁止C2端口快充输入
 #define SW6306_PORTQC_NOC2OUT       0x01U//禁止C2端口快充输出
 
-    //0x120 SW6306_CTRG_VCHG            输入电压配置
+//0x120 SW6306_CTRG_VCHG            输入电压配置
 #define SW6306_VCHG_MSK             0xA7U//输入电压配置寄存器有效位
 #define SW6306_VCHG_BPRIOR          0x80U//优先使用B口充电
 #define SW6306_VCHG_NO12V           0x20U//功率小于35W时，禁止12以上输入输出
@@ -1078,7 +1078,7 @@ func(__VA_ARGS__)
 #define SW6306_VCHG_MVRSQ_15V       0x01U//输入快充最高申请15V电压
 #define SW6306_VCHG_MVRSQ_20V       0x00U//输入快充最高申请20V电压
 
-    //0x122 SW6306_CTRG_P_DPDM0         DPDM协议设置0
+//0x122 SW6306_CTRG_P_DPDM0         DPDM协议设置0
 #define SW6306_P_DPDM0_MSK          0xF0U//DPDM协议设置0寄存器有效位
 #define SW6306_P_DPDM0_PSYS         0xC0U//高压快充协议功率跟随系统设置
 #define SW6306_P_DPDM0_45W          0x80U//高压快充协议功率45W
@@ -1087,7 +1087,7 @@ func(__VA_ARGS__)
 #define SW6306_P_DPDM0_NOAPPLE      0x20U//禁止多口输出时的苹果模式
 #define SW6306_P_DPDM0_NO1V2        0x10U//禁止三星1.2V模式
 
-    //0x123 SW6306_CTRG_P_DPDM1         DPDM协议设置1
+//0x123 SW6306_CTRG_P_DPDM1         DPDM协议设置1
 #define SW6306_DPDM1_QC3P_MSK       0xC0U//QC3+协议最大功率有效位
 #define SW6306_DPDM1_QC3P_45W       0xC0U//QC3+协议最大功率45W
 #define SW6306_DPDM1_QC3P_40W       0x80U//QC3+协议最大功率40W
@@ -1106,14 +1106,14 @@ func(__VA_ARGS__)
 #define SW6306_DPDM1_FCP_9V         0x01U//FCP协议最大电压9V
 #define SW6306_DPDM1_FCP_12V        0x00U//FCP协议最大电压12V
 
-    //0x124 SW6306_CTRG_P_DPDM2         DPDM协议设置2
+//0x124 SW6306_CTRG_P_DPDM2         DPDM协议设置2
 #define SW6306_DPDM2_MSK            0xC0U//DPDM协议设置2有效位
 #define SW6306_DPDM2_SFCP_12V       0x80U//SFCP协议最大电压12V
 #define SW6306_DPDM2_SFCP_9V        0x00U//SFCP协议最大电压9V
 #define SW6306_DPDM2_PE_12V         0x40U//PE协议最大电压12V
 #define SW6306_DPDM2_PE_9V          0x00U//PE协议最大电压9V
 
-    //0x12A SW6306_CTRG_P_DPDM3         DPDM协议设置3（source 协议全局开关，V0.3.0）
+//0x12A SW6306_CTRG_P_DPDM3         DPDM协议设置3（source 协议全局开关，V0.3.0）
 #define SW6306_P_DPDM3_MSK          0xFBU//DPDM协议设置3有效位（bit2保留）
 #define SW6306_P_DPDM3_NOQC2        0x80U//禁止QC2.0 source快充（0=使能/1=禁止）
 #define SW6306_P_DPDM3_NOQC3        0x40U//禁止QC3.0 source快充（0=使能/1=禁止）
@@ -1123,7 +1123,7 @@ func(__VA_ARGS__)
 #define SW6306_P_DPDM3_NOSCP_HV     0x02U//禁止高压SCP source快充（0=使能/1=禁止）
 #define SW6306_P_DPDM3_NOSCP_LV     0x01U//禁止低压SCP source快充（0=使能/1=禁止）
 
-    //0x12B SW6306_CTRG_P_DPDM4         DPDM协议设置4（source 协议全局开关，V0.3.0）
+//0x12B SW6306_CTRG_P_DPDM4         DPDM协议设置4（source 协议全局开关，V0.3.0）
 #define SW6306_P_DPDM4_MSK          0xFCU//DPDM协议设置4有效位（bit1:0保留）
 #define SW6306_P_DPDM4_NOPE         0x80U//禁止PE source快充（0=使能/1=禁止）
 #define SW6306_P_DPDM4_NOSFCP       0x40U//禁止SFCP source快充（0=使能/1=禁止）
@@ -1132,7 +1132,7 @@ func(__VA_ARGS__)
 #define SW6306_P_DPDM4_SVOOC        0x08U//Super VOOC source使能（active HIGH，1=使能/0=禁止）
 #define SW6306_P_DPDM4_NOUFCS       0x04U//禁止UFCS source（0=使能/1=禁止）
 
-    //0x12C SW6306_CTRG_P_DPDM5         DPDM协议设置5（sink 协议全局开关，V0.3.0）
+//0x12C SW6306_CTRG_P_DPDM5         DPDM协议设置5（sink 协议全局开关，V0.3.0）
 #define SW6306_P_DPDM5_MSK          0xF3U//DPDM协议设置5有效位（bit3:2保留）
 #define SW6306_P_DPDM5_NOUFCS       0x80U//禁止UFCS sink（0=使能/1=禁止）
 #define SW6306_P_DPDM5_NOAFC        0x40U//禁止AFC sink（0=使能/1=禁止）
@@ -1141,7 +1141,7 @@ func(__VA_ARGS__)
 #define SW6306_P_DPDM5_NOHVDCP      0x02U//禁止HVDCP sink（0=使能/1=禁止）
 #define SW6306_P_DPDM5_SDP2A        0x01U//SDP抽电电流（0=500mA/1=2A）
 
-    //0x12D SW6306_CTRG_P_UFCS          UFCS协议设置
+//0x12D SW6306_CTRG_P_UFCS          UFCS协议设置
 #define SW6306_P_UFCS_CFG_MSK       0x78U//UFCS协议设置有效位
 #define SW6306_P_UFCS_5VPPS_OFF     0x40U//UFCS source 5v可编程档位关闭
 #define SW6306_P_UFCS_5VPPS_ON      0x00U//UFCS source 5v可编程档位使能（当该位为1时，才能修改各档位的电流内容）
@@ -1152,27 +1152,27 @@ func(__VA_ARGS__)
 #define SW6306_P_UFCS_CURRSET_MAN   0x08U//手动修改相应寄存器设置广播的电流内容
 #define SW6306_P_UFCS_CURRSET_AUTO  0x00U//自动设置
 
-    //0x12E SW6306_CTRG_C_UFCS0         UFCS电流设置0
-    //0x12F SW6306_CTRG_C_UFCS1         UFCS电流设置1
-    //0x130 SW6306_CTRG_C_UFCS2         UFCS电流设置2
+//0x12E SW6306_CTRG_C_UFCS0         UFCS电流设置0
+//0x12F SW6306_CTRG_C_UFCS1         UFCS电流设置1
+//0x130 SW6306_CTRG_C_UFCS2         UFCS电流设置2
 #define SW6306_UFCS_CURR_CODE_MSK   0x7FU//UFCS电流设置有效位
 #define SW6306_UFCS_CURR_STEP_MA    2/100//电流码
 
-    //0x132 SW6306_CTRG_TYPEC1          C1 Type C设置
+//0x132 SW6306_CTRG_TYPEC1          C1 Type C设置
 #define SW6306_TYPEC_VCONN_NOOCP    0x80U//禁止VCONN引脚过流异常检测
 #define SW6306_TYPEC1_MSK           0x03U//C1 Type C设置寄存器有效位
 #define SW6306_TYPEC1_SNK           0x02U//Type C2仅为sink
 #define SW6306_TYPEC1_SRC           0x01U//Type C2仅为source
 #define SW6306_TYPEC1_DRP           0x00U//Type C2为有try.SRC功能的DRP口
 
-    //0x133 SW6306_CTRG_PD0             PD协议设置0
+//0x133 SW6306_CTRG_PD0             PD协议设置0
 #define SW6306_PD0_MSK              0xB8U//PD协议设置0寄存器有效位
 #define SW6306_PD0_NOPDSRC          0x80U//关闭PD Source协议
 #define SW6306_PD0_NOSCP            0x20U//PD触发后不响应SCP协议
 #define SW6306_PD0_NOVOOC           0x10U//PD触发后不响应VOOC协议
 #define SW6306_PD0_NOUFCS           0x08U//PD触发后不响应UFCS协议
 
-    //0x134 SW6306_CTRG_PD1             PD协议设置1
+//0x134 SW6306_CTRG_PD1             PD协议设置1
 #define SW6306_PD1_MSK              0x3FU//PD协议设置1寄存器有效位
 #define SW6306_PD1_NOPPS3           0x20U//禁止PPS3挡位（最大21V）（4个PPS最多只能响应2个）
 #define SW6306_PD1_NOPPS2           0x10U//禁止PPS2挡位（最大16V）
@@ -1181,7 +1181,7 @@ func(__VA_ARGS__)
 #define SW6306_PD1_NO20V            0x02U//禁止20V挡位
 #define SW6306_PD1_NO15V            0x01U//禁止15V挡位
 
-    //0x135 SW6306_CTRG_PD2             PD协议设置2
+//0x135 SW6306_CTRG_PD2             PD协议设置2
 #define SW6306_PD2_NO12V            0x80U//禁止12V挡位
 #define SW6306_PD2_NO9V             0x40U//禁止9V挡位
 #define SW6306_PD2_PPS3V3           0x20U//PPS广播电压最小3.3V
@@ -1191,7 +1191,7 @@ func(__VA_ARGS__)
 #define SW6306_PD2_5V2A             0x02U//8s内Sink只请求5V Fix时，重播5V2A的Src Cap
 #define SW6306_PD2_REJECT           0x01U//收到非法请求时不hard reset，仅无视该请求
 
-    //0x136 SW6306_CTRG_PD3             PD协议设置3
+//0x136 SW6306_CTRG_PD3             PD协议设置3
 #define SW6306_PD3_MSK              0x9BU//PD协议设置3寄存器有效位
 #define SW6306_PD3_NOALERT          0x80U//CC CV切换时，不发送Alert
 #define SW6306_PD3_ENSVID           0x10U//响应对端发送的SVID查询请求
@@ -1199,37 +1199,37 @@ func(__VA_ARGS__)
 #define SW6306_PD3_ENDRSWAP         0x02U//允许dr_swap
 #define SW6306_PD3_ENVCONNSWAP      0x01U//允许vconn_swap
 
-    //0x137 SW6306_CTRG_PD4             PD协议设置4
+//0x137 SW6306_CTRG_PD4             PD协议设置4
 #define SW6306_PD4_MSK              0x41U//PD协议设置4寄存器有效位
 #define SW6306_PD4_2_HARTRST        0x40U//作为sink超时未收到src cap时，发送两次hardreset
 #define SW6306_PD4_NOPDSNK          0x01U//关闭PD sink协议
 
-    //0x13E SW6306_CTRG_PD11            PD协议设置11
+//0x13E SW6306_CTRG_PD11            PD协议设置11
 #define SW6306_PD11_MSK             0xF0U//PD协议设置11寄存器有效位
 #define SW6306_PD11_CP_PPS0         0x80U//手动模式下接入5A线缆时PPS0挡位支持恒功率
 #define SW6306_PD11_CP_PPS1         0x40U//手动模式下接入5A线缆时PPS1挡位支持恒功率
 #define SW6306_PD11_CP_PPS2         0x20U//手动模式下接入5A线缆时PPS2挡位支持恒功率
 #define SW6306_PD11_CP_PPS3         0x10U//手动模式下接入5A线缆时PPS3挡位支持恒功率
 
-    //0x13F SW6306_CTRG_PPS0            PPS电流设置0
+//0x13F SW6306_CTRG_PPS0            PPS电流设置0
 #define SW6306_PPS0_ENCP            0x80U//手动模式下接入非5A线缆时PPS0挡位支持恒功率
 
-    //0x140 SW6306_CTRG_PPS1            PPS电流设置1
+//0x140 SW6306_CTRG_PPS1            PPS电流设置1
 #define SW6306_PPS1_ENCP            0x80U//手动模式下接入非5A线缆时PPS1挡位支持恒功率
 
-    //0x141 SW6306_CTRG_PPS2            PPS电流设置2
+//0x141 SW6306_CTRG_PPS2            PPS电流设置2
 #define SW6306_PPS2_ENCP            0x80U//手动模式下接入非5A线缆时PPS2挡位支持恒功率
 
-    //0x142 SW6306_CTRG_PPS3            PPS电流设置3
+//0x142 SW6306_CTRG_PPS3            PPS电流设置3
 #define SW6306_PPS3_ENCP            0x80U//手动模式下接入非5A线缆时PPS3挡位支持恒功率
 
-    //0x14B SW6306_CTRG_TYPEC2          C2 Type C设置
+//0x14B SW6306_CTRG_TYPEC2          C2 Type C设置
 #define SW6306_TYPEC2_MSK           0xC0U//C2 Type C设置寄存器有效位
 #define SW6306_TYPEC2_SNK           0x80U//Type C2仅为sink
 #define SW6306_TYPEC2_SRC           0x40U//Type C2仅为source
 #define SW6306_TYPEC2_DRP           0x00U//Type C2为有try.SRC功能的DRP口
 
-    //0x14D SW6306_CTRG_DISPLAY         显示设置
+//0x14D SW6306_CTRG_DISPLAY         显示设置
 #define SW6306_CTRG_DISPLAY_MSK     0x0EU//显示设置寄存器有效位
 #define SW6306_CTRG_DISPLAY_8_20M   0x0CU//LED/数码管驱动电流8/20mA
 #define SW6306_CTRG_DISPLAY_2_5M    0x08U//LED/数码管驱动电流2/5mA
@@ -1237,15 +1237,15 @@ func(__VA_ARGS__)
 #define SW6306_CTRG_DISPLAY_4_10M   0x00U//LED/数码管驱动电流4/10mA
 #define SW6306_CTRG_DISPLAY_5SDELAY 0x02U//轻载5s后关闭输出
 
-    //0x14E SW6306_CTRG_GAUGE0          库仑计设置0
+//0x14E SW6306_CTRG_GAUGE0          库仑计设置0
 #define SW6306_GAUGE0_MSK           0x90U//库仑计设置0寄存器有效位
 #define SW6306_GAUGE0_RDCEN         0x80U//Rdc计算使能
 #define SW6306_GAUGE0_LEARNEN       0x10U//容量学习使能
 
-    //0x14F SW6306_CTRG_GAUGE1          库仑计设置1
+//0x14F SW6306_CTRG_GAUGE1          库仑计设置1
 #define SW6306_GAUGE1_99WAIT        0x20U//充至99%后等待十分钟才充电至100%
 
-    //0x150 SW6306_CTRG_KEY0            按键设置0
+//0x150 SW6306_CTRG_KEY0            按键设置0
 #define SW6306_KEY0_MSK             0x4FU//按键设置0寄存器有效位
 #define SW6306_KEY0_SPEXIT          0x40U//短按键退出蓝牙模式或关闭WLED
 #define SW6306_KEY0_FILTER          0x08U//快充场景防误触发使能
@@ -1253,7 +1253,7 @@ func(__VA_ARGS__)
 #define SW6306_KEY0_NOVBUS          0x02U//短按键额外打开VBUS建立不起来的口
 #define SW6306_KEY0_REGSET          0x01U//短按键功能由寄存器决定
 
-    //0x151 SW6306_CTRG_KEY1            按键设置1
+//0x151 SW6306_CTRG_KEY1            按键设置1
 #define SW6306_KEY1_MSK             0x7FU//按键设置1寄存器有效位
 #define SW6306_KEY1_DISPLAY         0x60U//短按键打开灯显与已经接入的输出口
 #define SW6306_KEY1_RDPORT          0x40U//短按键打开有Rd电阻的口
@@ -1270,205 +1270,205 @@ func(__VA_ARGS__)
 #define SW6306_KEY1_DCBLU           0x01U//双击打开小电流模式
 #define SW6306_KEY1_DCFF            0x00U//双击关闭下游口
 
-    //0x153 SW6306_CTRG_IPPS            PPS电流偏移设置
+//0x153 SW6306_CTRG_IPPS            PPS电流偏移设置
 #define SW6306_IPPS_MSK             0x30U//PPS电流偏移设置寄存器有效位
 #define SW6306_IPPS_300M            0x30U//PPS限流偏移300mA
 #define SW6306_IPPS_200M            0x20U//PPS限流偏移200mA
 #define SW6306_IPPS_100M            0x10U//PPS限流偏移100mA
 #define SW6306_IPPS_NONE            0x00U//PPS限流无偏移
 
-    //0x154 SW6306_CTRG_FAULT1          异常/保护使能1
+//0x154 SW6306_CTRG_FAULT1          异常/保护使能1
 #define SW6306_FAULT1_NOVBUSOVP     0x08U//禁止放电时VBUS慢速过压保护
 #define SW6306_FAULT1_NODPDMOVP     0x04U//禁止放电时DPDM 5.5V过压保护
 #define SW6306_FAULT1_NOCCOVP       0x02U//禁止放电时CC1/2 5.5V过压保护
 
-    //0x155 SW6306_CTRG_FAULT2          异常/保护使能2
+//0x155 SW6306_CTRG_FAULT2          异常/保护使能2
 #define SW6306_FAULT2_62368_NOUTP   0x80U//禁止放电62368低温保护
 #define SW6306_FAULT2_NOCCFLAG      0x40U//禁止CC/CV切换时发送cc flag
 
-    //0x156 SW6306_CTRG_FAULT3          异常/保护使能3
+//0x156 SW6306_CTRG_FAULT3          异常/保护使能3
 #define SW6306_FAULT3_NTC_NOOTP     0x04U//禁止充电NTC过温保护
 #define SW6306_FAULT3_62368_NOOTP   0x02U//禁止充电62368过温保护
 #define SW6306_FAULT3_62368_NOUTP   0x01U//禁止充电62368低温保护
 
-    /*****************************函数声明区***************************************/
-    /* ============ 端口/协议枚举（供 PORTQC 端口快充与全局协议开关使用） ============ */
-    typedef enum {
-        SW6306_PORT_C1,
-        SW6306_PORT_C2,
-        SW6306_PORT_A1,
-        SW6306_PORT_A2
-    } sw6306_port_t;
+/*****************************函数声明区***************************************/
+/* ============ 端口/协议枚举（供 PORTQC 端口快充与全局协议开关使用） ============ */
+typedef enum {
+    SW6306_PORT_C1,
+    SW6306_PORT_C2,
+    SW6306_PORT_A1,
+    SW6306_PORT_A2
+} sw6306_port_t;
 
-    typedef enum {
-        SW6306_PORT_DIR_IN,     /* 输入方向（仅 C 口支持） */
-        SW6306_PORT_DIR_OUT     /* 输出方向 */
-    } sw6306_port_dir_t;
+typedef enum {
+    SW6306_PORT_DIR_IN,     /* 输入方向（仅 C 口支持） */
+    SW6306_PORT_DIR_OUT     /* 输出方向 */
+} sw6306_port_dir_t;
 
-    typedef enum {
-        SW6306_PROTO_DIR_SOURCE,
-        SW6306_PROTO_DIR_SINK
-    } sw6306_proto_dir_t;
+typedef enum {
+    SW6306_PROTO_DIR_SOURCE,
+    SW6306_PROTO_DIR_SINK
+} sw6306_proto_dir_t;
 
-    typedef enum {
-        SW6306_PROTO_PD,        /* USB PD */
-        SW6306_PROTO_PPS,       /* PD PPS（仅 source） */
-        SW6306_PROTO_QC,        /* QC2/QC3/QC3+ */
-        SW6306_PROTO_FCP,
-        SW6306_PROTO_AFC,
-        SW6306_PROTO_SCP,       /* 仅sink，source通过SCPSourceSet分别控制高/低压 */
-        SW6306_PROTO_PE,
-        SW6306_PROTO_SFCP,
-        SW6306_PROTO_VOOC,
-        SW6306_PROTO_SVOOC,
-        SW6306_PROTO_UFCS
-    } sw6306_proto_t;
+typedef enum {
+    SW6306_PROTO_PD,        /* USB PD */
+    SW6306_PROTO_PPS,       /* PD PPS（仅 source） */
+    SW6306_PROTO_QC,        /* QC2/QC3/QC3+ */
+    SW6306_PROTO_FCP,
+    SW6306_PROTO_AFC,
+    SW6306_PROTO_SCP,       /* 仅sink，source通过SCPSourceSet分别控制高/低压 */
+    SW6306_PROTO_PE,
+    SW6306_PROTO_SFCP,
+    SW6306_PROTO_VOOC,
+    SW6306_PROTO_SVOOC,
+    SW6306_PROTO_UFCS
+} sw6306_proto_t;
 
-    //ADC数据相关操作
-    SW6306_RET SW6306_ADCLoad(SW6306_NOARG);      //读取全部ADC数据并更新镜像寄存器
-    uint16_t SW6306_ReadVBUS(void);                 //读取BUS电压
-    uint16_t SW6306_ReadIBUS(void);                 //读取BUS电流
-    uint16_t SW6306_ReadVBAT(void);                 //读取BAT电压
-    uint16_t SW6306_ReadIBAT(void);                 //读取BAT电流（已按电池端感测电阻校准）
-    int16_t SW6306_ReadTNTC(void);                  //读取NTC温度（结果为5的倍数，并不准确，不推荐使用）
-    float SW6306_ReadTCHIP(void);                   //读取芯片温度
-    float SW6306_ReadVNTC(void);                    //读取NTC电压
-    float SW6306_ReadNTCResistance_Ohm(void);       //由 VNTC 与 INTC 反算 Rntc
-    float SW6306_TNTC_Calc(void);                   //由 Rntc 用 Beta 公式算温度(°C)
-    float SW6306_CalcNTCTemp_C(void);               //计算 NTC 温度（°C，Beta 公式；独立 API，无 FPU 平台可裁剪）
-    float SW6306_ReadNTCTemp(void);                 //读取句柄中的 NTC 温度（°C，Beta 公式计算）
-    SW6306_RET SW6306_NTCTempLoad(SW6306_NOARG);    //计算并缓存 NTC 温度到句柄（须先 ADCLoad+StatusLoad）
-    /* 电池端感测电阻校准（芯片按 SW6306_BATT_RSHUNT_NOMINAL 标定，实际硬件不同时用本 API 重新校准）：
-    * 影响 IBAT 读数/电池限流读数/库仑计能量读数（× NOMINAL/实际）与下次 Init 写入的电池限流值（× 实际/NOMINAL）。 */
-    //设置实际电池端感测电阻（mΩ，拒绝≤0.1）
-    //读取当前校准值（mΩ）
-    //状态相关操作
-    SW6306_RET SW6306_StatusLoad(SW6306_NOARG);   //将SW6306的各种状态读取到镜像寄存器(0x12,0x14,0x15,0x18,0x1A,0x2A,0x2B,0x2C)
-    uint8_t SW6306_IsWLEDON(void);                  //SW6306 WLED是否打开
-    uint8_t SW6306_IsDisplaying(void);              //SW6306显示是否打开（似乎是一直有效的）
-    uint8_t SW6306_IsLowCurrentMode(void);          //SW6306是否处于小电流模式
-    uint8_t SW6306_IsMPPTCharging(void);            //SW6306是否处于MPPT充电模式
-    uint8_t SW6306_IsCharging(void);                //SW6306是否正在充电（REG0x18实时）
-    uint8_t SW6306_IsDischarging(void);             //SW6306是否正在放电（REG0x18实时）
-    //实时状态（REG0x18 / ADC采样）
-    uint8_t SW6306_IsChargeStoppedByFault(void);    //REG0x18.bit7 异常导致充电关闭（实时）
-    uint8_t SW6306_IsDischargeStoppedByFault(void); //REG0x18.bit6 异常导致放电关闭（实时）
-    typedef struct {
-        uint8_t event0;    /* 0x15：W1C事件 */
-        uint8_t system;    /* 0x18：实时状态 */
-        uint8_t discharge; /* 0x2A：放电历史 */
-        uint8_t charge;    /* 0x2B：充电历史（FULL不是异常） */
-        uint8_t extra;     /* 0x2C：额外历史（[7:6]是按键） */
-    } sw6306_fault_snapshot_t;
-    uint32_t SW6306_StatusReadSequence(void); /* 仅完整StatusLoad成功才递增 */
-    void SW6306_GetFaultSnapshot(sw6306_fault_snapshot_t *out);
-    /* 历史事件：仅REG0x15可W1C清除；0x2A/0x2B/0x2C不可用此方式清除。 */
-    uint8_t SW6306_HasUVLOEvent(void);              //REG0x15.bit4 曾发生UVLO事件
-    uint8_t SW6306_HasChargeErrorEvent(void);       //REG0x15.bit3 曾发生充电异常事件
-    uint8_t SW6306_HasDischargeErrorEvent(void);    //REG0x15.bit2 曾发生放电异常事件
-    uint8_t SW6306_HasFullChargeEvent(void);        //REG0x2B.bit5 曾发生充满事件（下次开机清零）
-    uint8_t SW6306_HasKeyEvent(void);               //REG0x15.bit1 曾发生按键事件
-    uint8_t SW6306_HasSceneEvent(void);             //REG0x15.bit0 曾发生场景变化事件
-    SW6306_RET SW6306_ClearEvents(SW6306_ARGS(uint8_t events)); //写1清除REG0x15已处理的事件位（W1C）
-    uint8_t SW6306_ReadEventFlags(void);            //读取REG0x15原始事件值
-    uint8_t SW6306_ReadFaultDischarge(void);        //读取REG0x2A放电异常历史原因
-    uint8_t SW6306_ReadFaultCharge(void);           //读取REG0x2B充电异常历史原因
-    uint8_t SW6306_ReadSystemStatus(void);          //读取REG0x18系统实时状态
-    //端口状态相关操作
-    SW6306_RET SW6306_PortStatusLoad(SW6306_NOARG); //更新端口状态镜像寄存器(0x13,0x18,0x19,0x1C,0x1D)
-    uint8_t SW6306_TransportPortsIdle(void);        //实时读取端口与CC；I2C失败或占用均返回0
-    uint8_t SW6306_IsPortC1ON(void);                //读取C1口通路是否打开
-    uint8_t SW6306_IsPortC2ON(void);                //读取C2口通路是否打开
-    uint8_t SW6306_IsPortA1ON(void);                //读取A1口通路是否打开
-    uint8_t SW6306_IsPortA2ON(void);                //读取A2口通路是否打开
-    //功率与协议相关操作
-    SW6306_RET SW6306_PowerLoad(SW6306_NOARG);    //更新功率状态镜像寄存器(0x0E,0x0F,0x10,0x11,0x1C,0x45,0x4F,0x51,0x52)
-    uint16_t SW6306_ReadIPortLimit(void);           //读取充电时端口限流实时值（单位：mA）
-    uint16_t SW6306_ReadIBattLimit(void);           //读取充电时电池限流实时值（单位：mA）
-    uint8_t SW6306_ReadMaxOutputPower(void);        //读取最大输出功率（单位：W）
-    uint8_t SW6306_ReadMaxInputPower(void);         //读取最大输入功率（单位：W）
-    uint8_t SW6306_ReadPiMaxSet(void);              //读取PISET设置值（0x45，PowerLoad后更新，单位：W）
-    uint8_t SW6306_ReadPoMaxSet(void);              //读取POSET设置值（0x4F，PowerLoad后更新，单位：W）
-    SW6306_RET SW6306_SetMaxOutputPower(SW6306_ARGS(uint8_t watt)); //设置最大输出功率（单位W，如45/18）
-    uint8_t SW6306_GetMaxOutputPowerSetting(void);  //读取当前目标最大输出功率（W）
-    const char *SW6306_ReadProtocol(void);          //读取协议名称字符串
-    /* 端口快充总开关（0x11F PORTQC，0=使能/1=禁止；A 口仅输出方向） */
-    SW6306_RET SW6306_PortFastChargeSet(SW6306_ARGS(sw6306_port_t port, sw6306_port_dir_t dir, uint8_t enable));
-    /* 全局协议开关：SCP仅管理sink，source高低压分别通过SCPSourceSet管理。 */
-    SW6306_RET SW6306_ProtocolEnable(SW6306_ARGS(sw6306_proto_t proto, sw6306_proto_dir_t dir, uint8_t enable));
-    /* 0x12A[1:0]：高压/低压SCP source，1=使能；单次读改写保留其它位。 */
-    SW6306_RET SW6306_SCPSourceSet(SW6306_ARGS(uint8_t hv_enable, uint8_t lv_enable));
-    /* 0x133[5:3]：PD source进入后是否响应SCP/VOOC/UFCS，1=响应。 */
-    SW6306_RET SW6306_PDSourceYieldSet(SW6306_ARGS(uint8_t scp, uint8_t vooc, uint8_t ufcs));
-    /* PPS 档位开关：只提供 PPS1/PPS3（PPS0/PPS2 始终不使用，由 Init 禁止） */
-    typedef enum {
-        SW6306_PPS_1 = 0,   /* PPS1（最大 11V） */
-        SW6306_PPS_3        /* PPS3（最大 21V） */
-    } sw6306_pps_t;
-    SW6306_RET SW6306_PPSEnable(SW6306_ARGS(sw6306_pps_t pps, uint8_t enable)); //使能/禁止指定 PPS 档位（0x134 PD1）
-    SW6306_RET SW6306_SetLowCurrentMode(SW6306_ARGS(uint8_t enable));       //0x11B register-owned low-current, 4h backup
-    SW6306_RET SW6306_SetMaxInputPower(SW6306_ARGS(uint8_t watt));              //设置最大输入功率（单位W，如100/65；写 PISET 0x45）
-    SW6306_RET SW6306_PPSBroadcast(SW6306_NOARG);   //手动触发 PD/PPS 电流能力播发（Source Capability 重播）
-    SW6306_RET SW6306_UFCSBroadcast(SW6306_NOARG);  //手动触发 UFCS 电流能力播发（Source Capability 重播）
-    //容量与库仑计相关操作
-    SW6306_RET SW6306_CapacityLoad(SW6306_NOARG); //更新容量与库仑计镜像寄存器(0x86~0x8A,0x99,0xA2)
-    uint8_t SW6306_CapacityLoadOK(void);            //最近一次 CapacityLoad 全部读成功
-    uint8_t SW6306_ReadCapacity(void);              //读取SW6306显示电量
-    float SW6306_ReadMaxEnergy_mWh(void);           //读取库仑计最大能量（单位：mWh）
-    float SW6306_ReadRemainEnergy_mWh(void);        //读取库仑计当前（剩余）能量（单位：mWh）
-    /* 容量学习状态（0xA2 两位组合，bit5=END 在前为高位、bit6=ING 为低位）：
-    * 00 等待学习 Waiting / 01 学习中 Learning / 10 完成 Done / 11 共存(不存在) Unknown
-    * 注意：成员名带 ST 前缀，避免与 SW6306_LEARN_ING/END 位宏冲突。 */
-    typedef enum {
-        SW6306_LEARN_ST_WAITING = 0,
-        SW6306_LEARN_ST_ING     = 1,
-        SW6306_LEARN_ST_DONE    = 2,
-        SW6306_LEARN_ST_UNKNOWN = 3,
-    } sw6306_learn_state_t;
-    sw6306_learn_state_t SW6306_ReadLearnState(void);   //读取容量学习状态（0xA2 镜像，3 态 + Unknown）
-    /* 容量学习控制拆成两步，避免“开机确保使能”误清历史完成标志：
-    *  - Set(enable)：只控制 0x14E[4] LEARNEN，不修改 0xA2[5] LEARN_END；
-    *  - Rearm()：保持 LEARNEN=1，并清 LEARN_END，武装下一次完整学习。
-    * 实际学习仍需先触发 UVLO，随后再次开始充电才会启动。 */
-    SW6306_RET SW6306_CapacityLearningSet(SW6306_ARGS(uint8_t enable));
-    SW6306_RET SW6306_CapacityLearningRearm(SW6306_NOARG);
-    //状态操作
-    SW6306_RET SW6306_ForceOff(SW6306_NOARG);     //强制关闭放电并休眠
+//ADC数据相关操作
+SW6306_RET SW6306_ADCLoad(SW6306_NOARG);      //读取全部ADC数据并更新镜像寄存器
+uint16_t SW6306_ReadVBUS(void);                 //读取BUS电压
+uint16_t SW6306_ReadIBUS(void);                 //读取BUS电流
+uint16_t SW6306_ReadVBAT(void);                 //读取BAT电压
+uint16_t SW6306_ReadIBAT(void);                 //读取BAT电流（已按电池端感测电阻校准）
+int16_t SW6306_ReadTNTC(void);                  //读取NTC温度（结果为5的倍数，并不准确，不推荐使用）
+float SW6306_ReadTCHIP(void);                   //读取芯片温度
+float SW6306_ReadVNTC(void);                    //读取NTC电压
+float SW6306_ReadNTCResistance_Ohm(void);       //由 VNTC 与 INTC 反算 Rntc
+float SW6306_TNTC_Calc(void);                   //由 Rntc 用 Beta 公式算温度(°C)
+float SW6306_CalcNTCTemp_C(void);               //计算 NTC 温度（°C，Beta 公式；独立 API，无 FPU 平台可裁剪）
+float SW6306_ReadNTCTemp(void);                 //读取句柄中的 NTC 温度（°C，Beta 公式计算）
+SW6306_RET SW6306_NTCTempLoad(SW6306_NOARG);    //计算并缓存 NTC 温度到句柄（须先 ADCLoad+StatusLoad）
+/* 电池端感测电阻校准（芯片按 SW6306_BATT_RSHUNT_NOMINAL 标定，实际硬件不同时用本 API 重新校准）：
+ * 影响 IBAT 读数/电池限流读数/库仑计能量读数（× NOMINAL/实际）与下次 Init 写入的电池限流值（× 实际/NOMINAL）。 */
+//设置实际电池端感测电阻（mΩ，拒绝≤0.1）
+//读取当前校准值（mΩ）
+//状态相关操作
+SW6306_RET SW6306_StatusLoad(SW6306_NOARG);   //将SW6306的各种状态读取到镜像寄存器(0x12,0x14,0x15,0x18,0x1A,0x2A,0x2B,0x2C)
+uint8_t SW6306_IsWLEDON(void);                  //SW6306 WLED是否打开
+uint8_t SW6306_IsDisplaying(void);              //SW6306显示是否打开（似乎是一直有效的）
+uint8_t SW6306_IsLowCurrentMode(void);          //SW6306是否处于小电流模式
+uint8_t SW6306_IsMPPTCharging(void);            //SW6306是否处于MPPT充电模式
+uint8_t SW6306_IsCharging(void);                //SW6306是否正在充电（REG0x18实时）
+uint8_t SW6306_IsDischarging(void);             //SW6306是否正在放电（REG0x18实时）
+//实时状态（REG0x18 / ADC采样）
+uint8_t SW6306_IsChargeStoppedByFault(void);    //REG0x18.bit7 异常导致充电关闭（实时）
+uint8_t SW6306_IsDischargeStoppedByFault(void); //REG0x18.bit6 异常导致放电关闭（实时）
+typedef struct {
+    uint8_t event0;    /* 0x15：W1C事件 */
+    uint8_t system;    /* 0x18：实时状态 */
+    uint8_t discharge; /* 0x2A：放电历史 */
+    uint8_t charge;    /* 0x2B：充电历史（FULL不是异常） */
+    uint8_t extra;     /* 0x2C：额外历史（[7:6]是按键） */
+} sw6306_fault_snapshot_t;
+uint32_t SW6306_StatusReadSequence(void); /* 仅完整StatusLoad成功才递增 */
+void SW6306_GetFaultSnapshot(sw6306_fault_snapshot_t *out);
+/* 历史事件：仅REG0x15可W1C清除；0x2A/0x2B/0x2C不可用此方式清除。 */
+uint8_t SW6306_HasUVLOEvent(void);              //REG0x15.bit4 曾发生UVLO事件
+uint8_t SW6306_HasChargeErrorEvent(void);       //REG0x15.bit3 曾发生充电异常事件
+uint8_t SW6306_HasDischargeErrorEvent(void);    //REG0x15.bit2 曾发生放电异常事件
+uint8_t SW6306_HasFullChargeEvent(void);        //REG0x2B.bit5 曾发生充满事件（下次开机清零）
+uint8_t SW6306_HasKeyEvent(void);               //REG0x15.bit1 曾发生按键事件
+uint8_t SW6306_HasSceneEvent(void);             //REG0x15.bit0 曾发生场景变化事件
+SW6306_RET SW6306_ClearEvents(SW6306_ARGS(uint8_t events)); //写1清除REG0x15已处理的事件位（W1C）
+uint8_t SW6306_ReadEventFlags(void);            //读取REG0x15原始事件值
+uint8_t SW6306_ReadFaultDischarge(void);        //读取REG0x2A放电异常历史原因
+uint8_t SW6306_ReadFaultCharge(void);           //读取REG0x2B充电异常历史原因
+uint8_t SW6306_ReadSystemStatus(void);          //读取REG0x18系统实时状态
+//端口状态相关操作
+SW6306_RET SW6306_PortStatusLoad(SW6306_NOARG); //更新端口状态镜像寄存器(0x13,0x18,0x19,0x1C,0x1D)
+uint8_t SW6306_TransportPortsIdle(void);        //实时读取端口与CC；I2C失败或占用均返回0
+uint8_t SW6306_IsPortC1ON(void);                //读取C1口通路是否打开
+uint8_t SW6306_IsPortC2ON(void);                //读取C2口通路是否打开
+uint8_t SW6306_IsPortA1ON(void);                //读取A1口通路是否打开
+uint8_t SW6306_IsPortA2ON(void);                //读取A2口通路是否打开
+//功率与协议相关操作
+SW6306_RET SW6306_PowerLoad(SW6306_NOARG);    //更新功率状态镜像寄存器(0x0E,0x0F,0x10,0x11,0x1C,0x45,0x4F,0x51,0x52)
+uint16_t SW6306_ReadIPortLimit(void);           //读取充电时端口限流实时值（单位：mA）
+uint16_t SW6306_ReadIBattLimit(void);           //读取充电时电池限流实时值（单位：mA）
+uint8_t SW6306_ReadMaxOutputPower(void);        //读取最大输出功率（单位：W）
+uint8_t SW6306_ReadMaxInputPower(void);         //读取最大输入功率（单位：W）
+uint8_t SW6306_ReadPiMaxSet(void);              //读取PISET设置值（0x45，PowerLoad后更新，单位：W）
+uint8_t SW6306_ReadPoMaxSet(void);              //读取POSET设置值（0x4F，PowerLoad后更新，单位：W）
+SW6306_RET SW6306_SetMaxOutputPower(SW6306_ARGS(uint8_t watt)); //设置最大输出功率（单位W，如45/18）
+uint8_t SW6306_GetMaxOutputPowerSetting(void);  //读取当前目标最大输出功率（W）
+const char *SW6306_ReadProtocol(void);          //读取协议名称字符串
+/* 端口快充总开关（0x11F PORTQC，0=使能/1=禁止；A 口仅输出方向） */
+SW6306_RET SW6306_PortFastChargeSet(SW6306_ARGS(sw6306_port_t port, sw6306_port_dir_t dir, uint8_t enable));
+/* 全局协议开关：SCP仅管理sink，source高低压分别通过SCPSourceSet管理。 */
+SW6306_RET SW6306_ProtocolEnable(SW6306_ARGS(sw6306_proto_t proto, sw6306_proto_dir_t dir, uint8_t enable));
+/* 0x12A[1:0]：高压/低压SCP source，1=使能；单次读改写保留其它位。 */
+SW6306_RET SW6306_SCPSourceSet(SW6306_ARGS(uint8_t hv_enable, uint8_t lv_enable));
+/* 0x133[5:3]：PD source进入后是否响应SCP/VOOC/UFCS，1=响应。 */
+SW6306_RET SW6306_PDSourceYieldSet(SW6306_ARGS(uint8_t scp, uint8_t vooc, uint8_t ufcs));
+/* PPS 档位开关：只提供 PPS1/PPS3（PPS0/PPS2 始终不使用，由 Init 禁止） */
+typedef enum {
+    SW6306_PPS_1 = 0,   /* PPS1（最大 11V） */
+    SW6306_PPS_3        /* PPS3（最大 21V） */
+} sw6306_pps_t;
+SW6306_RET SW6306_PPSEnable(SW6306_ARGS(sw6306_pps_t pps, uint8_t enable)); //使能/禁止指定 PPS 档位（0x134 PD1）
+SW6306_RET SW6306_SetLowCurrentMode(SW6306_ARGS(uint8_t enable));       //0x11B register-owned low-current, 4h backup
+SW6306_RET SW6306_SetMaxInputPower(SW6306_ARGS(uint8_t watt));              //设置最大输入功率（单位W，如100/65；写 PISET 0x45）
+SW6306_RET SW6306_PPSBroadcast(SW6306_NOARG);   //手动触发 PD/PPS 电流能力播发（Source Capability 重播）
+SW6306_RET SW6306_UFCSBroadcast(SW6306_NOARG);  //手动触发 UFCS 电流能力播发（Source Capability 重播）
+//容量与库仑计相关操作
+SW6306_RET SW6306_CapacityLoad(SW6306_NOARG); //更新容量与库仑计镜像寄存器(0x86~0x8A,0x99,0xA2)
+uint8_t SW6306_CapacityLoadOK(void);            //最近一次 CapacityLoad 全部读成功
+uint8_t SW6306_ReadCapacity(void);              //读取SW6306显示电量
+float SW6306_ReadMaxEnergy_mWh(void);           //读取库仑计最大能量（单位：mWh）
+float SW6306_ReadRemainEnergy_mWh(void);        //读取库仑计当前（剩余）能量（单位：mWh）
+/* 容量学习状态（0xA2 两位组合，bit5=END 在前为高位、bit6=ING 为低位）：
+ * 00 等待学习 Waiting / 01 学习中 Learning / 10 完成 Done / 11 共存(不存在) Unknown
+ * 注意：成员名带 ST 前缀，避免与 SW6306_LEARN_ING/END 位宏冲突。 */
+typedef enum {
+    SW6306_LEARN_ST_WAITING = 0,
+    SW6306_LEARN_ST_ING     = 1,
+    SW6306_LEARN_ST_DONE    = 2,
+    SW6306_LEARN_ST_UNKNOWN = 3,
+} sw6306_learn_state_t;
+sw6306_learn_state_t SW6306_ReadLearnState(void);   //读取容量学习状态（0xA2 镜像，3 态 + Unknown）
+/* 容量学习控制拆成两步，避免“开机确保使能”误清历史完成标志：
+ *  - Set(enable)：只控制 0x14E[4] LEARNEN，不修改 0xA2[5] LEARN_END；
+ *  - Rearm()：保持 LEARNEN=1，并清 LEARN_END，武装下一次完整学习。
+ * 实际学习仍需先触发 UVLO，随后再次开始充电才会启动。 */
+SW6306_RET SW6306_CapacityLearningSet(SW6306_ARGS(uint8_t enable));
+SW6306_RET SW6306_CapacityLearningRearm(SW6306_NOARG);
+//状态操作
+SW6306_RET SW6306_ForceOff(SW6306_NOARG);     //强制关闭放电并休眠
 #ifndef SW6306_USE_PROTOTHREAD
-    uint8_t SW6306_WakeAndUnlock(void); /* 有限等待、版本寄存器读回与I2C错误反馈 */
+uint8_t SW6306_WakeAndUnlock(void); /* 有限等待、版本寄存器读回与I2C错误反馈 */
 #endif
-    SW6306_RET SW6306_Unlock(SW6306_NOARG);       //无短按事件：解除低功耗并解锁寄存器写入
-    SW6306_RET SW6306_Click(SW6306_NOARG);        //触发单击事件
-    SW6306_RET SW6306_LPSet(SW6306_NOARG);        //打开低功耗
-    SW6306_RET SW6306_PortC1Remove(SW6306_NOARG); //触发C1口拔出事件
-    SW6306_RET SW6306_PortC1Insert(SW6306_NOARG); //触发C1口插入事件
-    SW6306_RET SW6306_PortC2Remove(SW6306_NOARG); //触发C2口拔出事件
-    SW6306_RET SW6306_PortC2Insert(SW6306_NOARG); //触发C2口插入事件
-    SW6306_RET SW6306_PortA1Remove(SW6306_NOARG); //触发A1口拔出事件
-    SW6306_RET SW6306_A1AutoOffSet(SW6306_ARGS(uint8_t enable)); //A1硬件空载关断开关
-    SW6306_RET SW6306_PortA1Insert(SW6306_NOARG); //触发A1口插入事件
-    SW6306_RET SW6306_PortA2Remove(SW6306_NOARG); //触发A2口拔出事件
-    SW6306_RET SW6306_PortA2Insert(SW6306_NOARG); //触发A2口插入事件
-    //IO操作
-    SW6306_RET SW6306_WLEDSet(SW6306_ARGS(uint8_t wledstatus)); //控制WLED脚电平
-    SW6306_RET SW6306_IO1Set(SW6306_ARGS(uint8_t io1status));   //控制IO1脚电平
-    //外部系统兼容
-    SW6306_RET SW6306_IextEnSet(SW6306_ARGS(uint8_t status));   //是否计算外部系统的电流
-    SW6306_RET SW6306_IextDirSet(SW6306_ARGS(uint8_t status));  //外部系统的电流方向设置，0为充电，1为放电
-    SW6306_RET SW6306_IextSet(SW6306_ARGS(uint16_t current));   //外部系统的电流大小设置（单位:mA，范围：0~20475）
-    //强制控制（为了简化操作，输入输出功率与电池端电流被写死在头文件中经由初始化上电设置）
-    SW6306_RET SW6306_VbusSet(SW6306_ARGS(uint16_t voltage));           //设置强制输出的电压值（单位:mV，范围：3300~27300）
-    SW6306_RET SW6306_VbusForceCtrlSet(SW6306_ARGS(uint8_t status));    //设置是否强制控制输出电压
-    SW6306_RET SW6306_VbatSet(SW6306_ARGS(uint16_t voltage));           //设置强制浮充电压值（单位:mV，范围：3300~27300）
-    SW6306_RET SW6306_VbatForceCtrlSet(SW6306_ARGS(uint8_t status));    //设置是否强制控制浮充电压
-    SW6306_RET SW6306_IbusinDischargeSet(SW6306_ARGS(uint16_t current));//设置放电时的端口限流值（单位:mA，范围：200~7000）
-    SW6306_RET SW6306_IbusinChargeSet(SW6306_ARGS(uint16_t current));   //设置充电时的端口限流值（单位:mA，范围：200~7000）
-    SW6306_RET SW6306_IbusForceCtrlSet(SW6306_ARGS(uint8_t status));    //设置是否强制控制端口限流
-    //初始化
-    SW6306_RET SW6306_Init(SW6306_NOARG);         //初始化，最好系统上电后立刻执行
-    uint8_t SW6306_IsInitialized(void);             //纯状态查询：仅返回initialized，不校验PowerLoad镜像
-    uint8_t SW6306_ValidateInitialized(void);        //仅在fresh PowerLoad后调用；校验PISET/POSET，失配会清initialized，须在SW6306_PowerLoad()后执行
-    SW6306_RET SW6306_MarkUninitialized(SW6306_NOARG); //手动失能已初始化标志（供 UI 调用；是否重新 Init 由读回配置判定）
+SW6306_RET SW6306_Unlock(SW6306_NOARG);       //无短按事件：解除低功耗并解锁寄存器写入
+SW6306_RET SW6306_Click(SW6306_NOARG);        //触发单击事件
+SW6306_RET SW6306_LPSet(SW6306_NOARG);        //打开低功耗
+SW6306_RET SW6306_PortC1Remove(SW6306_NOARG); //触发C1口拔出事件
+SW6306_RET SW6306_PortC1Insert(SW6306_NOARG); //触发C1口插入事件
+SW6306_RET SW6306_PortC2Remove(SW6306_NOARG); //触发C2口拔出事件
+SW6306_RET SW6306_PortC2Insert(SW6306_NOARG); //触发C2口插入事件
+SW6306_RET SW6306_PortA1Remove(SW6306_NOARG); //触发A1口拔出事件
+SW6306_RET SW6306_A1AutoOffSet(SW6306_ARGS(uint8_t enable)); //A1硬件空载关断开关
+SW6306_RET SW6306_PortA1Insert(SW6306_NOARG); //触发A1口插入事件
+SW6306_RET SW6306_PortA2Remove(SW6306_NOARG); //触发A2口拔出事件
+SW6306_RET SW6306_PortA2Insert(SW6306_NOARG); //触发A2口插入事件
+//IO操作
+SW6306_RET SW6306_WLEDSet(SW6306_ARGS(uint8_t wledstatus)); //控制WLED脚电平
+SW6306_RET SW6306_IO1Set(SW6306_ARGS(uint8_t io1status));   //控制IO1脚电平
+//外部系统兼容
+SW6306_RET SW6306_IextEnSet(SW6306_ARGS(uint8_t status));   //是否计算外部系统的电流
+SW6306_RET SW6306_IextDirSet(SW6306_ARGS(uint8_t status));  //外部系统的电流方向设置，0为充电，1为放电
+SW6306_RET SW6306_IextSet(SW6306_ARGS(uint16_t current));   //外部系统的电流大小设置（单位:mA，范围：0~20475）
+//强制控制（为了简化操作，输入输出功率与电池端电流被写死在头文件中经由初始化上电设置）
+SW6306_RET SW6306_VbusSet(SW6306_ARGS(uint16_t voltage));           //设置强制输出的电压值（单位:mV，范围：3300~27300）
+SW6306_RET SW6306_VbusForceCtrlSet(SW6306_ARGS(uint8_t status));    //设置是否强制控制输出电压
+SW6306_RET SW6306_VbatSet(SW6306_ARGS(uint16_t voltage));           //设置强制浮充电压值（单位:mV，范围：3300~27300）
+SW6306_RET SW6306_VbatForceCtrlSet(SW6306_ARGS(uint8_t status));    //设置是否强制控制浮充电压
+SW6306_RET SW6306_IbusinDischargeSet(SW6306_ARGS(uint16_t current));//设置放电时的端口限流值（单位:mA，范围：200~7000）
+SW6306_RET SW6306_IbusinChargeSet(SW6306_ARGS(uint16_t current));   //设置充电时的端口限流值（单位:mA，范围：200~7000）
+SW6306_RET SW6306_IbusForceCtrlSet(SW6306_ARGS(uint8_t status));    //设置是否强制控制端口限流
+//初始化
+SW6306_RET SW6306_Init(SW6306_NOARG);         //初始化，最好系统上电后立刻执行
+uint8_t SW6306_IsInitialized(void);             //纯状态查询：仅返回initialized，不校验PowerLoad镜像
+uint8_t SW6306_ValidateInitialized(void);        //仅在fresh PowerLoad后调用；校验PISET/POSET，失配会清initialized，须在SW6306_PowerLoad()后执行
+SW6306_RET SW6306_MarkUninitialized(SW6306_NOARG); //手动失能已初始化标志（供 UI 调用；是否重新 Init 由读回配置判定）
 
 #ifdef __cplusplus
 }

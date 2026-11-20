@@ -5,17 +5,17 @@
 extern "C" {
 #endif
 
-    /*****************************用户配置区开始***********************************/
+/*****************************用户配置区开始***********************************/
 #include "main.h"                                                               //包含I2C读写函数声明的头文件
 
-    /*****************************用户配置区结束***********************************/
+/*****************************用户配置区结束***********************************/
 
 #define RDA5807_WR_CONT_Addr   0x20     //连续写方式的地址
 #define RDA5807_RD_CONT_Addr   0x21     //连续读方式的地址
 #define RDA5807_Wr_REG_Addr    0x22     //单字节写方式的地址
 #define RDA5807_Rd_REG_Addr    0x23     //单字节读方式的地址
 
-    //设置寄存器
+//设置寄存器
 #define RDA5807_REG02           0x02    //02H寄存器地址
 #define RDA5807_REG02_MSK       0xFFFF  //02H寄存器有效位
 #define RDA5807_REG02_DHIZ      0x8000  //关闭音频高阻输出
@@ -73,7 +73,7 @@ extern "C" {
 #define RDA5807_REG07_SBTH_MSK  0x7C00  //噪声软混合阈值有效位
 #define RDA5807_REG07_65M       0x0200  //1 = 65~76 MHz; 0 = 50~76 MHz. 
 
-    //状态寄存器
+//状态寄存器
 #define RDA5807_REG00           0x00    //CHIP ID
 
 #define RDA5807_REG0A           0x0A    //0AH寄存器地址
@@ -107,58 +107,58 @@ extern "C" {
 #define SEEK_UP         1
 #define SEEK_DOWN       0
 
-    struct RDA5807_t{
-        uint8_t Cur_Band;                           //当前频段(0-3)
-        uint32_t Band_Base[4][2];        //频段值
+struct RDA5807_t{
+    uint8_t Cur_Band;                           //当前频段(0-3)
+    uint32_t Band_Base[4][2];        //频段值
 
-        uint8_t Cur_Step;                           //当前步进值(0-3) =3时搜不到台
-        uint8_t Ch_Spacing[4];        //频率步进值（单位25KHz）
+    uint8_t Cur_Step;                           //当前步进值(0-3) =3时搜不到台
+    uint8_t Ch_Spacing[4];        //频率步进值（单位25KHz）
 
-        //uint32_t Cur_Frq = 0;                         //当前频率，没用Chan值为方便修改频段和步进值后的转换，需控制范围？？？何处控制？
-        uint8_t isSearching;                            //正在搜索频道中
+    //uint32_t Cur_Frq = 0;                         //当前频率，没用Chan值为方便修改频段和步进值后的转换，需控制范围？？？何处控制？
+    uint8_t isSearching;                            //正在搜索频道中
 
-        uint8_t Cur_Vol;                            //当前音量(0-15)
-    };//RDA5807参数句柄，需要定时更新或上传
+    uint8_t Cur_Vol;                            //当前音量(0-15)
+};//RDA5807参数句柄，需要定时更新或上传
 
-    /* 声明给外部使用的变量 */
-    extern uint16_t Register[6];
+/* 声明给外部使用的变量 */
+extern uint16_t Register[6];
 
-    /* 声明给外部使用的函数 */
-    //硬件控制
-    void RDA5807_Init(void);
-    void FM_WR_AllReg(void);
-    void RDA5807_PowerOn(void);
-    void RDA5807_PowerOff(void);
-    //声音控制
-    void RDA5807_SetMute(uint8_t Mute);     //
-    void RDA5807_SetMono(uint8_t Mono);     //声道控制
-    void RDA5807_SetVolume(uint8_t level);
-    uint8_t RDA5807_IncVolume(void);
-    uint8_t RDA5807_DecVolume(void);
-    //频率控制
-    void RDA5807_SetStartFreq(void);
-    //void RDA5807_SetFreq(uint32_t Frequency);
-    void RDA5807_SetFreq(uint16_t Frequency);
-    //uint32_t RDA5807_ChanToFreq(uint16_t Chan,uint8_t Band,uint8_t Step);
-    //uint32_t RDA5807_RegToFreq(uint16_t RegisterVal);
-    uint16_t RDA5807_ChanToFreq(uint16_t Chan,uint8_t Band,uint8_t Step);
-    uint16_t RDA5807_FreqToReg(uint16_t Frequency, uint8_t Tune);
-    uint16_t RDA5807_RegToFreq(uint16_t RegisterVal);
-    uint8_t RDA5807_CheckReg03(uint16_t Reg03);
-    void RDA5807_Reg03Tune(uint16_t Reg03);
-    //搜台控制
-    void RDA5807_SeekThSet(uint8_t RSSI);
-    void RDA5807_SeekDirection(uint8_t Direction);
-    void RDA5807_StartSeek(void);
-    void RDA5807_InterruptSeek(void);
-    uint16_t RDA5807_SeekChannel(void);
-    //获取信息
-    uint16_t RDA5807_GetFreqReg(void);
-    uint8_t RDA5807_GetSigLvl(void);
-    uint8_t RDA5807_GetStep(void);
-    void RDA5807_GetBand(uint8_t* Band);
-    uint8_t RDA5807_GetVolume(void);
-    uint8_t RDA5807_CheckSTC(void);
+/* 声明给外部使用的函数 */
+//硬件控制
+void RDA5807_Init(void);
+void FM_WR_AllReg(void);
+void RDA5807_PowerOn(void);
+void RDA5807_PowerOff(void);
+//声音控制
+void RDA5807_SetMute(uint8_t Mute);     //
+void RDA5807_SetMono(uint8_t Mono);     //声道控制
+void RDA5807_SetVolume(uint8_t level);
+uint8_t RDA5807_IncVolume(void);
+uint8_t RDA5807_DecVolume(void);
+//频率控制
+void RDA5807_SetStartFreq(void);
+//void RDA5807_SetFreq(uint32_t Frequency);
+void RDA5807_SetFreq(uint16_t Frequency);
+//uint32_t RDA5807_ChanToFreq(uint16_t Chan,uint8_t Band,uint8_t Step);
+//uint32_t RDA5807_RegToFreq(uint16_t RegisterVal);
+uint16_t RDA5807_ChanToFreq(uint16_t Chan,uint8_t Band,uint8_t Step);
+uint16_t RDA5807_FreqToReg(uint16_t Frequency, uint8_t Tune);
+uint16_t RDA5807_RegToFreq(uint16_t RegisterVal);
+uint8_t RDA5807_CheckReg03(uint16_t Reg03);
+void RDA5807_Reg03Tune(uint16_t Reg03);
+//搜台控制
+void RDA5807_SeekThSet(uint8_t RSSI);
+void RDA5807_SeekDirection(uint8_t Direction);
+void RDA5807_StartSeek(void);
+void RDA5807_InterruptSeek(void);
+uint16_t RDA5807_SeekChannel(void);
+//获取信息
+uint16_t RDA5807_GetFreqReg(void);
+uint8_t RDA5807_GetSigLvl(void);
+uint8_t RDA5807_GetStep(void);
+void RDA5807_GetBand(uint8_t* Band);
+uint8_t RDA5807_GetVolume(void);
+uint8_t RDA5807_CheckSTC(void);
 
 #ifdef __cplusplus
 }
