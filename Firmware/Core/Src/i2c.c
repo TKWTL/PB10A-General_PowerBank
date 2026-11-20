@@ -199,8 +199,14 @@ static HAL_StatusTypeDef i2c_hal_start(uint8_t op,uint16_t addr,uint8_t reg,uint
 
 static uint8_t i2c_submit(uint8_t op,uint16_t addr,uint8_t reg,uint8_t *data,uint16_t n,volatile uint8_t *flag) {
     HAL_StatusTypeDef result;
-    if(s_state!=I2C_IDLE || s_lock_depth || HAL_I2C_GetState(&hi2c1)!=HAL_I2C_STATE_READY) return 0u;
     if(!data || !flag) return 0u;
+    /* Permanent HAL abort failure: complete immediately with ERROR rather
+     * than leaving every waiting protothread stuck on bus admission. */
+    if(s_state==I2C_POISONED) {
+        *flag=I2C_ASYNC_ERROR;
+        return 1u;
+    }
+    if(s_state!=I2C_IDLE || s_lock_depth || HAL_I2C_GetState(&hi2c1)!=HAL_I2C_STATE_READY) return 0u;
     *flag=I2C_ASYNC_PENDING;
     s_async_flag=flag;
     s_address=addr;
