@@ -12,6 +12,11 @@ static struct SW6306_StatusTypedef SW6306_Status;//SW6306状态全局变量
 static uint8_t s_i2c_fail_groups;
 /* 每次StatusLoad完整读成功才递增；SW6306任务靠序号排除旧镜像。 */
 static uint32_t s_status_read_seq;
+static uint32_t s_port_read_seq;
+static uint8_t s_io_failed; /* sticky until SW6306_OperationReset */
+void SW6306_OperationReset(void) { s_io_failed=0u; }
+uint8_t SW6306_LastOperationOK(void) { return (uint8_t)(s_io_failed==0u); }
+uint32_t SW6306_PortReadSequence(void) { return s_port_read_seq; }
 static void sw6306_i2c_failed(void) {
     if (s_i2c_fail_groups < SW6306_I2C_FAILURE_LIMIT) ++s_i2c_fail_groups;
     if (s_i2c_fail_groups >= SW6306_I2C_FAILURE_LIMIT)
@@ -50,6 +55,9 @@ SW6306_RET SW6306_ByteWrite(SW6306_ARGS(uint16_t reg, uint8_t data)) {
     SW6306_Status.sendbuf[0] = data;
     SW6306_EXEC(SW6306_I2C_Transmit(SW6306_I2C_ADDR, reg, (uint8_t*)SW6306_Status.sendbuf, 1, (uint8_t*)&SW6306_Status.flag));
     SW6306_UNTIL(SW6306_Status.flag);
+#ifdef SW6306_USE_PROTOTHREAD
+    if(SW6306_Status.flag!=I2C_ASYNC_DONE) s_io_failed=1u;
+#endif
     SW6306_FUNC_END;
 }
 
@@ -57,6 +65,9 @@ SW6306_RET SW6306_ByteRead(SW6306_ARGS(uint16_t reg, volatile uint8_t *data)) {
     SW6306_FUNC_BEGIN;
     SW6306_EXEC(SW6306_I2C_Receive(SW6306_I2C_ADDR, reg, (uint8_t*)data, 1, (uint8_t*)&SW6306_Status.flag));
     SW6306_UNTIL(SW6306_Status.flag);
+#ifdef SW6306_USE_PROTOTHREAD
+    if(SW6306_Status.flag!=I2C_ASYNC_DONE) s_io_failed=1u;
+#endif
     SW6306_FUNC_END;
 }
 
@@ -64,6 +75,9 @@ SW6306_RET SW6306_BytesRead(SW6306_ARGS(uint16_t reg, uint8_t *pdata, uint16_t l
     SW6306_FUNC_BEGIN;
     SW6306_EXEC(SW6306_I2C_Receive(SW6306_I2C_ADDR, reg, pdata, len, (uint8_t*)&SW6306_Status.flag));
     SW6306_UNTIL(SW6306_Status.flag);
+#ifdef SW6306_USE_PROTOTHREAD
+    if(SW6306_Status.flag!=I2C_ASYNC_DONE) s_io_failed=1u;
+#endif
     SW6306_FUNC_END;
 }
 
@@ -75,12 +89,17 @@ SW6306_RET SW6306_RegsetSwitch(SW6306_ARGS(uint16_t regset)) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
     SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_REV, SW6306_Status.sendbuf);
+#ifdef SW6306_USE_PROTOTHREAD
+    if(s_io_failed) SW6306_FUNC_ABORT;
+#endif
     if(regset > 0xFFU) {
         if(SW6306_Status.sendbuf[0] == 0x01)//需要读写高位地址但目前是低地址
             {
             SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_WREN,0x81);
 #ifndef SW6306_USE_PROTOTHREAD
             Millis_Delay(2U); /* >=50us */
+#else
+            THRD_DELAY(2u);
 #endif
         }
     }
@@ -90,6 +109,8 @@ SW6306_RET SW6306_RegsetSwitch(SW6306_ARGS(uint16_t regset)) {
             SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_LREGSET,0x00);
 #ifndef SW6306_USE_PROTOTHREAD
             Millis_Delay(2U); /* >=50us */
+#else
+            THRD_DELAY(2u);
 #endif
         }
     }
@@ -105,6 +126,9 @@ SW6306_RET SW6306_ByteModify(SW6306_ARGS(uint16_t reg, uint8_t mask, uint8_t dat
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
     SW6306_SPAWN_ARGS(SW6306_ByteRead, reg, SW6306_Status.sendbuf);
+#ifdef SW6306_USE_PROTOTHREAD
+    if(s_io_failed) SW6306_FUNC_ABORT;
+#endif
     SW6306_Status.sendbuf[0] = (SW6306_Status.sendbuf[0] &(~mask)) | (data & mask);
     SW6306_SPAWN_ARGS(SW6306_ByteWrite, reg, SW6306_Status.sendbuf[0]);
     SW6306_MUTEX_GIVE;
