@@ -3,7 +3,7 @@
  * Multi-step operations hold the I2C1 bus lock for the full sequence.
  */
 #include "bmp180.h"
-#include "bsp_i2c.h"
+#include "i2c.h"
 #include "millis.h"
 #include <math.h>
 static uint8_t s_ok,s_oss=3u,s_result;

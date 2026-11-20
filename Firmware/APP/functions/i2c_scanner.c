@@ -11,7 +11,7 @@
  */
 #include "i2c_scanner.h"
 #include "millis.h"
-#include "bsp_i2c.h"
+#include "i2c.h"
 #include "display/dispDriver.h"
 #include "fonts/fonts.h"
 #include "pm_api.h"

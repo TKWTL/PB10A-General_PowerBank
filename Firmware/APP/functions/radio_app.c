@@ -7,7 +7,7 @@
 #include "radio_app.h"
 #include "core/ui.h" /* MiaoUI Q10 PID animations */
 #include "rda5807m.h"
-#include "bsp_i2c.h"
+#include "i2c.h"
 #include "pm_api.h"
 #include "millis.h"
 #include "main.h"

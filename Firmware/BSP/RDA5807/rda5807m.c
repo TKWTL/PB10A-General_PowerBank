@@ -1,6 +1,6 @@
 /* 包含自定义头文件 */
 #include "rda5807m.h"
-#include "bsp_i2c.h"
+#include "i2c.h"
 #include "millis.h"
 
 /* 全局变量 */

@@ -28,7 +28,7 @@ do { SC7A20_Status.initialized = 0; SC7A20_Status.last_error = SC7A20_ERR_NOT_ON
 #endif
 
 /*包含自己的I2C驱动库*/
-#include "bsp_i2c.h"
+#include "i2c.h"
 
 //外部库给出的I2C读写函数
 #ifdef SC7A20_USE_PROTOTHREAD   //允许挂起    

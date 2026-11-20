@@ -23,7 +23,7 @@ extern "C" {
 #endif
 
 /*包含自己的I2C驱动库*/
-#include "bsp_i2c.h"
+#include "i2c.h"
 
 /* SW6306将0x000~0x0FF与0x100~0x1FF映射到同一个8位I2C寄存器地址空间，
  * 由0x24[7]/0x1FF寄存器切换页。驱动内部保留16位逻辑地址，用于判断页；

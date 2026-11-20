@@ -12,7 +12,7 @@
 #include "sc7a20.h"
 #include "mmc5603.h"
 #include "bmp180.h"
-#include "bsp_i2c.h"
+#include "i2c.h"
 static uint8_t s_sc_suspended,s_sc_odr;
 static uint8_t s_mmc_suspended,s_mmc_odr,s_mmc_ctrl2;
 

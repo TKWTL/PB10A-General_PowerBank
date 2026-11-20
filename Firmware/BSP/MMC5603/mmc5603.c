@@ -3,7 +3,7 @@
  * All multi-step operations hold one transaction lock across I2C frames.
  */
 #include "mmc5603.h"
-#include "bsp_i2c.h"
+#include "i2c.h"
 uint8_t MMC5603_ReadReg(uint8_t reg,uint8_t *value) {
     if(!value)return I2C_ERROR;
     return I2C_RegRead(MMC5603_I2C_ADDR,reg,value,1u);
