@@ -3,24 +3,17 @@
  */
 #include "system_algo.h"
 #include "beep_algo.h"
-#include "time_algo.h"
 #include "power_algo.h"
-#include "millis.h"
 #include "main.h"
 #include "core/ui.h"
-#include "display/dispDriver.h"
-#include <stdio.h>
-static ui_item_t s_click_item,s_mute_item,s_reset_item,s_uptime_item;
+static ui_item_t s_click_item,s_mute_item,s_reset_item;
 static ui_item_t s_vdda_item,s_temp_item;
 static ui_data_t s_vdda_data,s_temp_data;
 static ui_element_t s_vdda_element,s_temp_element;
-static int s_vdda_mv,s_die_temp_c;
+static int s_vdda_mv,s_die_temp_c10;
 static ui_data_t s_click_data,s_mute_data;
 static ui_element_t s_click_element,s_mute_element;
 static uint8_t s_click_on,s_muted;
-static char s_uptime_text[32]="Uptime: --";
-static uint32_t s_last_seconds=0xFFFFFFFFu,s_last_poll;
-static uint8_t s_stats_ready;
 static void system_click_changed(ui_t *ui)
 { (void)ui;beep_set_key_enabled(s_click_on); }
 static void system_mute_changed(ui_t *ui)
@@ -57,43 +50,21 @@ void System_AddSettingsItems(ui_page_t *page) {
     AddItem(" System Reset",UI_ITEM_ONCE_FUNCTION,0,&s_reset_item,page,0,system_reset_selected);
 }
 
-static void system_uptime_page(ui_t *ui) {
-    uint8_t fg;
-    if(!ui||ui->action!=UI_ACTION_NONE)return;
-    Disp_ClearBuffer();
-    fg=(uint8_t)(ui->bgColor^1u);
-    Disp_SetDrawColor(&fg);
-    Disp_SetFont(UI_FONT);
-    Disp_DrawStr(0,13,s_uptime_text);
-    Disp_SendBuffer();
-}
-
 void System_AddStatisticsItems(ui_page_t *page) {
     if(!page)return;
-    AddItem(" Uptime",UI_ITEM_WORD,0,&s_uptime_item,page,0,system_uptime_page);
     s_vdda_data.name=" VDDA mV";s_vdda_data.ptr=&s_vdda_mv;
     s_vdda_data.dataType=UI_DATA_INT;s_vdda_data.actionType=UI_DATA_ACTION_RO;
     s_vdda_element.data=&s_vdda_data;
     Create_element(&s_vdda_item,&s_vdda_element);
     AddItem(" VDDA mV",UI_ITEM_DATA,0,&s_vdda_item,page,0,0);
-    s_temp_data.name=" Die Temp C";s_temp_data.ptr=&s_die_temp_c;
-    s_temp_data.dataType=UI_DATA_INT;s_temp_data.actionType=UI_DATA_ACTION_RO;
+    s_temp_data.name=" Die Temp C";s_temp_data.ptr=&s_die_temp_c10;
+    s_temp_data.dataType=UI_DATA_FLOAT;s_temp_data.actionType=UI_DATA_ACTION_RO;
+    s_temp_data.decimals=1u;
     s_temp_element.data=&s_temp_data;
     Create_element(&s_temp_item,&s_temp_element);
     AddItem(" Die Temp C",UI_ITEM_DATA,0,&s_temp_item,page,0,0);
-    s_stats_ready=1u;s_last_poll=Millis()-100u;
 }
 
 void System_Poll(void) {
-    uint32_t seconds,now=Millis();
-    char value[24];
-    if(!s_stats_ready||(uint32_t)(now-s_last_poll)<100u)return;
-    s_last_poll=now;
-    PowerAlgo_GetSystemAdc(&s_vdda_mv,&s_die_temp_c,0);
-    if(!Time_GetUptimeSeconds(&seconds))
-        { (void)snprintf(s_uptime_text,sizeof(s_uptime_text),"Uptime: RTC error");return; }
-    if(seconds==s_last_seconds)return;
-    s_last_seconds=seconds;
-    Time_FormatDuration(seconds,value,sizeof(value));
-    (void)snprintf(s_uptime_text,sizeof(s_uptime_text),"Uptime: %s",value);
+    PowerAlgo_GetSystemAdc(&s_vdda_mv,&s_die_temp_c10,0);
 }

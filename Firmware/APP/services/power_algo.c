@@ -127,30 +127,28 @@ static const pm_device_node_t s_node={
 };
 
 /************************* 附加 A 口与 ADC1 DMA *************************/
-/* Auxiliary A-port PM and ADC1 DMA sampling, merged from power_adc_algo. */
+/* ADC rank order: PA0 current, PA5 divided voltage, die temperature,
+ * VREFINT. DMA completion only signals the cooperative owner thread. */
 #define POWER_ADC_TIMEOUT_MS 50u
+#define AUX_A_VDIV_HIGH 680u
+#define AUX_A_VDIV_LOW  220u
+#define AUX_A_CURRENT_MV_PER_A 500u
 
-/* DMA writes four 16-bit ADC results; static storage stays alive across IRQs. */
 static uint16_t s_dma[4] __attribute__((aligned(4)));
-/* 0 = pending, 1 = transfer completed, 2 = ADC/DMA error callback. */
-static volatile uint8_t s_transfer_result;
-static uint8_t s_active, s_suspended, s_cal_failed;
+static volatile uint8_t s_transfer_result; /* 0 pending, 1 done, 2 error */
+static uint8_t s_active,s_suspended,s_adc_initialized;
+static uint8_t s_aux_inserted,s_aux_enabled,s_system_adc_valid;
 static uint32_t s_started_at;
-static int s_pa0_raw, s_pa5_raw, s_usb_mv;
-static int s_vdda_mv,s_die_temp_c;
-static uint8_t s_system_adc_valid;
-static int s_adc_state; /* 0 OK,1 cal,2 start,3 timeout,4 callback,5 pending */
-static int s_adc_hal_error, s_dma_hal_error;
-static ui_item_t s_pa0_item,s_pa5_item,s_mv_item,s_state_item;
-static ui_item_t s_adc_hal_item,s_dma_hal_item;
-static ui_data_t s_data[6];
-static ui_element_t s_elements[6];
+static int s_aux_voltage_mv,s_aux_current_ma;
+static int s_vdda_mv,s_die_temp_c10;
+static ui_item_t s_aux_voltage_item,s_aux_current_item;
+static ui_data_t s_aux_data[2];
+static ui_element_t s_aux_elements[2];
 
 static pm_hook_result_t power_adc_suspend(void *ctx) {
     HAL_StatusTypeDef result;
     (void)ctx;
     s_suspended=1u;
-    /* Remove auxiliary A-port power only after ADC/DMA is stopped. */
     if(s_active) {
         result=HAL_ADC_Stop_DMA(&hadc1);
         s_active=0u;
@@ -160,13 +158,15 @@ static pm_hook_result_t power_adc_suspend(void *ctx) {
         result=HAL_ADC_Stop(&hadc1);
     if(result!=HAL_OK)return PM_HOOK_ERROR;
     LL_GPIO_ResetOutputPin(SUB_EN_GPIO_Port,SUB_EN_Pin);
+    s_aux_enabled=0u;
+    s_system_adc_valid=0u;
     return PM_HOOK_DONE;
 }
 
 static pm_hook_result_t power_adc_resume(void *ctx) {
     (void)ctx;
-    /* STM32 clock/tick restoration precedes this callback. */
     LL_GPIO_SetOutputPin(SUB_EN_GPIO_Port,SUB_EN_Pin);
+    s_aux_enabled=1u;
     s_suspended=0u;
     return PM_HOOK_DONE;
 }
@@ -175,82 +175,72 @@ static const pm_device_node_t s_power_adc_pm={
     "power-adc",0,power_adc_suspend,power_adc_resume,0,200u,0,0
 };
 
-static void power_adc_init(void) {
+/* Invoked once by ADC_RTC_AuxAThread before its for(;;). */
+void PowerAlgo_AdcInit(void) {
     LL_GPIO_SetOutputPin(SUB_EN_GPIO_Port,SUB_EN_Pin);
     s_active=0u;s_suspended=0u;s_transfer_result=0u;
-    s_pa0_raw=0;s_pa5_raw=0;s_usb_mv=0;
-    s_vdda_mv=0;s_die_temp_c=0;s_system_adc_valid=0u;
-    s_adc_state=5;s_adc_hal_error=0;s_dma_hal_error=0;
-    s_cal_failed=(HAL_ADCEx_Calibration_Start(&hadc1)!=HAL_OK)?1u:0u;
-    if(s_cal_failed) {
-        s_adc_state=1;
-        s_adc_hal_error=(int)HAL_ADC_GetError(&hadc1);
-    }
+    s_aux_enabled=1u;s_aux_inserted=0u;
+    s_aux_voltage_mv=0;s_aux_current_ma=0;
+    s_vdda_mv=0;s_die_temp_c10=0;s_system_adc_valid=0u;
+    s_adc_initialized=(uint8_t)(HAL_ADCEx_Calibration_Start(&hadc1)==HAL_OK);
 }
 
 uint8_t PowerAlgo_AdcIsSuspended(void){return s_suspended;}
 
 uint8_t PowerAlgo_AdcBeginScan(void) {
-    HAL_StatusTypeDef result;
-    if(s_suspended)return 0u;
+    if(s_suspended || !s_adc_initialized)return 0u;
     s_transfer_result=0u;
-    /* Keep the previous scan's error snapshot until this scan settles. */
-    s_active=1u; /* Set BEFORE start: callback may run immediately. */
+    s_active=1u; /* Set before HAL start: IRQ completion can be immediate. */
     s_started_at=Millis();
-    result=HAL_ADC_Start_DMA(&hadc1,(uint32_t *)(void *)s_dma,4u);
-    if(result!=HAL_OK) {
-        s_adc_hal_error=(int)HAL_ADC_GetError(&hadc1);
-        s_dma_hal_error=(int)HAL_DMA_GetError(hadc1.DMA_Handle);
-        s_adc_state=2;
-        (void)HAL_ADC_Stop_DMA(&hadc1);
+    if(HAL_ADC_Start_DMA(&hadc1,(uint32_t *)(void *)s_dma,4u)!=HAL_OK) {
         s_active=0u;
+        s_system_adc_valid=0u;
+        (void)HAL_ADC_Stop_DMA(&hadc1);
         return 0u;
     }
     return 1u;
 }
 
-/* Called by ADC coroutine while active; 0 => yield, 1 => this scan done.
- * Neither spin-waits nor starts another conversion. */
+/* The cooperative owner waits for IRQ completion and calculates all values.
+ * No fixed 3300 mV assumption: rank 4 VREFINT determines measured VDDA. */
 uint8_t PowerAlgo_AdcScanSettled(void) {
+    uint32_t pin_voltage_mv,pin_current_mv;
+    int32_t cal_span,scaled_temp10;
     uint8_t result;
     if(s_suspended || !s_active)return 1u;
     result=s_transfer_result;
-    if(result==0u && (uint32_t)(Millis()-s_started_at)<=POWER_ADC_TIMEOUT_MS)
+    if(result==0u && (uint32_t)(Millis()-s_started_at)<POWER_ADC_TIMEOUT_MS)
         return 0u;
-
-    if(result!=1u) {
-        s_system_adc_valid=0u;
-        s_adc_hal_error=(int)HAL_ADC_GetError(&hadc1);
-        s_dma_hal_error=(int)HAL_DMA_GetError(hadc1.DMA_Handle);
-    }
-    /* A completed NORMAL DMA transfer is already idle: do not stop and
-     * disable the ADC after a successful one-shot sequence. The next
-     * HAL_ADC_Start_DMA() re-arms DMA for the following 500ms sample.
-     * Abort only on a failed or timed-out sequence. */
-    if(result!=1u)
-        (void)HAL_ADC_Stop_DMA(&hadc1);
     s_active=0u;
-    if(result==1u) {
-        /* Factory VREFINT and temperature calibration, rank 4 then rank 3. */
-        if(s_dma[3]) {
-            s_vdda_mv=(int)__HAL_ADC_CALC_VREFANALOG_VOLTAGE(s_dma[3],ADC_RESOLUTION_12B);
-            s_die_temp_c=(int)__HAL_ADC_CALC_TEMPERATURE((uint32_t)s_vdda_mv,s_dma[2],ADC_RESOLUTION_12B);
-            s_system_adc_valid=1u;
-        }
-        else s_system_adc_valid=0u;
-        s_pa0_raw=(int)s_dma[0];
-        s_pa5_raw=(int)s_dma[1];
-        /* Vout_mV = raw*3300/4095*(680+220)/220,
-         * equivalent to raw * 148500 / 45045; fits uint32_t. */
-        s_usb_mv=(int)(((uint32_t)s_dma[1]*148500u+22522u)/45045u);
-        s_adc_hal_error=0;
-        s_dma_hal_error=0;
-        s_adc_state=s_cal_failed?1:0;
+    if(result!=1u) {
+        (void)HAL_ADC_Stop_DMA(&hadc1);
+        s_system_adc_valid=0u;
+        return 1u;
     }
-    else if(result==2u)
-        s_adc_state=4;
-    else
-        s_adc_state=3;
+    if(s_dma[3]==0u) {
+        s_system_adc_valid=0u;
+        return 1u;
+    }
+    s_vdda_mv=(int)__HAL_ADC_CALC_VREFANALOG_VOLTAGE(s_dma[3],ADC_RESOLUTION_12B);
+    pin_current_mv=((uint32_t)s_dma[0]*(uint32_t)s_vdda_mv+2047u)/4095u;
+    pin_voltage_mv=((uint32_t)s_dma[1]*(uint32_t)s_vdda_mv+2047u)/4095u;
+    /* PA0: 0.5 V/A (500 mV/A). PA5: 680 k / 220 k divider. */
+    s_aux_current_ma=(int)(pin_current_mv*1000u/AUX_A_CURRENT_MV_PER_A);
+    s_aux_voltage_mv=(int)((pin_voltage_mv*
+        (AUX_A_VDIV_HIGH+AUX_A_VDIV_LOW)+AUX_A_VDIV_LOW/2u)/AUX_A_VDIV_LOW);
+
+    /* The HAL integer helper truncates to whole degrees. Use the same
+     * factory TS_CAL1/TS_CAL2 values but retain a tenth-degree digit. */
+    cal_span=(int32_t)*TEMPSENSOR_CAL2_ADDR-(int32_t)*TEMPSENSOR_CAL1_ADDR;
+    if(cal_span!=0) {
+        scaled_temp10=(int32_t)(((uint32_t)s_dma[2]*(uint32_t)s_vdda_mv*10u+
+            TEMPSENSOR_CAL_VREFANALOG/2u)/TEMPSENSOR_CAL_VREFANALOG);
+        s_die_temp_c10=(int)(TEMPSENSOR_CAL1_TEMP*10+
+            (scaled_temp10-(int32_t)*TEMPSENSOR_CAL1_ADDR*10)*
+            (TEMPSENSOR_CAL2_TEMP-TEMPSENSOR_CAL1_TEMP)/cal_span);
+        s_system_adc_valid=1u;
+    }
+    else s_system_adc_valid=0u;
     return 1u;
 }
 
@@ -264,31 +254,34 @@ void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc) {
         s_transfer_result=2u;
 }
 
+/* PA7 is pulled up: low indicates an inserted auxiliary-A load.
+ * The existing RUN/UI_OFF -> STOP1 enable policy is unchanged. */
+void PowerAlgo_AuxA_Service(void) {
+    s_aux_inserted=(uint8_t)!LL_GPIO_IsInputPinSet(SUB_INDET_GPIO_Port,SUB_INDET_Pin);
+    if(s_suspended)return;
+    LL_GPIO_SetOutputPin(SUB_EN_GPIO_Port,SUB_EN_Pin);
+    s_aux_enabled=1u;
+}
+
+uint8_t PowerAlgo_AuxAIsInserted(void){return s_aux_inserted;}
+uint8_t PowerAlgo_AuxAIsEnabled(void){return s_aux_enabled;}
+
 void PowerAlgo_AddStatisticsItems(ui_page_t *page) {
-    static ui_item_t *const items[6]={
-        &s_pa0_item,&s_pa5_item,&s_mv_item,&s_state_item,
-        &s_adc_hal_item,&s_dma_hal_item
-    };
-    static int *const values[6]={
-        &s_pa0_raw,&s_pa5_raw,&s_usb_mv,&s_adc_state,
-        &s_adc_hal_error,&s_dma_hal_error
-    };
-    static const char *const names[6]={
-        " PA0 I raw"," PA5 V raw"," Vout~ mV",
-        " ADC Err"," ADC HAL"," DMA HAL"
-    };
+    static const char *const names[2]={" Aux-A V mV"," Aux-A I mA"};
+    int *values[2]={&s_aux_voltage_mv,&s_aux_current_ma};
     uint8_t i;
     if(!page)return;
-    for(i=0u;i<6u;i++) {
-        s_data[i].name=names[i];
-        s_data[i].ptr=values[i];
-        s_data[i].dataType=UI_DATA_INT;
-        s_data[i].actionType=UI_DATA_ACTION_RO;
-        s_data[i].function=0;
-        s_data[i].decimals=0u;
-        s_elements[i].data=&s_data[i];
-        Create_element(items[i],&s_elements[i]);
-        AddItem(names[i],UI_ITEM_DATA,0,items[i],page,0,0);
+    for(i=0u;i<2u;i++) {
+        s_aux_data[i].name=names[i];
+        s_aux_data[i].ptr=values[i];
+        s_aux_data[i].dataType=UI_DATA_INT;
+        s_aux_data[i].actionType=UI_DATA_ACTION_RO;
+        s_aux_data[i].function=0;
+        s_aux_data[i].decimals=0u;
+        s_aux_elements[i].data=&s_aux_data[i];
+        Create_element(i==0u?&s_aux_voltage_item:&s_aux_current_item,&s_aux_elements[i]);
+        AddItem(names[i],UI_ITEM_DATA,0,
+            i==0u?&s_aux_voltage_item:&s_aux_current_item,page,0,0);
     }
 }
 
@@ -415,7 +408,6 @@ void PowerAlgo_GetMonitor(power_monitor_t *out) {
 
 /**************************** 服务注册与初始化 ***************************/
 void PowerAlgo_Init(void) {
-    power_adc_init(); /* assert PA6 and calibrate ADC1 */
     memset(&s_monitor,0,sizeof(s_monitor));
     s_monitor.protocol="--";
     s_sw_phase=0u;s_capacity_div=1u;s_idle_verified=0u;
@@ -429,8 +421,8 @@ void PowerAlgo_Init(void) {
     (void)pm_device_register(&s_power_adc_pm); /* SUB_EN + ADC / order 200 */
 }
 
-void PowerAlgo_GetSystemAdc(int *vdda_mv,int *die_temp_c,uint8_t *valid) {
+void PowerAlgo_GetSystemAdc(int *vdda_mv,int *die_temp_c10,uint8_t *valid) {
     if(vdda_mv)*vdda_mv=s_vdda_mv;
-    if(die_temp_c)*die_temp_c=s_die_temp_c;
+    if(die_temp_c10)*die_temp_c10=s_die_temp_c10;
     if(valid)*valid=(uint8_t)(s_system_adc_valid && !s_suspended);
 }

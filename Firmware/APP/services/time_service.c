@@ -59,6 +59,14 @@ static ui_page_t s_time_page;
 static ui_data_t s_data[6];
 static ui_element_t s_element[6];
 static const char *const s_names[6]={"Second","Minute","Hour","Date","Month","Year"};
+uint8_t RTC_IsEditing(const ui_t *ui) {
+    uint8_t i;
+    if(!ui || (ui->menuState!=UI_ITEM_RUNING &&
+        ui->menuState!=UI_ITEM_DRAWING))return 0u;
+    for(i=0u;i<6u;i++)if(ui->nowItem==&s_fields[i])return 1u;
+    return 0u;
+}
+
 void Create_TimeSet_Parameters(ui_t *ui) {
     int *ptr[6]={&sTime.Seconds,&sTime.Minutes,&sTime.Hours,
         &sTime.Date,&sTime.Month,&sTime.Year};

@@ -20,7 +20,6 @@
 #include "radio_app.h"
 
 static ui_t s_ui;
-static uint32_t s_last_time_update_ms;
 static coro_scheduler_t s_scheduler;
 static coro_pt_t s_states[7];
 
@@ -38,14 +37,6 @@ THRD_DECLARE(MiaoUiThread) {
     THRD_BEGIN;
     for(;;) {
         if(SSD1306_Display_IsReady() && !SSD1306_Display_FrameBusy() && !pm_api_ui_should_block()) {
-            /* Live RTC display/edit fields, but never overwrite a currently
-             * edited field with an asynchronous RTC read. */
-            if((uint32_t)(Millis()-s_last_time_update_ms)>=1000u &&
-                s_ui.menuState!=UI_ITEM_RUNING &&
-                s_ui.menuState!=UI_ITEM_DRAWING) {
-                s_last_time_update_ms=Millis();
-                RTC_UpdateTime();
-            }
             ui_loop(&s_ui);
         }
         THRD_DELAY(20u);
@@ -78,22 +69,29 @@ THRD_DECLARE(SystemServiceThread) {
                 Radio_AppPoll();
         }
         beep_poll(now);
-        System_Poll();
         THRD_DELAY(1u);
     }
     THRD_END;
 }
-/* Exactly one four-rank ADC1 scan per coroutine iteration. The ADC/DMA
- * IRQ signals completion while the coroutine yields to all other threads.
- * The 500ms delay runs regardless of success or failure, and also when the
- * display is off. STOP1 stops ADC and disables SUB_EN via power_algo. */
-THRD_DECLARE(PowerADCThread) {
+/* ADC/DMA, RTC and auxiliary USB-A share a 500 ms service cadence.
+ * The ADC settles by IRQ while the other coroOS threads continue running.
+ * RTC readout is halved to 1 Hz; the Time editor keeps its own write API. */
+static uint8_t s_rtc_divider;
+THRD_DECLARE(ADC_RTC_AuxAThread) {
     THRD_BEGIN;
+    PowerAlgo_AdcInit();
+    s_rtc_divider=0u;
+    RTC_UpdateTime();
     for(;;) {
-        if(!PowerAlgo_AdcIsSuspended()) {
-            (void)PowerAlgo_AdcBeginScan();
+        if(!PowerAlgo_AdcIsSuspended() && PowerAlgo_AdcBeginScan()) {
             THRD_UNTIL(PowerAlgo_AdcScanSettled());
         }
+        if(++s_rtc_divider>=2u) {
+            s_rtc_divider=0u;
+            if(!RTC_IsEditing(&s_ui))RTC_UpdateTime();
+        }
+        PowerAlgo_AuxA_Service();
+        System_Poll();
         THRD_DELAY(500u);
     }
     THRD_END;
@@ -113,7 +111,7 @@ THRD_DECLARE(SensorServiceThread) {
 /*************************** 线程表与入口 ***************************/
 static const coro_thread_fn_t s_threads[] = {
     OledServiceThread, MiaoUiThread, PowerManagerThread,
-    SystemServiceThread, PowerADCThread, PowerAlgo_SW6306Thread,
+    SystemServiceThread, ADC_RTC_AuxAThread, PowerAlgo_SW6306Thread,
     SensorServiceThread
 };
 
@@ -123,14 +121,13 @@ void APP_TaskInit(void) {
     indevInit();
     s_last_key_tick=Millis();
     s_last_radio_poll=Millis();
-    Time_Init(); /* one-shot uptime baseline */
+    Time_Init(); /* keep the underlying RTC uptime API, without a UI item */
     /* Sensors initialize through their own nonblocking service actors. */
     PowerAlgo_Init();  /* SW6306 monitor, sleep gating, auxiliary A ADC. */
     SC7A20Algo_Init();
     MMC5603Algo_Init();
     BMP180Algo_Init();
     RadioAlgo_Init();  /* RDA5807 powers down before UI_OFF. */
-    RTC_UpdateTime();
     MiaoUi_Setup(&s_ui);
     pm_api_init();
     CoroOS_Init(&s_scheduler, s_threads, s_states,

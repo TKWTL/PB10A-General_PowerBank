@@ -19,9 +19,14 @@ void PowerAlgo_Init(void);
 /* SW6306 owner thread: cooperative Init/ADC/Status/Port/Power/Capacity. */
 char PowerAlgo_SW6306Thread(coro_pt_t *pt);
 void PowerAlgo_GetMonitor(power_monitor_t *out);
+/* ADC_RTC_AuxAThread owns ADC calibration, DMA sampling and Aux-A updates. */
+void PowerAlgo_AdcInit(void);
 uint8_t PowerAlgo_AdcIsSuspended(void);
 uint8_t PowerAlgo_AdcBeginScan(void);
 uint8_t PowerAlgo_AdcScanSettled(void);
+void PowerAlgo_AuxA_Service(void);
+uint8_t PowerAlgo_AuxAIsInserted(void);
+uint8_t PowerAlgo_AuxAIsEnabled(void);
 void PowerAlgo_AddStatisticsItems(ui_page_t *page);
-void PowerAlgo_GetSystemAdc(int *vdda_mv,int *die_temp_c,uint8_t *valid);
+void PowerAlgo_GetSystemAdc(int *vdda_mv,int *die_temp_c10,uint8_t *valid);
 #endif

@@ -69,7 +69,7 @@ static const uint8_t s_battery_icon[]={
 static uint16_t s_stations[RADIO_MAX_STATIONS]; /* units: 25 kHz */
 static uint8_t s_station_count;
 static uint16_t s_freq_units; /* 25 kHz units, as in Collar-Radio */
-static uint32_t s_state_at, s_last_query, s_last_rtc;
+static uint32_t s_state_at, s_last_query;
 static uint8_t s_error_code;
 
 static uint8_t radio_write16(uint8_t reg,uint16_t value) {
@@ -230,7 +230,7 @@ void Radio_AppStart(void) {
     s_full_scan=0u;s_scan_last_freq=0u;
     s_volume=RADIO_DEFAULT_VOLUME;s_stereo=0u;s_rssi=0u;
     s_freq_units=3480u;s_station_count=0u;
-    s_last_rtc=Millis();
+
     pm_api_set_sleep_block(RADIO_PM_BLOCK,1u); /* MCO clock must not stop */
     LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE,LL_RCC_MCO1_DIV_1);
     if(radio_write16(RDA5807_REG02,RDA5807_REG02_SRST)!=I2C_OK)
@@ -268,10 +268,6 @@ void Radio_AppPoll(void) {
     }
     if(s_state==RADIO_OFF)return;
     if(RadioAlgo_TakeIOError()){radio_fail(4u);return;}
-    if((uint32_t)(now-s_last_rtc)>=1000u) {
-        s_last_rtc=now;
-        RTC_UpdateTime();
-    }
     if(s_state==RADIO_RESET_WAIT) {
         if((uint32_t)(now-s_state_at)<50u)return;
         Register[0]|=(RDA5807_REG02_ENABLE|RDA5807_REG02_DMUTE|

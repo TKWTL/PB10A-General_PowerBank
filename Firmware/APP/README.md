@@ -30,7 +30,7 @@ Board-level current and wake reliability still require measurement.
 
 ### Devices, RTC and scanning
 
-SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) and RDA5807 (Collar-Radio-derived) use the HAL I2C1 adapter retained in `Core/Src/i2c.c` / `Core/Inc/i2c.h` USER CODE sections. SW6306 now initializes and is refreshed by an independent 100ms coroOS service thread. The I2C Scanner WORD page has regained the original Collar-Radio title and 16x8 address matrix. The Collar-Radio style Time page offers aligned integer date/time edits via HAL RTC. RTC uses backup-register DR0 validity marking so CubeMX-generated default time/date is applied only on a fresh backup domain. RTC fields refresh every second outside active parameter editing; RTC currently uses LSI and is not crystal-accurate. STOP1 and all hardware peripherals remain untested on board.
+SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) and RDA5807 (Collar-Radio-derived) use the HAL I2C1 adapter retained in `Core/Src/i2c.c` / `Core/Inc/i2c.h` USER CODE sections. SW6306 now initializes and is refreshed by an independent 100ms coroOS service thread. The I2C Scanner WORD page has regained the original Collar-Radio title and 16x8 address matrix. The Collar-Radio style Time page offers aligned integer date/time edits via HAL RTC. RTC uses backup-register DR0 validity marking so CubeMX-generated default time/date is applied only on a fresh backup domain. RTC fields refresh every second outside active parameter editing; RTC uses LSE in the current CubeMX configuration. STOP1 and all hardware peripherals remain untested on board.
 
 
 ### Application versus service separation
@@ -46,7 +46,7 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 - `APP/functions/` hosts independent user-facing MiaoUI applications. Powerbank displays cached SW6306 voltage, current, percentage and protocol; Radio is forced low-power at boot and starts only when its WORD page is entered (or kept running in explicit background ON mode)
 - `APP/i18n.c/h` defines a shared localization interface and placeholder English-only catalog
 - `BSP/BMP180` ports Collar-Radio compensation code with Cortex-M0+ safe endian calibration; `BSP/MMC5603` supports register I/O, product ID and low-power configuration
-- `Core/Src/i2c.c` USER CODE owns the HAL I2C1 transfer adapter and IRQ completion, including new `ASYNC_I2C_Transmit/Receive`, asynchronous scanner probe and bounded abort handling. Old `BSP/I2C/bsp_i2c.c/.h` were removed and Keil references updated. The sensor service actors now use IRQ-completed register transactions; legacy synchronous BSP helpers and the radio app still need separate migration before every I2C code path is asynchronous. **SW6306 now enables `SW6306_USE_PROTOTHREAD`** and uses the HAL IRQ asynchronous transfer API from its own exclusive service coroutine. Other modules must not directly run another SW6306 protothread concurrently.
+- `Core/Src/i2c.c` USER CODE owns the HAL I2C1 transfer adapter and IRQ completion, including new `ASYNC_I2C_Transmit/Receive`, asynchronous scanner probe and bounded abort handling. Old `BSP/I2C/bsp_i2c.c/.h` were removed and Keil references updated. The sensor and radio application paths use IRQ-completed register transactions; legacy synchronous compatibility functions remain in the BSP drivers. **SW6306 now enables `SW6306_USE_PROTOTHREAD`** and uses the HAL IRQ asynchronous transfer API from its own exclusive service coroutine. Other modules must not directly run another SW6306 protothread concurrently.
 - In the I2C transaction layer, synchronous `I2C_TransactionBegin/End` brackets non-yielding legacy transactions. Asynchronous operations use an independent single-in-flight admission check and persistent completion flags; on timeout, a stalled abort poisons the HAL adapter until reset. Do not use stack buffers for asynchronous transfers
 
 ### Seven icon entries
@@ -60,12 +60,19 @@ The temporary boot-time hardware test, including forced FM auto-seek, has
 been removed. Startup now always runs the standard MiaoUI/coroOS
 scheduler; Radio starts only when its menu application is entered.
 
-The auxiliary USB-A power and ADC sampler are now unified in
-`APP/services/power_algo.c`, along with SW6306 PM policy. The fifth
-coroOS thread keeps its four-rank ADC1 DMA scan and `THRD_DELAY(500)`
-cadence. PA6/SUB_EN is HIGH at startup (CubeMX GPIO initial state) and
-during RUN/UI_OFF. Before STOP1, the PM hook stops DMA/ADC and sets
-SUB_EN LOW. Wake first restores SUB_EN HIGH, then ADC sampling resumes.
+The fifth coroOS task, `ADC_RTC_AuxAThread` in `APP/app_task.c`,
+owns ADC calibration before its `for(;;)`, a four-rank DMA scan,
+HAL IRQ completion waiting, Aux-A status/enable management and RTC
+refresh. The base delay is 500 ms; RTC reads occur every second.
+`RTC_IsEditing()` prevents the time editor's pending changes from being
+overwritten; the RTC setter remains a normal service function.
+
+PA6/SUB_EN starts HIGH (CubeMX GPIO initial state) and stays enabled
+during RUN/UI_OFF. PA7/SUB_INDET is active low and sampled every 500 ms
+to cache the insertion state. Before STOP1 the PM hook stops DMA/ADC
+and drives SUB_EN LOW; resume restores it HIGH. No 500 ms software
+overcurrent protection is attempted; the power IC must handle rapid
+faults.
 
 The current CubeMX-generated configuration uses ADC1 HSI clock DIV1,
 39.5-cycle sampling for external channels and 79.5-cycle sampling for
@@ -74,12 +81,16 @@ internal channels; four ranks, software triggering, normal DMA1 Channel2,
 Keep `.ioc` as the configuration source of truth; do not maintain a
 private patch to the vendor HAL files.
 
-Statistics -> Power reports:
-- `ADC Err`: 0 = success; 1 = calibration failed; 2 = start failed;
-  3 = 50 ms timeout; 4 = ADC/DMA error callback; 5 = pending.
-- `ADC HAL`: `HAL_ADC_GetError()`; `DMA HAL`: `HAL_DMA_GetError()`.
-  These can show zero after an earlier state-machine failure because
-  `HAL_ADC_Start_DMA()` resets the ADC error code.
+Statistics -> Power contains only two cached Aux-A readings:
+- Voltage (mV): PA5 ADC rank 2, scaled by measured VDDA from VREFINT
+  and the 680 kΩ / 220 kΩ divider.
+- Current (mA): PA0 ADC rank 1, scaled by measured VDDA, with
+  sensor output sensitivity 0.5 V/A (500 mV/A).
+
+Statistics -> System contains only measured VDDA in mV (ADC rank 4)
+and die temperature with one decimal place, calculated using
+VREFINT-corrected ADC rank 3 and STM32G0 factory TS_CAL1/TS_CAL2.
+Neither statistics page displays ADC HAL/error/debug fields or Uptime.
 
 The reproduced G0 calibration failure (`hadc1.State=0x13`,
 `ErrorCode=0x01`, second `ADC_DISABLE_TIMEOUT` branch) and the verified
