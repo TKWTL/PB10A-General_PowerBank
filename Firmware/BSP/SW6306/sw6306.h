@@ -116,16 +116,25 @@ extern "C" {
 #define SW6306_RET          char
 #define SW6306_NOARG        struct pt *pt
 #define SW6306_ARGS(...)    struct pt *pt, __VA_ARGS__
-#define SW6306_EXEC(cond)   if(cond == 0) THRD_YIELD                        //反复执行某函数直到返回1
-#define SW6306_UNTIL(cond)  THRD_UNTIL(cond)                                //条件不满足时出让CPU
+/* Retry I2C admission at each scheduler pass; only the calling SW
+ * coroutine waits. A failed admission must never be treated as a
+ * completed transfer. */
+#define SW6306_EXEC(cond)   THRD_UNTIL((cond) != 0u)
+/* HAL completion: 0=pending, 1=success, 2=error. */
+#define SW6306_UNTIL(cond)  THRD_UNTIL((cond) != I2C_ASYNC_PENDING)
 #define SW6306_SPAWN_NOARG(func)\
 THRD_SPAWN_NOARG(func)
 #define SW6306_SPAWN_ARGS(func,...)\
 THRD_SPAWN_ARGS(func, __VA_ARGS__)              //调用子线程/函数语句
 #define SW6306_FUNC_BEGIN   THRD_BEGIN
 #define SW6306_FUNC_END     THRD_END
-#define SW6306_MUTEX_TAKE   PT_SEM_WAIT(pt, &i2c_mutex)
-#define SW6306_MUTEX_GIVE   PT_SEM_SIGNAL(pt, &i2c_mutex)   
+/* SW6306 is serialized by one service coroutine and explicit PM handoff.
+ * Device register helpers may nest; PT_SEM_WAIT is not recursive and would
+ * deadlock RegsetSwitch/ByteModify under a top-level operation. The Core
+ * HAL I2C adapter arbitrates individual bus transactions. */
+#define SW6306_MUTEX_TAKE   ((void)0)
+#define SW6306_MUTEX_GIVE   ((void)0)
+#define SW6306_FUNC_ABORT   PT_EXIT(pt)   
 #else
 #define SW6306_RET          void
 #define SW6306_NOARG        void
@@ -140,12 +149,13 @@ func(__VA_ARGS__)
 #define SW6306_FUNC_END     {}
 #define SW6306_MUTEX_TAKE   ((void)I2C_TransactionBegin()) /* whole operation */
 #define SW6306_MUTEX_GIVE   I2C_TransactionEnd()
+#define SW6306_FUNC_ABORT   return
 #endif    
 
 struct SW6306_StatusTypedef {
     uint8_t initialized;                                                        //SW6306已初始化，当SW6306失去连接时自动回到未初始化状态
     uint8_t unlocked;                                                           //SW6306已解锁，此时可以对寄存器进行写入
-    uint8_t flag;                                                               //标识传输完成与传输状态用变量
+    volatile uint8_t flag;                                                      //IRQ completion (pending/done/error)
     uint8_t sendbuf[4];                                                         //传输缓冲用变量
 
     /***************************寄存器内存镜像声明*********************************/
@@ -1383,7 +1393,9 @@ uint8_t SW6306_ReadFaultCharge(void);           //读取REG0x2B充电异常历�
 uint8_t SW6306_ReadSystemStatus(void);          //读取REG0x18系统实时状态
 //端口状态相关操作
 SW6306_RET SW6306_PortStatusLoad(SW6306_NOARG); //更新端口状态镜像寄存器(0x13,0x18,0x19,0x1C,0x1D)
-uint8_t SW6306_TransportPortsIdle(void);        //实时读取端口与CC；I2C失败或占用均返回0
+uint8_t SW6306_TransportPortsIdle(void);        //PT mode: verify current cached port snapshot (never performs I2C)
+uint32_t SW6306_PortReadSequence(void);        //increases only after a complete successful PortStatusLoad
+uint8_t SW6306_LastOperationOK(void);          //1 if no I2C error latched by last SW6306 operation
 uint8_t SW6306_IsPortC1ON(void);                //读取C1口通路是否打开
 uint8_t SW6306_IsPortC2ON(void);                //读取C2口通路是否打开
 uint8_t SW6306_IsPortA1ON(void);                //读取A1口通路是否打开
