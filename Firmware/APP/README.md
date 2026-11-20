@@ -46,7 +46,7 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 - `APP/functions/` hosts independent user-facing MiaoUI applications. Powerbank displays cached SW6306 voltage, current, percentage and protocol; Radio is forced low-power at boot and starts only when its WORD page is entered (or kept running in explicit background ON mode)
 - `APP/i18n.c/h` defines a shared localization interface and placeholder English-only catalog
 - `BSP/BMP180` ports Collar-Radio compensation code with Cortex-M0+ safe endian calibration; `BSP/MMC5603` supports register I/O, product ID and low-power configuration
-- `Core/Src/i2c.c` USER CODE owns the HAL I2C1 transfer adapter and IRQ completion, including new `ASYNC_I2C_Transmit/Receive`, asynchronous scanner probe and bounded abort handling. Old `BSP/I2C/bsp_i2c.c/.h` were removed and Keil references updated. Legacy `I2C_RegRead/Write` remain synchronous **for unmigrated sensor and SW6306 drivers**, so those calls still stall other coroOS tasks. `SW6306_USE_PROTOTHREAD` remains disabled until its direct read/write call sites and stack-backed buffers are refactored; do not enable it in isolation
+- `Core/Src/i2c.c` USER CODE owns the HAL I2C1 transfer adapter and IRQ completion, including new `ASYNC_I2C_Transmit/Receive`, asynchronous scanner probe and bounded abort handling. Old `BSP/I2C/bsp_i2c.c/.h` were removed and Keil references updated. Legacy `I2C_RegRead/Write` remain synchronous for the unmigrated sensor and radio drivers. **SW6306 now enables `SW6306_USE_PROTOTHREAD`** and uses the HAL IRQ asynchronous transfer API from its own exclusive service coroutine. Other modules must not directly run another SW6306 protothread concurrently.
 - In the I2C transaction layer, synchronous `I2C_TransactionBegin/End` brackets non-yielding legacy transactions. Asynchronous operations use an independent single-in-flight admission check and persistent completion flags; on timeout, a stalled abort poisons the HAL adapter until reset. Do not use stack buffers for asynchronous transfers
 
 ### Seven icon entries
@@ -114,29 +114,21 @@ then retries at most every five seconds when uninitialized. Its 100ms
 staggered phases follow the accessible PB02B reference, not a verified
 PB02A source: phase 0 ADC (VBUS/IBUS/VBAT/IBAT), phase 1 Status,
 phase 2 Port/CC, phase 3 idle, phase 4 Power/protocol, with Capacity
-once per two complete cycles (about one second). Calls into legacy
-BSP I2C remain synchronous from the caller perspective, even though
-the HAL transport uses interrupts.
+once per two complete cycles (about one second). The sixth thread is now `PowerAlgo_SW6306Thread`, whose Init and data-load calls yield through Protothreads while HAL I2C is active. Other tasks continue to run.
 
 The Powerbank WORD page displays a RAM snapshot only: shared BUS
 mV/mA (not separate per-port current sensing), battery mV/mA,
 capacity %, negotiated protocol, and C1/A1 path flags. UI labels
 freshness as unavailable until initialization and successful
-StatusLoad within the current cycle. An age above 2.5 seconds
-invalidates the displayed snapshot. Individual ADCLoad/PowerLoad
-failures cannot yet be proven from their void-returning driver API.
+StatusLoad within the current cycle. An age above 2.5 seconds invalidates the snapshot. The coroutine read groups now check IRQ completion and publish entire register groups only on success; the service checks all required groups before presenting valid data.
 
-PM sleep-block bit 0x08 is held while ports are active, status is
-uncertain or the driver is uninitialized. At STOP1 entry, a fresh
-`SW6306_TransportPortsIdle()` is mandatory: error or activity
-cancels sleep, never merely skips LPSet. The inherited SW6306
+PM sleep-block bit 0x08 is held while ports are active or status is uncertain. Before STOP1, the PM hook asynchronously performs a fresh `SW6306_PortStatusLoad()` and requires its successful sequence to advance; only then can `SW6306_TransportPortsIdle()` use the just-refreshed RAM snapshot. LPSET and subsequent wake/unlock also yield without blocking unrelated coroutines. The inherited SW6306
 configuration disables passive A-port VBUS insertion detection, so
 a cable plugged into an inactive A port may not be detectable.
 
 **Verify hardware configuration before connecting real loads:** the
 current SW6306 BSP initialization includes 5S/4.2V cells,
-5 mΩ battery shunt scaling, 30W maximum input and 55W output
-configuration inherited from PB02B. These are existing driver
+5 mΩ battery shunt scaling, 100W input and experimental 105W output configuration following PB10A changes. These are existing driver
 defaults, not independently confirmed PB10A battery/hardware specs.
 
 ### Key input (Collar-Radio Buttons DAS)
