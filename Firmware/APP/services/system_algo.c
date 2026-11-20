@@ -4,12 +4,17 @@
 #include "system_algo.h"
 #include "beep_algo.h"
 #include "time_algo.h"
+#include "power_algo.h"
 #include "millis.h"
 #include "main.h"
 #include "core/ui.h"
 #include "display/dispDriver.h"
 #include <stdio.h>
 static ui_item_t s_click_item,s_mute_item,s_reset_item,s_uptime_item;
+static ui_item_t s_vdda_item,s_temp_item;
+static ui_data_t s_vdda_data,s_temp_data;
+static ui_element_t s_vdda_element,s_temp_element;
+static int s_vdda_mv,s_die_temp_c;
 static ui_data_t s_click_data,s_mute_data;
 static ui_element_t s_click_element,s_mute_element;
 static uint8_t s_click_on,s_muted;
@@ -66,6 +71,16 @@ static void system_uptime_page(ui_t *ui) {
 void System_AddStatisticsItems(ui_page_t *page) {
     if(!page)return;
     AddItem(" Uptime",UI_ITEM_WORD,0,&s_uptime_item,page,0,system_uptime_page);
+    s_vdda_data.name=" VDDA mV";s_vdda_data.ptr=&s_vdda_mv;
+    s_vdda_data.dataType=UI_DATA_INT;s_vdda_data.actionType=UI_DATA_ACTION_RO;
+    s_vdda_element.data=&s_vdda_data;
+    Create_element(&s_vdda_item,&s_vdda_element);
+    AddItem(" VDDA mV",UI_ITEM_DATA,0,&s_vdda_item,page,0,0);
+    s_temp_data.name=" Die Temp C";s_temp_data.ptr=&s_die_temp_c;
+    s_temp_data.dataType=UI_DATA_INT;s_temp_data.actionType=UI_DATA_ACTION_RO;
+    s_temp_element.data=&s_temp_data;
+    Create_element(&s_temp_item,&s_temp_element);
+    AddItem(" Die Temp C",UI_ITEM_DATA,0,&s_temp_item,page,0,0);
     s_stats_ready=1u;s_last_poll=Millis()-100u;
 }
 
@@ -74,6 +89,7 @@ void System_Poll(void) {
     char value[24];
     if(!s_stats_ready||(uint32_t)(now-s_last_poll)<100u)return;
     s_last_poll=now;
+    PowerAlgo_GetSystemAdc(&s_vdda_mv,&s_die_temp_c,0);
     if(!Time_GetUptimeSeconds(&seconds))
         { (void)snprintf(s_uptime_text,sizeof(s_uptime_text),"Uptime: RTC error");return; }
     if(seconds==s_last_seconds)return;

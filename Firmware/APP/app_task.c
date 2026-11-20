@@ -12,16 +12,17 @@
 #include "time_algo.h"
 #include "beep_algo.h"
 #include "system_algo.h"
-#include "sc7a20.h"
+#include "sc7a20_algo.h"
+#include "mmc5603_algo.h"
+#include "bmp180_algo.h"
 #include "power_algo.h"
-#include "sensor_algo.h"
 #include "radio_algo.h"
 #include "radio_app.h"
 
 static ui_t s_ui;
 static uint32_t s_last_time_update_ms;
 static coro_scheduler_t s_scheduler;
-static coro_pt_t s_states[6];
+static coro_pt_t s_states[7];
 
 /*************************** 协程服务线程 ***************************/
 THRD_DECLARE(OledServiceThread) {
@@ -69,9 +70,11 @@ THRD_DECLARE(SystemServiceThread) {
         }
         /* Keep Radio Power Mode=ON playing and polling after leaving its
          * WORD page, without a blocking radio task. */
+        RadioAlgo_Service();
         if((uint32_t)(now-s_last_radio_poll)>=100u) {
             s_last_radio_poll=now;
-            if(Radio_AppIsActive() && !pm_api_ui_should_block())
+            if(Radio_AppStopPending() ||
+                (Radio_AppIsActive() && !pm_api_ui_should_block()))
                 Radio_AppPoll();
         }
         beep_poll(now);
@@ -95,10 +98,23 @@ THRD_DECLARE(PowerADCThread) {
     }
     THRD_END;
 }
+/* The three sensor actors share a lightweight polling thread; each actor
+ * owns a persistent I2C buffer, IRQ completion flag and its own timing. */
+THRD_DECLARE(SensorServiceThread) {
+    THRD_BEGIN;
+    for(;;) {
+        SC7A20Algo_Poll();
+        MMC5603Algo_Poll();
+        BMP180Algo_Poll();
+        THRD_DELAY(5u);
+    }
+    THRD_END;
+}
 /*************************** 线程表与入口 ***************************/
 static const coro_thread_fn_t s_threads[] = {
     OledServiceThread, MiaoUiThread, PowerManagerThread,
-    SystemServiceThread, PowerADCThread, PowerAlgo_SW6306Thread
+    SystemServiceThread, PowerADCThread, PowerAlgo_SW6306Thread,
+    SensorServiceThread
 };
 
 void APP_TaskInit(void) {
@@ -108,11 +124,11 @@ void APP_TaskInit(void) {
     s_last_key_tick=Millis();
     s_last_radio_poll=Millis();
     Time_Init(); /* one-shot uptime baseline */
-    /* PB02B SC7A20 initialization: WHO_AM_I + 25Hz/2g/BDU/HR.
-     * PB10A INT is on PB5, independent from SW6306; no IRQ sharing. */
-    SC7A20_Init();
+    /* Sensors initialize through their own nonblocking service actors. */
     PowerAlgo_Init();  /* SW6306 monitor, sleep gating, auxiliary A ADC. */
-    SensorAlgo_Init(); /* SC7A20/MMC5603/BMP180 STOP policy. */
+    SC7A20Algo_Init();
+    MMC5603Algo_Init();
+    BMP180Algo_Init();
     RadioAlgo_Init();  /* RDA5807 powers down before UI_OFF. */
     RTC_UpdateTime();
     MiaoUi_Setup(&s_ui);

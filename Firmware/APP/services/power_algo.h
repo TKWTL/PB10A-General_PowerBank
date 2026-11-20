@@ -23,4 +23,5 @@ uint8_t PowerAlgo_AdcIsSuspended(void);
 uint8_t PowerAlgo_AdcBeginScan(void);
 uint8_t PowerAlgo_AdcScanSettled(void);
 void PowerAlgo_AddStatisticsItems(ui_page_t *page);
+void PowerAlgo_GetSystemAdc(int *vdda_mv,int *die_temp_c,uint8_t *valid);
 #endif

@@ -37,4 +37,10 @@ uint8_t MMC5603_ReadID(uint8_t *id);
 uint8_t MMC5603_Probe(void);
 uint8_t MMC5603_EnterLowPower(void);
 uint8_t MMC5603_StartSingleMeasurement(void);
+
+/* IRQ-completed register transactions; buffers live in the service. */
+uint8_t MMC5603_AsyncRead(uint8_t reg,uint8_t *data,uint16_t count,uint8_t *flag);
+uint8_t MMC5603_AsyncWrite(uint8_t reg,uint8_t *data,uint16_t count,uint8_t *flag);
+void MMC5603_ParseAxes(const uint8_t *data,int *x_mg,int *y_mg,int *z_mg);
+
 #endif

@@ -954,3 +954,21 @@ SC7A20_RET SC7A20_RegisterDump(SC7A20_NOARG) {
     }
     SC7A20_FUNC_END;
 }
+
+/* The service owns I2C completion; the BSP owns the sensor data layout. */
+void SC7A20_AsyncSetReady(uint8_t ready) {
+    SC7A20_Status.initialized=ready;
+    if(ready) {
+        SC7A20_Status.ctrl1=SC7A20_DEFAULT_ODR|SC7A20_DEFAULT_AXIS_EN;
+        SC7A20_Status.ctrl4=(SC7A20_DEFAULT_BDU?SC7A20_CTRL4_BDU:0u) |
+            SC7A20_DEFAULT_FULLSCALE |
+            (SC7A20_DEFAULT_HIGHRES?SC7A20_CTRL4_HR:0u);
+    }
+}
+
+void SC7A20_AsyncSetAxes(const uint8_t *data) {
+    if(!data)return;
+    SC7A20_Status.x=(int16_t)(((uint16_t)data[1]<<8)|data[0]);
+    SC7A20_Status.y=(int16_t)(((uint16_t)data[3]<<8)|data[2]);
+    SC7A20_Status.z=(int16_t)(((uint16_t)data[5]<<8)|data[4]);
+}

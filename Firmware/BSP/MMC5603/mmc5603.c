@@ -38,3 +38,22 @@ uint8_t MMC5603_StartSingleMeasurement(void) {
     /* TM_M sets a single-shot magnetic measurement; self-clearing. */
     return MMC5603_WriteReg(MMC5603_REG_CTRL0,MMC5603_CTRL0_TM_M);
 }
+
+uint8_t MMC5603_AsyncRead(uint8_t reg,uint8_t *data,uint16_t count,uint8_t *flag) {
+    return ASYNC_I2C_Receive(MMC5603_I2C_ADDR,reg,data,count,0u,flag);
+}
+uint8_t MMC5603_AsyncWrite(uint8_t reg,uint8_t *data,uint16_t count,uint8_t *flag) {
+    return ASYNC_I2C_Transmit(MMC5603_I2C_ADDR,reg,data,count,0u,flag);
+}
+
+/* 20-bit unsigned output is centered at 2^19; 16384 counts per gauss. */
+void MMC5603_ParseAxes(const uint8_t *data,int *x_mg,int *y_mg,int *z_mg) {
+    int32_t x,y,z;
+    if(!data)return;
+    x=(int32_t)(((uint32_t)data[0]<<12)|((uint32_t)data[1]<<4)|(data[6]>>4))-524288L;
+    y=(int32_t)(((uint32_t)data[2]<<12)|((uint32_t)data[3]<<4)|(data[7]>>4))-524288L;
+    z=(int32_t)(((uint32_t)data[4]<<12)|((uint32_t)data[5]<<4)|(data[8]>>4))-524288L;
+    if(x_mg)*x_mg=(int)(x*125L/2048L);
+    if(y_mg)*y_mg=(int)(y*125L/2048L);
+    if(z_mg)*z_mg=(int)(z*125L/2048L);
+}

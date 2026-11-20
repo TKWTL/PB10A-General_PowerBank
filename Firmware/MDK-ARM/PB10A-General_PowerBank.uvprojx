@@ -858,9 +858,19 @@
               <FilePath>../APP/services/power_algo.c</FilePath>
             </File>
             <File>
-              <FileName>sensor_algo.c</FileName>
+              <FileName>sc7a20_algo.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../APP/services/sensor_algo.c</FilePath>
+              <FilePath>../APP/services/sc7a20_algo.c</FilePath>
+            </File>
+            <File>
+              <FileName>mmc5603_algo.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/services/mmc5603_algo.c</FilePath>
+            </File>
+            <File>
+              <FileName>bmp180_algo.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/services/bmp180_algo.c</FilePath>
             </File>
             <File>
               <FileName>radio_algo.c</FileName>

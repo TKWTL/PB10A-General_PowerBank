@@ -21,7 +21,7 @@ The PB02B/IH01A PM controller supports cooperative device callbacks:
 only after every suspend operation finishes; errors cancel sleep and resume
 devices. Default idle timeout is 60 s, `pm_api_set_sleep_timeout(0)`
 disables it, and keypad EXTI can wake STOP1. External nodes reside in
-`APP/services/power_algo.c`, `sensor_algo.c`, `radio_algo.c`;
+`APP/services/power_algo.c`, `sc7a20_algo.c`, `mmc5603_algo.c`, `bmp180_algo.c`, `radio_algo.c`;
 OLED and STM32 platform nodes reside in `pm_device_builtin.c`.
 Power sequencing, callback order and hardware caveats are recorded in
 [`Docs/Debug/2026-11-19_pm_callbacks.md`](../../Docs/Debug/2026-11-19_pm_callbacks.md).
@@ -41,17 +41,17 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 ## Architecture (2026-11)
 
 - `APP/app_task.c` registers coroOS tasks and polls shared services
-- `Scheduler/coroOS.*` now wraps the actual Protothreads 1.4 (`Scheduler/pt1.4/pt.h`, `pt-sem.h`, `lc-switch.h`), as in Handheld-Fan; six tasks are retained (not FreeRTOS, no priorities)
+- `Scheduler/coroOS.*` now wraps the actual Protothreads 1.4 (`Scheduler/pt1.4/pt.h`, `pt-sem.h`, `lc-switch.h`), as in Handheld-Fan; seven tasks are retained (not FreeRTOS, no priorities)
 - `APP/services/*_algo.c` holds reusable beep, RTC and system algorithms; `time_service.c` retains the MiaoUI calendar editor
 - `APP/functions/` hosts independent user-facing MiaoUI applications. Powerbank displays cached SW6306 voltage, current, percentage and protocol; Radio is forced low-power at boot and starts only when its WORD page is entered (or kept running in explicit background ON mode)
 - `APP/i18n.c/h` defines a shared localization interface and placeholder English-only catalog
 - `BSP/BMP180` ports Collar-Radio compensation code with Cortex-M0+ safe endian calibration; `BSP/MMC5603` supports register I/O, product ID and low-power configuration
-- `Core/Src/i2c.c` USER CODE owns the HAL I2C1 transfer adapter and IRQ completion, including new `ASYNC_I2C_Transmit/Receive`, asynchronous scanner probe and bounded abort handling. Old `BSP/I2C/bsp_i2c.c/.h` were removed and Keil references updated. Legacy `I2C_RegRead/Write` remain synchronous for the unmigrated sensor and radio drivers. **SW6306 now enables `SW6306_USE_PROTOTHREAD`** and uses the HAL IRQ asynchronous transfer API from its own exclusive service coroutine. Other modules must not directly run another SW6306 protothread concurrently.
+- `Core/Src/i2c.c` USER CODE owns the HAL I2C1 transfer adapter and IRQ completion, including new `ASYNC_I2C_Transmit/Receive`, asynchronous scanner probe and bounded abort handling. Old `BSP/I2C/bsp_i2c.c/.h` were removed and Keil references updated. The sensor service actors now use IRQ-completed register transactions; legacy synchronous BSP helpers and the radio app still need separate migration before every I2C code path is asynchronous. **SW6306 now enables `SW6306_USE_PROTOTHREAD`** and uses the HAL IRQ asynchronous transfer API from its own exclusive service coroutine. Other modules must not directly run another SW6306 protothread concurrently.
 - In the I2C transaction layer, synchronous `I2C_TransactionBegin/End` brackets non-yielding legacy transactions. Asynchronous operations use an independent single-in-flight admission check and persistent completion flags; on timeout, a stalled abort poisons the HAL adapter until reset. Do not use stack buffers for asynchronous transfers
 
 ### Seven icon entries
 
-Powerbank (app), Radio (app), Settings (TEXT: Display/Time/System), Statistics (TEXT: Power/Battery/Sensors), Game (ICON), Tools (ICON), About (WORD). Empty/statistics/game items are placeholders and not hardware telemetry.
+Powerbank (app), Radio (app), Settings (TEXT: Display/Time/System), Statistics (TEXT: Power/Battery/Sensors/System), Game (ICON), Tools (ICON), About (WORD). Battery and game items remain placeholders; Sensors and System show measured telemetry.
 
 ### Board bring-up and ADC telemetry (2026-11)
 
@@ -262,3 +262,18 @@ regions (e.g. move last-256B .noinit from 0x20008F00 to 0x20007F00),
 update startup SRAM parity initialization, and decide how to preserve
 and validate previous fault records without reading uninitialized
 parity bits. No option bytes have been changed by this commit.
+
+### Sensor service boundaries
+
+- BSP/SC7A20, BSP/MMC5603 and BSP/BMP180 own register definitions,
+  byte decoding and compensation; Core/I2C retains HAL IRQ transfers.
+- APP/services/sc7a20_algo, mmc5603_algo and bmp180_algo own asynchronous
+  initialization, sampling cadence, cached results and PM preparation.
+  Their I2C buffers and completion flags persist across scheduler calls.
+- APP/MiaoUI/ui_conf.c only binds cached telemetry to Statistics/Sensors;
+  no I2C request or sensor conversion runs in a drawing callback.
+- Statistics/System displays ADC rank 4 VREFINT-derived VDDA (mV)
+  and rank 3 internal die temperature (degrees Celsius) through the
+  factory-calibrated HAL conversion helpers, using the existing 500ms DMA scan.
+- Conversion timing, sensor scaling, STOP1 transitions and UI fields still
+  require hardware verification; this edit has not been board-tested.

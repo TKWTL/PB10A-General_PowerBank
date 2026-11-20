@@ -137,6 +137,8 @@ static volatile uint8_t s_transfer_result;
 static uint8_t s_active, s_suspended, s_cal_failed;
 static uint32_t s_started_at;
 static int s_pa0_raw, s_pa5_raw, s_usb_mv;
+static int s_vdda_mv,s_die_temp_c;
+static uint8_t s_system_adc_valid;
 static int s_adc_state; /* 0 OK,1 cal,2 start,3 timeout,4 callback,5 pending */
 static int s_adc_hal_error, s_dma_hal_error;
 static ui_item_t s_pa0_item,s_pa5_item,s_mv_item,s_state_item;
@@ -177,6 +179,7 @@ static void power_adc_init(void) {
     LL_GPIO_SetOutputPin(SUB_EN_GPIO_Port,SUB_EN_Pin);
     s_active=0u;s_suspended=0u;s_transfer_result=0u;
     s_pa0_raw=0;s_pa5_raw=0;s_usb_mv=0;
+    s_vdda_mv=0;s_die_temp_c=0;s_system_adc_valid=0u;
     s_adc_state=5;s_adc_hal_error=0;s_dma_hal_error=0;
     s_cal_failed=(HAL_ADCEx_Calibration_Start(&hadc1)!=HAL_OK)?1u:0u;
     if(s_cal_failed) {
@@ -216,6 +219,7 @@ uint8_t PowerAlgo_AdcScanSettled(void) {
         return 0u;
 
     if(result!=1u) {
+        s_system_adc_valid=0u;
         s_adc_hal_error=(int)HAL_ADC_GetError(&hadc1);
         s_dma_hal_error=(int)HAL_DMA_GetError(hadc1.DMA_Handle);
     }
@@ -227,6 +231,13 @@ uint8_t PowerAlgo_AdcScanSettled(void) {
         (void)HAL_ADC_Stop_DMA(&hadc1);
     s_active=0u;
     if(result==1u) {
+        /* Factory VREFINT and temperature calibration, rank 4 then rank 3. */
+        if(s_dma[3]) {
+            s_vdda_mv=(int)__HAL_ADC_CALC_VREFANALOG_VOLTAGE(s_dma[3],ADC_RESOLUTION_12B);
+            s_die_temp_c=(int)__HAL_ADC_CALC_TEMPERATURE((uint32_t)s_vdda_mv,s_dma[2],ADC_RESOLUTION_12B);
+            s_system_adc_valid=1u;
+        }
+        else s_system_adc_valid=0u;
         s_pa0_raw=(int)s_dma[0];
         s_pa5_raw=(int)s_dma[1];
         /* Vout_mV = raw*3300/4095*(680+220)/220,
@@ -416,4 +427,10 @@ void PowerAlgo_Init(void) {
     pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK,1u); /* fail closed until idle proven */
     (void)pm_device_register(&s_node);         /* SW6306 / order 90 */
     (void)pm_device_register(&s_power_adc_pm); /* SUB_EN + ADC / order 200 */
+}
+
+void PowerAlgo_GetSystemAdc(int *vdda_mv,int *die_temp_c,uint8_t *valid) {
+    if(vdda_mv)*vdda_mv=s_vdda_mv;
+    if(die_temp_c)*die_temp_c=s_die_temp_c;
+    if(valid)*valid=(uint8_t)(s_system_adc_valid && !s_suspended);
 }

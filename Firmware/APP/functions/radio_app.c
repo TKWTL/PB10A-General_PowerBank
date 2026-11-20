@@ -7,6 +7,7 @@
 #include "radio_app.h"
 #include "core/ui.h" /* MiaoUI Q10 PID animations */
 #include "rda5807m.h"
+#include "radio_algo.h"
 #include "i2c.h"
 #include "pm_api.h"
 #include "millis.h"
@@ -25,7 +26,7 @@ enum { RADIO_OFF=0, RADIO_RESET_WAIT, RADIO_POWER_WAIT, RADIO_TUNE_WAIT,
 enum { RADIO_MODE_SEARCH=0, RADIO_MODE_PRESET, RADIO_MODE_FREQ };
 enum { RADIO_POWER_AUTO=0, RADIO_POWER_ON, RADIO_POWER_OFF };
 #define RADIO_MENU_COUNT 5u
-static uint8_t s_state, s_first_seek_pending, s_search_failed;
+static uint8_t s_state, s_first_seek_pending, s_search_failed,s_stop_pending;
 static uint8_t s_volume, s_stereo, s_rssi;
 static uint8_t s_mode=RADIO_MODE_PRESET,s_power_policy=RADIO_POWER_AUTO;
 static uint8_t s_menu_open,s_menu_index,s_full_scan,s_view_entered;
@@ -72,27 +73,20 @@ static uint32_t s_state_at, s_last_query, s_last_rtc;
 static uint8_t s_error_code;
 
 static uint8_t radio_write16(uint8_t reg,uint16_t value) {
-    uint8_t data[2]={(uint8_t)(value>>8),(uint8_t)value};
-    return I2C_RegWrite(RDA5807_Wr_REG_Addr,reg,data,2u);
-}
-/* Enforce radio sleep at firmware startup; RCLK is provided only during
- * the power-down I2C command and when the app explicitly starts radio. */
-uint8_t Radio_AppInitLowPower(void) {
-    uint8_t result;
-    LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE,LL_RCC_MCO1_DIV_1);
-    result=radio_write16(RDA5807_REG02,0u); /* ENABLE=0/DMUTE=0 */
-    LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_NOCLOCK,LL_RCC_MCO1_DIV_1);
-    pm_api_set_sleep_block(RADIO_PM_BLOCK,0u);
-    s_state=RADIO_OFF;s_view_entered=0u;
-    return (uint8_t)(result==I2C_OK);
+    return RadioAlgo_QueueWrite(reg,value);
 }
 
-static uint8_t radio_read16(uint8_t reg,uint16_t *value) {
-    uint8_t data[2];
-    if(!value || I2C_RegRead(RDA5807_Wr_REG_Addr,reg,data,2u)!=I2C_OK)
-        return I2C_ERROR;
-    *value=(uint16_t)(((uint16_t)data[0]<<8)|data[1]);
-    return I2C_OK;
+/* Boot sleep is queued; MCO remains active until IRQ completion. */
+uint8_t Radio_AppInitLowPower(void) {
+    uint8_t accepted;
+    LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE,LL_RCC_MCO1_DIV_1);
+    accepted=(uint8_t)(radio_write16(RDA5807_REG02,0u)==I2C_OK);
+    s_stop_pending=accepted;
+    if(!accepted)
+        LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_NOCLOCK,LL_RCC_MCO1_DIV_1);
+    pm_api_set_sleep_block(RADIO_PM_BLOCK,accepted);
+    s_state=RADIO_OFF;s_view_entered=0u;
+    return accepted;
 }
 
 static void radio_save_station(uint16_t freq) {
@@ -122,25 +116,18 @@ static void radio_fail(uint8_t why) {
 }
 
 static uint8_t radio_read_status(uint16_t *status,uint16_t *signal) {
-    uint8_t ok=I2C_ERROR;
-    if(I2C_TransactionBegin()!=I2C_OK)return I2C_ERROR;
-    if(radio_read16(RDA5807_REG0A,status)==I2C_OK &&
-        radio_read16(RDA5807_REG0B,signal)==I2C_OK)ok=I2C_OK;
-    I2C_TransactionEnd();
-    return ok;
+    return RadioAlgo_TakeStatus(status,signal);
 }
 /* Collar-Radio SEEK_UP/SEEK_DOWN sequence; unlike StartSeek(), this does
  * not rely on a previous STC bit being set to accept the request. */
 static void radio_seek(uint8_t upward) {
     uint8_t ok=I2C_ERROR;
-    if(I2C_TransactionBegin()!=I2C_OK){radio_fail(4u);return;}
     if(upward)Register[0]|=RDA5807_REG02_SEEKUP;
     else Register[0]&=(uint16_t)~RDA5807_REG02_SEEKUP;
     Register[0]|=RDA5807_REG02_SEEK;
     Register[1]&=(uint16_t)~RDA5807_REG03_TUNE;
     if(radio_write16(RDA5807_REG02,Register[0])==I2C_OK &&
         radio_write16(RDA5807_REG03,Register[1])==I2C_OK)ok=I2C_OK;
-    I2C_TransactionEnd();
     if(ok!=I2C_OK){radio_fail(4u);return;}
     s_state=RADIO_SEARCH;
     s_state_at=Millis();
@@ -156,12 +143,10 @@ static void radio_tune(uint16_t freq) {
         s_state!=RADIO_TUNE_WAIT)return;
     if(freq<3480u)freq=4320u;
     if(freq>4320u)freq=3480u;
-    if(I2C_TransactionBegin()!=I2C_OK){radio_fail(4u);return;}
     Register[0]&=(uint16_t)~RDA5807_REG02_SEEK;
     Register[1]=RDA5807_FreqToReg(freq,TUNE);
     if(radio_write16(RDA5807_REG02,Register[0])==I2C_OK &&
         radio_write16(RDA5807_REG03,Register[1])==I2C_OK)ok=I2C_OK;
-    I2C_TransactionEnd();
     if(ok!=I2C_OK){radio_fail(4u);return;}
     s_freq_units=freq;
     s_state=RADIO_TUNE_WAIT;
@@ -239,7 +224,8 @@ static void radio_start_full_scan(void) {
 }
 
 void Radio_AppStart(void) {
-    if(s_state!=RADIO_OFF)return;
+    if(s_state!=RADIO_OFF || s_stop_pending)return;
+    RadioAlgo_ResetStatus();
     s_error_code=0u;s_search_failed=0u;s_first_seek_pending=1u;
     s_full_scan=0u;s_scan_last_freq=0u;
     s_volume=RADIO_DEFAULT_VOLUME;s_stereo=0u;s_rssi=0u;
@@ -254,24 +240,34 @@ void Radio_AppStart(void) {
 }
 
 void Radio_AppStop(void) {
-    if(s_state!=RADIO_OFF) {
-        /* The I2C command may need the external 32kHz MCO reference,
-         * including when trying to recover from RADIO_ERROR. */
+    if(!s_stop_pending && s_state!=RADIO_OFF) {
         LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE,LL_RCC_MCO1_DIV_1);
         Register[0]&=(uint16_t)~(RDA5807_REG02_ENABLE|
             RDA5807_REG02_DMUTE|RDA5807_REG02_SEEK);
-        (void)radio_write16(RDA5807_REG02,Register[0]);
+        if(radio_write16(RDA5807_REG02,Register[0])!=I2C_OK)return;
+        s_stop_pending=1u;
     }
-    LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_NOCLOCK,LL_RCC_MCO1_DIV_1);
-    pm_api_set_sleep_block(RADIO_PM_BLOCK,0u);
+    if(!s_stop_pending)return;
     s_first_seek_pending=1u;
     s_full_scan=0u;
     s_state=RADIO_OFF;
 }
 
+uint8_t Radio_AppStopPending(void)
+{return (uint8_t)(s_stop_pending || s_state!=RADIO_OFF);}
+
 void Radio_AppPoll(void) {
     uint32_t now=Millis();
+    uint8_t query_result;
     uint16_t status=0u, signal=0u;
+    if(s_stop_pending) {
+        if(RadioAlgo_IOBusy())return;
+        s_stop_pending=0u;
+        LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_NOCLOCK,LL_RCC_MCO1_DIV_1);
+        pm_api_set_sleep_block(RADIO_PM_BLOCK,0u);
+    }
+    if(s_state==RADIO_OFF)return;
+    if(RadioAlgo_TakeIOError()){radio_fail(4u);return;}
     if((uint32_t)(now-s_last_rtc)>=1000u) {
         s_last_rtc=now;
         RTC_UpdateTime();
@@ -289,13 +285,11 @@ void Radio_AppPoll(void) {
     if(s_state==RADIO_POWER_WAIT) {
         uint8_t ok=I2C_ERROR;
         if((uint32_t)(now-s_state_at)<400u)return;
-        if(I2C_TransactionBegin()!=I2C_OK){radio_fail(3u);return;}
         Register[1]=RDA5807_FreqToReg(87u*40u,TUNE);
         Register[3]=(uint16_t)((Register[3]&~RDA5807_REG05_VOL_MSK)|s_volume);
         if(radio_write16(RDA5807_REG03,Register[1])==I2C_OK &&
             radio_write16(RDA5807_REG04,Register[2])==I2C_OK &&
             radio_write16(RDA5807_REG05,Register[3])==I2C_OK)ok=I2C_OK;
-        I2C_TransactionEnd();
         if(ok!=I2C_OK){radio_fail(3u);return;}
         s_state=RADIO_TUNE_WAIT;s_state_at=now;s_last_query=now-200u;
         return;
@@ -304,7 +298,9 @@ void Radio_AppPoll(void) {
         return;
     if((uint32_t)(now-s_last_query)<RADIO_QUERY_MS)return;
     s_last_query=now;
-    if(radio_read_status(&status,&signal)!=I2C_OK){radio_fail(5u);return;}
+    query_result=radio_read_status(&status,&signal);
+    if(query_result==RADIO_IO_PENDING)return;
+    if(query_result!=I2C_OK){radio_fail(5u);return;}
     s_rssi=(uint8_t)((signal&RDA5807_REG0B_RSSI_MSK)>>9);
     s_stereo=(uint8_t)((status&RDA5807_REG0A_ST)!=0u);
     s_freq_units=(uint16_t)(3480u+4u*(status&RDA5807_REG0A_CHAN_MSK));

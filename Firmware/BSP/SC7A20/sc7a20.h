@@ -467,6 +467,11 @@ const sc7a20_vibration_result_t *SC7A20_VibrationGetResult(void);//获取窗口R
 SC7A20_RET SC7A20_RegisterDumpRead(SC7A20_ARGS(uint8_t *out, uint16_t len));//读0x0F+0x20~0x3F共33字节到out（out[0]=WHO_AM_I）
 SC7A20_RET SC7A20_RegisterDump(SC7A20_NOARG);   //读取并通过USART_Printf打印
 
+
+/* Cached conversion result for the asynchronous APP service. */
+void SC7A20_AsyncSetReady(uint8_t ready);
+void SC7A20_AsyncSetAxes(const uint8_t *data);
+
 #ifdef __cplusplus
 }
 #endif

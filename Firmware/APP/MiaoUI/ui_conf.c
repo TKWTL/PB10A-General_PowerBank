@@ -9,13 +9,16 @@
 #include "radio_app.h"
 #include "system_algo.h"
 #include "power_algo.h"
+#include "sc7a20_algo.h"
+#include "mmc5603_algo.h"
+#include "bmp180_algo.h"
 static ui_page_t s_home,s_settings,s_stats,s_game,s_tools,s_display;
-static ui_page_t s_sys,s_stat_power,s_stat_battery,s_stat_sensors;
+static ui_page_t s_sys,s_stat_power,s_stat_battery,s_stat_sensors,s_stat_system;
 static ui_item_t s_powerbank,s_radio,s_settings_item,s_stats_item,s_game_item,s_tools_item,s_about;
 static ui_item_t s_settings_back,s_stats_back,s_game_back,s_tools_back;
 static ui_item_t s_display_item,s_system_item,s_display_back,s_system_back;
-static ui_item_t s_stat_power_item,s_stat_battery_item,s_stat_sensors_item;
-static ui_item_t s_stat_power_back,s_stat_battery_back,s_stat_sensors_back;
+static ui_item_t s_stat_power_item,s_stat_battery_item,s_stat_sensors_item,s_stat_system_item;
+static ui_item_t s_stat_power_back,s_stat_battery_back,s_stat_sensors_back,s_stat_system_back;
 static ui_item_t s_dino,s_scanner,s_tools_info;
 static ui_text_t s_about_text,s_dino_text,s_tools_text;
 static ui_element_t s_about_el,s_dino_el,s_tools_el;
@@ -74,14 +77,20 @@ void Create_MenuTree(ui_t *ui) {
     AddItem(" Power",UI_ITEM_PARENTS,0,&s_stat_power_item,&s_stats,&s_stat_power,0);
     AddItem(" Battery",UI_ITEM_PARENTS,0,&s_stat_battery_item,&s_stats,&s_stat_battery,0);
     AddItem(" Sensors",UI_ITEM_PARENTS,0,&s_stat_sensors_item,&s_stats,&s_stat_sensors,0);
+    AddItem(" System",UI_ITEM_PARENTS,0,&s_stat_system_item,&s_stats,&s_stat_system,0);
     AddPage("[Power]",&s_stat_power,UI_PAGE_TEXT,&s_stats);
     add_return(&s_stat_power,&s_stats,&s_stat_power_back,0);
     PowerAlgo_AddStatisticsItems(&s_stat_power);
-    System_AddStatisticsItems(&s_stat_power);
     AddPage("[Battery]",&s_stat_battery,UI_PAGE_TEXT,&s_stats);
     add_return(&s_stat_battery,&s_stats,&s_stat_battery_back,0);
     AddPage("[Sensors]",&s_stat_sensors,UI_PAGE_TEXT,&s_stats);
     add_return(&s_stat_sensors,&s_stats,&s_stat_sensors_back,0);
+    SC7A20Algo_AddStatisticsItems(&s_stat_sensors);
+    MMC5603Algo_AddStatisticsItems(&s_stat_sensors);
+    BMP180Algo_AddStatisticsItems(&s_stat_sensors);
+    AddPage("[System]",&s_stat_system,UI_PAGE_TEXT,&s_stats);
+    add_return(&s_stat_system,&s_stats,&s_stat_system_back,0);
+    System_AddStatisticsItems(&s_stat_system);
 
     AddPage("[Game]",&s_game,UI_PAGE_ICON,&s_home);
     add_return(&s_game,&s_home,&s_game_back,0);

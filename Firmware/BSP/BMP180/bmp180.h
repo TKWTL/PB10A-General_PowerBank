@@ -23,4 +23,12 @@ void BMP180_CalcAltitude(void);
 /* Atomic multi-step sample, holds one I2C bus lock through both conversions.
  * Synchronous, blocking: not for IRQ or a running PM STOP transition. */
 uint8_t BMP180_ReadSample(void);
+
+/* Async APP service uses these conversion-only BSP functions. */
+uint8_t BMP180_AsyncRead(uint8_t reg,uint8_t *data,uint16_t count,uint8_t *flag);
+uint8_t BMP180_AsyncWrite(uint8_t reg,uint8_t *data,uint16_t count,uint8_t *flag);
+uint8_t BMP180_LoadCalibration(const uint8_t *data);
+uint8_t BMP180_ApplyTemperature(const uint8_t *data,int *temp10);
+uint8_t BMP180_ApplyPressure(const uint8_t *data,int *pressure_hpa10);
+
 #endif
