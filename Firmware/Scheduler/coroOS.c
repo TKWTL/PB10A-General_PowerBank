@@ -7,14 +7,14 @@ void CoroOS_Init(coro_scheduler_t *scheduler,
     uint8_t i;
 
     if((scheduler == 0) || (threads == 0) || (states == 0) || (count == 0u))
-    return;
+        return;
 
     scheduler->threads = threads;
     scheduler->states = states;
     scheduler->count = count;
 
     for(i = 0; i < count; i++)
-    CORO_INIT(&states[i]);
+        CORO_INIT(&states[i]);
 }
 
 void CoroOS_RunOnce(coro_scheduler_t *scheduler) {
@@ -25,5 +25,5 @@ void CoroOS_RunOnce(coro_scheduler_t *scheduler) {
     return;
 
     for(i = 0; i < scheduler->count; i++)
-    (void)scheduler->threads[i](&scheduler->states[i]);
+        (void)scheduler->threads[i](&scheduler->states[i]);
 }

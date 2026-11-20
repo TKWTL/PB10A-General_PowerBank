@@ -1,8 +1,8 @@
 /* PB10A: one bus / one I2C1 HAL handle / interrupt-based transfers.
-* Calls are synchronous from caller perspective to preserve legacy PB02B
-* drivers. The full high-level operation owns the transaction lock, not each
-* START-to-STOP frame. No coroOS yield is legal while the lock is held.
-*/
+ * Calls are synchronous from caller perspective to preserve legacy PB02B
+ * drivers. The full high-level operation owns the transaction lock, not each
+ * START-to-STOP frame. No coroOS yield is legal while the lock is held.
+ */
 #include "bsp_i2c.h"
 #include "i2c.h"
 #include "millis.h"
@@ -16,20 +16,22 @@ static uint16_t s_active_address;
 static uint8_t s_probe_dummy;
 uint8_t I2C_TransactionBegin(void) {
     /* Nested acquisition is valid only in the same non-yielding call stack.
-    * All applications use a single cooperative foreground thread. */
+     * All applications use a single cooperative foreground thread. */
     if(s_poisoned || s_lock_depth==255u)return I2C_ERROR;
     ++s_lock_depth;
     return I2C_OK;
 }
+
 void I2C_TransactionEnd(void) {
     if(s_lock_depth)s_lock_depth--;
 }
+
 uint8_t I2C_BusIsLocked(void)
 {return s_lock_depth!=0u || s_it_state==IT_BUSY || s_it_state==IT_ABORTING;}
 static uint8_t i2c_wait(uint16_t address,HAL_StatusTypeDef started) {
     uint32_t start=Millis();
     if(started!=HAL_OK)
-    {s_it_state=IT_IDLE;return I2C_ERROR;}
+        {s_it_state=IT_IDLE;return I2C_ERROR;}
     while(s_it_state==IT_BUSY) {
         if((uint32_t)(Millis()-start)<I2C_TX_TIMEOUT_MS)continue;
         s_it_state=IT_ABORTING;
@@ -47,10 +49,11 @@ static uint8_t i2c_wait(uint16_t address,HAL_StatusTypeDef started) {
         return I2C_ERROR;
     }
     if(s_it_state==IT_DONE)
-    {s_it_state=IT_IDLE;return I2C_OK;}
+        {s_it_state=IT_IDLE;return I2C_OK;}
     s_it_state=IT_IDLE;
     return I2C_ERROR;
 }
+
 static uint8_t i2c_start(uint16_t address,uint8_t op,uint8_t reg,uint8_t *data,uint16_t count) {
     HAL_StatusTypeDef result;
     if(s_poisoned || s_it_state!=IT_IDLE ||
@@ -66,6 +69,7 @@ static uint8_t i2c_start(uint16_t address,uint8_t op,uint8_t reg,uint8_t *data,u
     }
     return i2c_wait(s_active_address,result);
 }
+
 uint8_t I2C_RegWrite(uint16_t a,uint8_t reg,const uint8_t *p,uint16_t n) {
     uint8_t result;
     if(!p || !n || I2C_TransactionBegin()!=I2C_OK)return I2C_ERROR;
@@ -73,6 +77,7 @@ uint8_t I2C_RegWrite(uint16_t a,uint8_t reg,const uint8_t *p,uint16_t n) {
     I2C_TransactionEnd();
     return result;
 }
+
 uint8_t I2C_RegRead(uint16_t a,uint8_t reg,uint8_t *p,uint16_t n) {
     uint8_t result;
     if(!p || !n || I2C_TransactionBegin()!=I2C_OK)return I2C_ERROR;
@@ -80,6 +85,7 @@ uint8_t I2C_RegRead(uint16_t a,uint8_t reg,uint8_t *p,uint16_t n) {
     I2C_TransactionEnd();
     return result;
 }
+
 uint8_t I2C_Transmit(uint16_t a,const uint8_t *p,uint16_t n) {
     uint8_t result;
     if(!p || !n || I2C_TransactionBegin()!=I2C_OK)return I2C_ERROR;
@@ -87,6 +93,7 @@ uint8_t I2C_Transmit(uint16_t a,const uint8_t *p,uint16_t n) {
     I2C_TransactionEnd();
     return result;
 }
+
 uint8_t I2C_Receive(uint16_t a,uint8_t *p,uint16_t n) {
     uint8_t result;
     if(!p || !n || I2C_TransactionBegin()!=I2C_OK)return I2C_ERROR;
@@ -94,11 +101,12 @@ uint8_t I2C_Receive(uint16_t a,uint8_t *p,uint16_t n) {
     I2C_TransactionEnd();
     return result;
 }
+
 uint8_t I2C_IsReady(uint16_t address) {
     uint8_t result;
     if(I2C_TransactionBegin()!=I2C_OK)return 0u;
     /* Verified with bundled STM32G0 HAL source: Master_Transmit_IT with
-    * Size=0 sends START/address/STOP (no TXDR byte) and reports via IRQ. */
+     * Size=0 sends START/address/STOP (no TXDR byte) and reports via IRQ. */
     result=i2c_start(address,2u,0u,&s_probe_dummy,0u);
     I2C_TransactionEnd();
     return result==I2C_OK?1u:0u;

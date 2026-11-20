@@ -1,7 +1,7 @@
 /* BMP180 compensation from Collar-Radio, adapted for Cortex-M0+:
-* no unaligned pointer casts, use big-endian calibration conversion.
-* Multi-step operations hold the I2C1 bus lock for the full sequence.
-*/
+ * no unaligned pointer casts, use big-endian calibration conversion.
+ * Multi-step operations hold the I2C1 bus lock for the full sequence.
+ */
 #include "bmp180.h"
 #include "bsp_i2c.h"
 #include "millis.h"
@@ -23,9 +23,9 @@ void BMP180_Init(void) {
     s_ok=0u;
     if(I2C_TransactionBegin()!=I2C_OK)return;
     if(I2C_RegRead(BMP180_ADDRESS,BMP180_ID,&id,1u)!=I2C_OK||id!=0x55u)
-    goto finish;
+        goto finish;
     if(I2C_RegRead(BMP180_ADDRESS,BMP180_CALVALUE_BASE,c,22u)!=I2C_OK)
-    goto finish;
+        goto finish;
     ac1=s16(&c[0]);ac2=s16(&c[2]);ac3=s16(&c[4]);ac4=be16(&c[6]);
     ac5=be16(&c[8]);ac6=be16(&c[10]);b1=s16(&c[12]);b2=s16(&c[14]);
     mb=s16(&c[16]);mc=s16(&c[18]);md=s16(&c[20]);
@@ -33,10 +33,12 @@ void BMP180_Init(void) {
 finish:
     I2C_TransactionEnd();
 }
+
 void BMP180_StartConv(uint8_t code) {
     if(s_ok)
-    s_result=I2C_RegWrite(BMP180_ADDRESS,BMP180_CONTROL,&code,1u);
+        s_result=I2C_RegWrite(BMP180_ADDRESS,BMP180_CONTROL,&code,1u);
 }
+
 void BMP180_GetTemprature(void) {
     uint8_t d[2];
     int32_t x1,x2,den,ut;
@@ -50,6 +52,7 @@ void BMP180_GetTemprature(void) {
     b5=x1+x2;
     BMP180_AirTemprature=(float)((b5+8)>>4)*0.1f;
 }
+
 void BMP180_GetPressure(void) {
     uint8_t d[3];
     int32_t b3,b6,x1,x2,x3,p;
@@ -75,12 +78,14 @@ void BMP180_GetPressure(void) {
     x2=(-7357*p)>>16;
     BMP180_AirPressure=p+((x1+x2+3791)>>4);
 }
+
 void BMP180_CalcAltitude(void) {
     const float p=(float)BMP180_AirPressure;
     if(p<=0.0f)return;
     BMP180_AirPressure_kPa=p*0.001f;
     BMP180_Altitude=44330.0f*(1.0f-powf(p/101325.0f,0.1903f));
 }
+
 uint8_t BMP180_ReadSample(void) {
     if(!s_ok || I2C_TransactionBegin()!=I2C_OK)return I2C_ERROR;
     BMP180_StartConv(BMP180_CMD_TEMP);

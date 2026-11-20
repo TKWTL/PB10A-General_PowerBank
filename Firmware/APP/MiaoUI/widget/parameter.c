@@ -1,29 +1,29 @@
 /*
-* This file is part of the MiaoUI Library.
-*
-* Copyright (c) 2025, JFeng-Z, <2834294740@qq.com>
-*
-* Permission is hereby granted, free of charge, to any person obtaining
-* a copy of this software and associated documentation files (the
-* 'Software'), to deal in the Software without restriction, including
-* without limitation the rights to use, copy, modify, merge, publish,
-* distribute, sublicense, and/or sell copies of the Software, and to
-* permit persons to whom the Software is furnished to do so, subject to
-* the following conditions:
-*
-* The above copyright notice and this permission notice shall be
-* included in all copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,
-* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
-* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
-* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-*
-* Created on: 2025-02-08
-*/
+ * This file is part of the MiaoUI Library.
+ *
+ * Copyright (c) 2025, JFeng-Z, <2834294740@qq.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * 'Software'), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+ * CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+ * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ *
+ * Created on: 2025-02-08
+ */
 #include "widget/parameter.h"
 #include "stdio.h"
 #include "core/ui.h"
@@ -48,7 +48,7 @@ void ParameterSetting_Widget(ui_t *ui) {
         case UI_ACTION_MINUS:
         case UI_ACTION_PLUS:
             /* Page-specific physical keys emit MINUS/PLUS for numeric
-            * editing; menu navigation remains UP/DOWN. */
+             * editing; menu navigation remains UP/DOWN. */
             Draw_Scrollbar(ui, x + 4, y + 18, w - 12, 6, 3,
                 (ui->action == UI_ACTION_MINUS) ? -Step : Step);
             if(ui->nowItem->element->data->function != NULL && ui->nowItem->element->data->functionType == UI_DATA_FUNCTION_STEP_EXECUTE)ui->nowItem->element->data->function(ui);
@@ -94,11 +94,11 @@ void Switch_Widget(ui_t *ui) {
     ui_item_t *it;
 
     if (ui == NULL || ui->nowItem == NULL || ui->nowItem->element == NULL || ui->nowItem->element->data == NULL)
-    return;
+        return;
 
     data = ui->nowItem->element->data;
     if (data->dataType != UI_DATA_SWITCH || data->ptr == NULL)
-    return;
+        return;
 
     /* ===== 多选一（radio）判定：min==1 且 max>0 ===== */
     if (data->min == 1 && data->max > 0) {
@@ -129,7 +129,7 @@ void Switch_Widget(ui_t *ui) {
 
     /* ===== 保留用户自定义回调，不占用 function ===== */
     if (data->function != NULL)
-    data->function(ui);
+        data->function(ui);
 
     /* ===== 原有 RTOS task suspend/resume 逻辑保持不变 ===== */
 #if ( UI_USE_FREERTOS == 1 )

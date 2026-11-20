@@ -1,7 +1,7 @@
 /* PB10A adaptation of Collar-Radio Buttons. Poll at 10ms.
-* Four arrows: 30ms debounce, 1000ms first DAS, 200ms repeat.
-* CONF: 30ms debounce, 700ms hold, no automatic repeat.
-*/
+ * Four arrows: 30ms debounce, 1000ms first DAS, 200ms repeat.
+ * CONF: 30ms debounce, 700ms hold, no automatic repeat.
+ */
 #include "buttons.h"
 #include "main.h"
 #define DEBOUNCE_TICKS 3u
@@ -31,9 +31,11 @@ void Key_Init(void) {
         keys[i].edge=KeyEdge_Null;
     }
 }
+
 void Key_DebounceService_10ms(void) {
     uint8_t i;for(i=0u;i<KeyIndex_Max;i++)if(keys[i].ticks)keys[i].ticks--;
 }
+
 void Key_Scand(void) {
     uint8_t i,raw;
     key_state_t *k;
@@ -47,7 +49,7 @@ void Key_Scand(void) {
             if(k->state==KeyState_ShortPress)k->ticks=cfg[i].long_ticks;
         }
         if(k->state==KeyState_ShortPress && k->ticks==0u)
-        {k->state=KeyState_LongPress;k->ticks=cfg[i].das_ticks;}
+            {k->state=KeyState_LongPress;k->ticks=cfg[i].das_ticks;}
         if(k->state==k->prev)k->edge=KeyEdge_Null;
         else if(k->state==KeyState_ShortPress &&
             (k->prev==KeyState_None || k->prev==KeyState_Release))
@@ -56,7 +58,7 @@ void Key_Scand(void) {
             (k->prev==KeyState_ShortPress || k->prev==KeyState_LongPress))
         k->edge=KeyEdge_Falling;
         else if(k->state==KeyState_LongPress && k->prev==KeyState_ShortPress)
-        k->edge=KeyEdge_Holding;
+            k->edge=KeyEdge_Holding;
         else k->edge=KeyEdge_Error;
         k->prev=k->state;
     }
@@ -71,6 +73,6 @@ uint8_t KEY_GetDASClick(KeyIndex_t key) {
     k=&keys[key];
     if(k->edge==KeyEdge_Rising || k->edge==KeyEdge_Holding)return 1u;
     if(cfg[key].das_ticks && k->state==KeyState_LongPress && k->ticks==0u)
-    {k->ticks=cfg[key].das_ticks;return 1u;}
+        {k->ticks=cfg[key].das_ticks;return 1u;}
     return 0u;
 }
