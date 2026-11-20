@@ -1,0 +1,6 @@
+# Generated or external sources (do not autoformat)
+Firmware/Core/**
+Firmware/Drivers/**
+Firmware/BSP/u8g2/**
+Firmware/APP/MiaoUI/fonts/font_*.c
+Firmware/APP/MiaoUI/images/image.c

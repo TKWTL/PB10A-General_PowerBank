@@ -1,0 +1,21 @@
+# PB10A firmware: 4 spaces, attached braces and no line-length wrapping.
+BasedOnStyle: LLVM
+Language: Cpp
+IndentWidth: 4
+ContinuationIndentWidth: 4
+UseTab: Never
+BreakBeforeBraces: Attach
+ColumnLimit: 0
+BinPackArguments: true
+BinPackParameters: true
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+IndentCaseLabels: false
+IndentPPDirectives: None
+SortIncludes: Never
+ReflowComments: false
+MaxEmptyLinesToKeep: 2
+KeepEmptyLinesAtTheStartOfBlocks: false
+AlignTrailingComments: false
+PointerAlignment: Right
+SpaceBeforeParens: ControlStatements

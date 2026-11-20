@@ -22,30 +22,24 @@ static uint32_t s_last_time_update_ms;
 static coro_scheduler_t s_scheduler;
 static coro_pt_t s_states[6];
 
-THRD_DECLARE(OledServiceThread)
-{
+THRD_DECLARE(OledServiceThread) {
     THRD_BEGIN;
-    for(;;)
-    {
+    for(;;) {
         SSD1306_Display_Service();
         THRD_DELAY(1u);
     }
     THRD_END;
 }
 
-THRD_DECLARE(MiaoUiThread)
-{
+THRD_DECLARE(MiaoUiThread) {
     THRD_BEGIN;
-    for(;;)
-    {
-        if(SSD1306_Display_IsReady() && !SSD1306_Display_FrameBusy() && !pm_api_ui_should_block())
-        {
+    for(;;) {
+        if(SSD1306_Display_IsReady() && !SSD1306_Display_FrameBusy() && !pm_api_ui_should_block()) {
             /* Live RTC display/edit fields, but never overwrite a currently
-             * edited field with an asynchronous RTC read. */
+            * edited field with an asynchronous RTC read. */
             if((uint32_t)(Millis()-s_last_time_update_ms)>=1000u &&
-               s_ui.menuState!=UI_ITEM_RUNING &&
-               s_ui.menuState!=UI_ITEM_DRAWING)
-            {
+                s_ui.menuState!=UI_ITEM_RUNING &&
+                s_ui.menuState!=UI_ITEM_DRAWING) {
                 s_last_time_update_ms=Millis();
                 RTC_UpdateTime();
             }
@@ -56,31 +50,26 @@ THRD_DECLARE(MiaoUiThread)
     THRD_END;
 }
 
-THRD_DECLARE(PowerManagerThread)
-{
+THRD_DECLARE(PowerManagerThread) {
     THRD_BEGIN;
     for(;;){pm_api_poll();THRD_DELAY(50u);}
     THRD_END;
 }
 static uint32_t s_last_key_tick,s_last_radio_poll;
-THRD_DECLARE(SystemServiceThread)
-{
+THRD_DECLARE(SystemServiceThread) {
     THRD_BEGIN;
-    for(;;)
-    {
+    for(;;) {
         const uint32_t now=Millis();
-        if((uint32_t)(now-s_last_key_tick)>=10u)
-        {
+        if((uint32_t)(now-s_last_key_tick)>=10u) {
             s_last_key_tick=now;
             indevService_10ms();
         }
         /* Keep Radio Power Mode=ON playing and polling after leaving its
-         * WORD page, without a blocking radio task. */
-        if((uint32_t)(now-s_last_radio_poll)>=100u)
-        {
+        * WORD page, without a blocking radio task. */
+        if((uint32_t)(now-s_last_radio_poll)>=100u) {
             s_last_radio_poll=now;
             if(Radio_AppIsActive() && !pm_api_ui_should_block())
-                Radio_AppPoll();
+            Radio_AppPoll();
         }
         beep_poll(now);
         System_Poll();
@@ -89,16 +78,13 @@ THRD_DECLARE(SystemServiceThread)
     THRD_END;
 }
 /* Exactly one four-rank ADC1 scan per coroutine iteration. The ADC/DMA
- * IRQ signals completion while the coroutine yields to all other threads.
- * The 500ms delay runs regardless of success or failure, and also when the
- * display is off. STOP1 stops ADC and disables SUB_EN via power_algo. */
-THRD_DECLARE(PowerADCThread)
-{
+* IRQ signals completion while the coroutine yields to all other threads.
+* The 500ms delay runs regardless of success or failure, and also when the
+* display is off. STOP1 stops ADC and disables SUB_EN via power_algo. */
+THRD_DECLARE(PowerADCThread) {
     THRD_BEGIN;
-    for(;;)
-    {
-        if(!PowerAlgo_AdcIsSuspended())
-        {
+    for(;;) {
+        if(!PowerAlgo_AdcIsSuspended()) {
             (void)PowerAlgo_AdcBeginScan();
             THRD_UNTIL(PowerAlgo_AdcScanSettled());
         }
@@ -107,13 +93,11 @@ THRD_DECLARE(PowerADCThread)
     THRD_END;
 }
 /* PB02B-derived 100ms staggered SW6306 read groups, independent of UI. */
-THRD_DECLARE(SW6306ServiceThread)
-{
+THRD_DECLARE(SW6306ServiceThread) {
     THRD_BEGIN;
-    for(;;)
-    {
+    for(;;) {
         if(!pm_api_ui_should_block())
-            PowerAlgo_Service100ms();
+        PowerAlgo_Service100ms();
         THRD_DELAY(100u);
     }
     THRD_END;
@@ -123,8 +107,7 @@ static const coro_thread_fn_t s_threads[] = {
     SystemServiceThread, PowerADCThread, SW6306ServiceThread
 };
 
-void APP_TaskInit(void)
-{
+void APP_TaskInit(void) {
     if(!diapInit()) return;
     beep_init(); /* one-shot hardware/queue init */
     indevInit();
@@ -132,7 +115,7 @@ void APP_TaskInit(void)
     s_last_radio_poll=Millis();
     Time_Init(); /* one-shot uptime baseline */
     /* PB02B SC7A20 initialization: WHO_AM_I + 25Hz/2g/BDU/HR.
-     * PB10A INT is on PB5, independent from SW6306; no IRQ sharing. */
+    * PB10A INT is on PB5, independent from SW6306; no IRQ sharing. */
     SC7A20_Init();
     PowerAlgo_Init();  /* SW6306 monitor, sleep gating, auxiliary A ADC. */
     SensorAlgo_Init(); /* SC7A20/MMC5603/BMP180 STOP policy. */
@@ -141,10 +124,9 @@ void APP_TaskInit(void)
     MiaoUi_Setup(&s_ui);
     pm_api_init();
     CoroOS_Init(&s_scheduler, s_threads, s_states,
-                (uint8_t)(sizeof(s_threads) / sizeof(s_threads[0])));
+        (uint8_t)(sizeof(s_threads) / sizeof(s_threads[0])));
 }
 
-void APP_TaskRunOnce(void)
-{
+void APP_TaskRunOnce(void) {
     CoroOS_RunOnce(&s_scheduler);
 }
