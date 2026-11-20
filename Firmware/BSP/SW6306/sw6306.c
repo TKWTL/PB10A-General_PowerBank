@@ -194,6 +194,10 @@ SW6306_RET SW6306_ADCLoad(SW6306_NOARG) {
     SW6306_MUTEX_TAKE;
     SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_ADC_SET);
 #ifdef SW6306_USE_PROTOTHREAD
+    if(s_io_failed) {
+        sw6306_i2c_failed();
+        SW6306_FUNC_ABORT; /* never interpret the wrong register page */
+    }
     any_fail=0u;
     for(i=0u;i<7u;i++) {
         SW6306_SPAWN_ARGS(sw6306_adc_read_raw, ch_tab[i], &adc[i]);
@@ -220,8 +224,10 @@ SW6306_RET SW6306_ADCLoad(SW6306_NOARG) {
     /* tntc 边界 5~24 = NTC -55~40°C：上限太低，快充/快放时电池正常发热超 40°C 会误判
      * 数据不合规 → initialized=0 → ForceOff+Init → 放电掉功率（2026-08-17/18 两次实测确认）。
      * 放宽为 5~50 = -55~170°C，仅拦截真正无效的通信数据。 */
-    if(SW6306_Status.tntc > 50U    || SW6306_Status.tntc <  5U)    SW6306_Status.initialized = 0;//数据边界检查
-    if(SW6306_Status.tchip > 3203U || SW6306_Status.tchip < 1500U) SW6306_Status.initialized = 0;//不合规时重新初始化
+    if(adc[4].ok && (SW6306_Status.tntc > 50u || SW6306_Status.tntc < 5u))
+        SW6306_Status.initialized=0u;
+    if(adc[5].ok && (SW6306_Status.tchip > 3203u || SW6306_Status.tchip < 1500u))
+        SW6306_Status.initialized=0u;
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
