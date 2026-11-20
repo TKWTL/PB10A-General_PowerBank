@@ -145,6 +145,22 @@ typedef struct {
     uint16_t raw;
 } sw6306_adc_slot_t;
 
+#ifdef SW6306_USE_PROTOTHREAD
+static SW6306_RET sw6306_adc_read_raw(SW6306_ARGS(uint8_t ch, sw6306_adc_slot_t *slot)) {
+    /* ISR reads into persistent bytes. Never yield with a stack buffer. */
+    static uint8_t raw[2];
+    SW6306_FUNC_BEGIN;
+    slot->ok=0u;
+    s_io_failed=0u;
+    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_ADC_SET, ch);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_BytesRead, SW6306_STRG_ADCL, raw, 2u);
+    if(!s_io_failed) {
+        slot->raw=(uint16_t)(((uint16_t)raw[0] | ((uint16_t)raw[1]<<8)) & 0x0FFFu);
+        slot->ok=1u;
+    }
+    SW6306_FUNC_END;
+}
+#else
 static void sw6306_adc_read_raw(uint8_t ch, sw6306_adc_slot_t *slot) {
     uint16_t raw = 0U;
     SW6306_ByteWrite(SW6306_CTRG_ADC_SET, ch);
@@ -155,12 +171,19 @@ static void sw6306_adc_read_raw(uint8_t ch, sw6306_adc_slot_t *slot) {
     slot->raw = raw & 0x0FFF;        /* 12 位有效（0x31 低 8 位 + 0x32 低 4 位），高 4 位为保留位 */
     slot->ok  = 1U;
 }
+#endif
 
 SW6306_RET SW6306_ADCLoad(SW6306_NOARG) {
     /* 原始码与工程量分开：先读齐 12 位原始码，再统一换算写入镜像（换算集中在 LOAD 阶段）。
      * 失败的通道跳过更新，保证镜像不会出现"半新半旧"或被重复换算的值。 */
+#ifdef SW6306_USE_PROTOTHREAD
+    static sw6306_adc_slot_t adc[7];
+    static uint8_t i;
+    static uint8_t any_fail;
+#else
     sw6306_adc_slot_t adc[7];
     uint8_t i;
+#endif
     static const uint8_t ch_tab[7] = {
         SW6306_ADC_SET_VBUS, SW6306_ADC_SET_IBUS, SW6306_ADC_SET_VBAT, SW6306_ADC_SET_IBAT,
         SW6306_ADC_SET_TNTC, SW6306_ADC_SET_TCHIP, SW6306_ADC_SET_VNTC
@@ -168,9 +191,20 @@ SW6306_RET SW6306_ADCLoad(SW6306_NOARG) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
     SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_ADC_SET);
+#ifdef SW6306_USE_PROTOTHREAD
+    any_fail=0u;
+    for(i=0u;i<7u;i++) {
+        SW6306_SPAWN_ARGS(sw6306_adc_read_raw, ch_tab[i], &adc[i]);
+        if(s_io_failed) any_fail=1u;
+    }
+    s_io_failed=any_fail;
+    if(any_fail) sw6306_i2c_failed();
+    else sw6306_i2c_succeeded();
+#else
     for(i = 0U; i < 7U; i++) {
         sw6306_adc_read_raw(ch_tab[i], &adc[i]);
     }
+#endif
 
     /* 原始码 → 工程量（8mV / 4mA / 7mV / 5mA 每 LSB；电池端感测电阻校准在 ReadIBAT 里做） */
     if(adc[0].ok) SW6306_Status.vbus  = (uint16_t)(adc[0].raw << 3);//转换BUS电压
@@ -280,27 +314,43 @@ float SW6306_ReadNTCTemp(void)//读取句柄中的 NTC 温度（°C，Beta 公�
     return SW6306_Status.ntc_temp;
 }
 
-SW6306_RET SW6306_PortStatusLoad(SW6306_NOARG)//更新端口状态镜像寄存器(0x13,0x18,0x19,0x1C,0x1D)
-{
-    uint8_t t[5];                    /* 读缓冲：失败时镜像保持上一次有效值 */
+SW6306_RET SW6306_PortStatusLoad(SW6306_NOARG) {
+#ifdef SW6306_USE_PROTOTHREAD
+    static uint8_t t[5]; /* survives PT yields and HAL IRQ */
+#else
+    uint8_t t[5];
+#endif
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
-    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_STRG_NOLOAD);//切换低地址
-    if(SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_NOLOAD, &t[0], 1, (uint8_t*)&SW6306_Status.flag) != I2C_OK
-        || SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_SYS_STAT, &t[1], 1, (uint8_t*)&SW6306_Status.flag) != I2C_OK
-        || SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_TYPEC, &t[2], 1, (uint8_t*)&SW6306_Status.flag) != I2C_OK
-        || SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_TYPEA_QCIN, &t[3], 1, (uint8_t*)&SW6306_Status.flag) != I2C_OK
-        || SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_PORT_STA, &t[4], 1, (uint8_t*)&SW6306_Status.flag) != I2C_OK) {
-        sw6306_i2c_failed();   /* 已重试仍失败，累计整组故障 */
-        SW6306_MUTEX_GIVE;
-        SW6306_FUNC_END;
+    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_STRG_NOLOAD);
+#ifdef SW6306_USE_PROTOTHREAD
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_NOLOAD, &t[0]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_SYS_STAT, &t[1]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_TYPEC, &t[2]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_TYPEA_QCIN, &t[3]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_PORT_STA, &t[4]);
+    if(s_io_failed) {
+        sw6306_i2c_failed();
+        SW6306_FUNC_ABORT;
     }
+#else
+    if(SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_NOLOAD, &t[0], 1, (uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
+       SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_SYS_STAT, &t[1], 1, (uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
+       SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_TYPEC, &t[2], 1, (uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
+       SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_TYPEA_QCIN, &t[3], 1, (uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
+       SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_PORT_STA, &t[4], 1, (uint8_t*)&SW6306_Status.flag)!=I2C_OK) {
+        sw6306_i2c_failed();
+        SW6306_MUTEX_GIVE;
+        return;
+    }
+#endif
     sw6306_i2c_succeeded();
-    SW6306_Status.noload     = t[0];//0x13
-    SW6306_Status.sys_stat   = t[1];//0x18
-    SW6306_Status.typec_stat = t[2];//0x19
-    SW6306_Status.typea_qcin = t[3];//0x1C
-    SW6306_Status.port_stat  = t[4];//0x1D
+    SW6306_Status.noload=t[0];
+    SW6306_Status.sys_stat=t[1];
+    SW6306_Status.typec_stat=t[2];
+    SW6306_Status.typea_qcin=t[3];
+    SW6306_Status.port_stat=t[4];
+    ++s_port_read_seq;
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
@@ -309,22 +359,31 @@ SW6306_RET SW6306_PortStatusLoad(SW6306_NOARG)//更新端口状态镜像寄存�
  * 已打开A1、检测到A1在线的情况禁止运输；物理端口存在标志不能表示设备插入。
  * 独立于SW6306缓存镜像，避免利用500ms前的旧数据。 */
 uint8_t SW6306_TransportPortsIdle(void) {
-    uint8_t sys, typec, port;
-    if (!SW6306_IsInitialized()) return 0U;
-    SW6306_MUTEX_TAKE;
+    uint8_t sys,typec,port;
+    if(!SW6306_IsInitialized())return 0u;
+#ifdef SW6306_USE_PROTOTHREAD
+    /* Caller MUST check PortReadSequence advanced in its own async
+     * operation. RAM-only here: never block the scheduler in PM. */
+    if(!s_port_read_seq)return 0u;
+    sys=SW6306_Status.sys_stat;
+    typec=SW6306_Status.typec_stat;
+    port=SW6306_Status.port_stat;
+#else
+    if(I2C_TransactionBegin()!=I2C_OK)return 0u;
     SW6306_RegsetSwitch(SW6306_STRG_SYS_STAT);
-    if (SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_SYS_STAT, &sys, 1, (uint8_t*)&SW6306_Status.flag) != I2C_OK ||
-        SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_TYPEC, &typec, 1, (uint8_t*)&SW6306_Status.flag) != I2C_OK ||
-        SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_PORT_STA, &port, 1, (uint8_t*)&SW6306_Status.flag) != I2C_OK) {
-        SW6306_MUTEX_GIVE;
-        return 0U;
+    if(SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_SYS_STAT, &sys, 1, (uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
+       SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_TYPEC, &typec, 1, (uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
+       SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_PORT_STA, &port, 1, (uint8_t*)&SW6306_Status.flag)!=I2C_OK) {
+        I2C_TransactionEnd();
+        return 0u;
     }
-    SW6306_MUTEX_GIVE;
-    return ((sys & (SW6306_SYS_STAT_CHGING | SW6306_SYS_STAT_DISCHGING |
-        SW6306_SYS_STAT_C1ON | SW6306_SYS_STAT_A1ON)) == 0U &&
-        (typec & (SW6306_TYPEC_C1MSK | SW6306_TYPEC_C1_CC1 | SW6306_TYPEC_C1_CC2)) == 0U &&
-        (port & (SW6306_PORT_STA_C1SRC | SW6306_PORT_STA_C1SNK |
-        SW6306_PORT_STA_C1OL | SW6306_PORT_STA_A1OL)) == 0U) ? 1U : 0U;
+    I2C_TransactionEnd();
+#endif
+    return ((sys & (SW6306_SYS_STAT_CHGING|SW6306_SYS_STAT_DISCHGING|
+        SW6306_SYS_STAT_C1ON|SW6306_SYS_STAT_A1ON))==0u &&
+        (typec & (SW6306_TYPEC_C1MSK|SW6306_TYPEC_C1_CC1|SW6306_TYPEC_C1_CC2))==0u &&
+        (port & (SW6306_PORT_STA_C1SRC|SW6306_PORT_STA_C1SNK|
+        SW6306_PORT_STA_C1OL|SW6306_PORT_STA_A1OL))==0u) ? 1u:0u;
 }
 
 uint8_t SW6306_IsPortC1ON(void) {
