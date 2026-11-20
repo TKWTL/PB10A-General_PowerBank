@@ -63,7 +63,7 @@ uint8_t I2C_IsReady(uint16_t address);
  * Buffer/flag storage MUST survive coroutine yields and IRQ completion. */
 uint8_t ASYNC_I2C_Transmit(uint16_t address, uint8_t reg, uint8_t *data, uint16_t count, uint8_t priority, uint8_t *flag);
 uint8_t ASYNC_I2C_Receive(uint16_t address, uint8_t reg, uint8_t *data, uint16_t count, uint8_t priority, uint8_t *flag);
-uint8_t I2C_AsyncProbe(uint16_t address, uint8_t *flag);
+uint8_t I2C_AsyncProbe(uint16_t address, volatile uint8_t *flag);
 void I2C_AsyncService(void);
 /* USER CODE END Prototypes */
 

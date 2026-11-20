@@ -227,7 +227,7 @@ uint8_t ASYNC_I2C_Receive(uint16_t a,uint8_t reg,uint8_t *data,uint16_t n,uint8_
     return i2c_submit(1u,a,reg,data,n,flag);
 }
 
-uint8_t I2C_AsyncProbe(uint16_t a,uint8_t *flag) {
+uint8_t I2C_AsyncProbe(uint16_t a,volatile uint8_t *flag) {
     return i2c_submit(2u,a,0u,&s_probe_dummy,0u,flag);
 }
 

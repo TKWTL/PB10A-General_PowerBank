@@ -24,7 +24,7 @@
 enum {SCANNER_TITLE=0,SCANNER_SCAN,SCANNER_HOLD};
 static uint8_t s_active,s_phase,s_next,s_ack[128];
 static uint8_t s_probe_addr,s_probe_pending;
-static uint8_t s_probe_flag; /* stable IRQ completion storage */
+static volatile uint8_t s_probe_flag; /* IRQ-written completion state */
 static uint32_t s_phase_at;
 static void scanner_start(uint32_t now,uint8_t title) {
     uint8_t i;
