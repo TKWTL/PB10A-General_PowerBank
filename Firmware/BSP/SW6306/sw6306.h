@@ -14,11 +14,12 @@ extern "C" {
 // 定义 SW6306_USE_PROTOTHREAD 以启用协作式挂起（protothread + coroOS）。
 //  - 未定义：阻塞式 API（返回类型为 void）。
 //  - 已定义：协作式 API（返回类型为 char，并额外带 struct pt *pt 参数）。
-/* NOT enabled until all direct I2C calls and stack-backed buffers in the
- * SW6306 driver have been migrated. Uncommenting alone is unsafe.
- * The underlying pt.h / coroOS wrapper and Core I2C async API are ready.
+/* SW6306 driver now runs from one owning Protothreads actor.
+ * Do not call SW6306 PT functions directly from UI or other tasks:
+ * register configuration requests with that actor instead.
+ * The PM callback temporarily takes ownership only after it is idle.
  */
-//#define SW6306_USE_PROTOTHREAD
+#define SW6306_USE_PROTOTHREAD
 
 /* 连续I²C失败保护：整组寄存器读取失败5次才重初始化；
  * 成功一次整组读取即清零。ADC单通道失败保留旧镜像。 */
