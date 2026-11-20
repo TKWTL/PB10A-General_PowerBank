@@ -13,6 +13,8 @@
 #include "mmc5603_algo.h"
 #include "bmp180_algo.h"
 #include "pm_api.h"
+#include "main.h"
+#include "millis.h"
 static ui_page_t s_home,s_settings,s_stats,s_game,s_tools,s_display;
 static ui_page_t s_sys,s_sleep_wake,s_sleep_options,s_stat_power,s_stat_battery,s_stat_sensors,s_stat_system;
 static ui_item_t s_powerbank,s_radio,s_settings_item,s_stats_item,s_game_item,s_tools_item,s_about;
@@ -32,6 +34,12 @@ static const char *const s_sleep_labels[9]={
 static const int s_sleep_seconds[9]={0,15,30,60,120,300,600,900,1800};
 static ui_text_t s_about_text,s_dino_text,s_tools_text;
 static ui_element_t s_about_el,s_dino_el,s_tools_el;
+/* Only one pending target; Radio (1) outranks Powerbank (2). */
+static uint8_t s_nav_pending,s_nav_active;
+static uint32_t s_power_nav_requested_at;
+static uint8_t s_mic_candidate,s_mic_latched;
+static uint32_t s_mic_edge_at;
+
 static void add_return(ui_page_t *page,ui_page_t *parent,ui_item_t *item,uint8_t icon) {
     (void)icon;
     AddItem("[Back]",UI_ITEM_RETURN,page->type==UI_PAGE_ICON?img_home:0,item,page,parent,0);
@@ -91,64 +99,128 @@ void Create_Text(ui_t *ui) {
     s_tools_el.text=&s_tools_text;Create_element(&s_tools_info,&s_tools_el);
 }
 
+/* Menu hierarchy is deliberately visible through indentation. All
+ * AddPage/AddItem calls remain in their original registration order. */
 void Create_MenuTree(ui_t *ui) {
     (void)ui;
     AddPage("[PB10A]",&s_home,UI_PAGE_ICON,0);
-    AddItem("-Powerbank",UI_ITEM_WORD,img_power,&s_powerbank,&s_home,0,Powerbank_AppRun);
-    AddItem("-Radio",UI_ITEM_WORD,img_radio,&s_radio,&s_home,0,Radio_AppRun);
-    AddItem("-Settings",UI_ITEM_PARENTS,img_configuration,&s_settings_item,&s_home,&s_settings,0);
-    AddItem("-Statistics",UI_ITEM_PARENTS,img_statistics,&s_stats_item,&s_home,&s_stats,0);
-    AddItem("-Game",UI_ITEM_PARENTS,img_games,&s_game_item,&s_home,&s_game,0);
-    AddItem("-Tools",UI_ITEM_PARENTS,img_tools,&s_tools_item,&s_home,&s_tools,0);
-    AddItem("-About",UI_ITEM_WORD,img_toby_fox,&s_about,&s_home,0,0);
+        AddItem("-Powerbank",UI_ITEM_WORD,img_power,&s_powerbank,&s_home,0,Powerbank_AppRun);
+        AddItem("-Radio",UI_ITEM_WORD,img_radio,&s_radio,&s_home,0,Radio_AppRun);
+        UI_SetLeaveHook(&s_radio,Radio_AppOnLeave);
+        AddItem("-Settings",UI_ITEM_PARENTS,img_configuration,&s_settings_item,&s_home,&s_settings,0);
+        AddItem("-Statistics",UI_ITEM_PARENTS,img_statistics,&s_stats_item,&s_home,&s_stats,0);
+        AddItem("-Game",UI_ITEM_PARENTS,img_games,&s_game_item,&s_home,&s_game,0);
+        AddItem("-Tools",UI_ITEM_PARENTS,img_tools,&s_tools_item,&s_home,&s_tools,0);
+        AddItem("-About",UI_ITEM_WORD,img_toby_fox,&s_about,&s_home,0,0);
 
     AddPage("[Settings]",&s_settings,UI_PAGE_TEXT,&s_home);
-    add_return(&s_settings,&s_home,&s_settings_back,0);
-    AddItem(" Display",UI_ITEM_PARENTS,0,&s_display_item,&s_settings,&s_display,0);
-    AddItem(" Sleep&Wake",UI_ITEM_PARENTS,0,&s_sleep_wake_item,&s_settings,&s_sleep_wake,0);
-    Add_TimeSet_Items(&s_settings); /* Time submenu and its editor from service */
-    AddItem(" System",UI_ITEM_PARENTS,0,&s_system_item,&s_settings,&s_sys,0);
+        add_return(&s_settings,&s_home,&s_settings_back,0);
+        AddItem(" Display",UI_ITEM_PARENTS,0,&s_display_item,&s_settings,&s_display,0);
+        AddItem(" Sleep&Wake",UI_ITEM_PARENTS,0,&s_sleep_wake_item,&s_settings,&s_sleep_wake,0);
+        Add_TimeSet_Items(&s_settings);
+        AddItem(" System",UI_ITEM_PARENTS,0,&s_system_item,&s_settings,&s_sys,0);
 
-    AddPage("[Display]",&s_display,UI_PAGE_TEXT,&s_settings);
-    add_return(&s_display,&s_settings,&s_display_back,0);
-    Add_Disp_Items(&s_display);
-    AddPage("[Sleep&Wake]",&s_sleep_wake,UI_PAGE_TEXT,&s_settings);
-    add_return(&s_sleep_wake,&s_settings,&s_sleep_wake_back,0);
-    add_sleep_options(&s_sleep_wake);
-    SC7A20Algo_AddWakeSettingsItems(&s_sleep_wake);
-    AddPage("[System]",&s_sys,UI_PAGE_TEXT,&s_settings);
-    add_return(&s_sys,&s_settings,&s_system_back,0);
-    System_AddSettingsItems(&s_sys);
+        AddPage("[Display]",&s_display,UI_PAGE_TEXT,&s_settings);
+            add_return(&s_display,&s_settings,&s_display_back,0);
+            Add_Disp_Items(&s_display);
+
+        AddPage("[Sleep&Wake]",&s_sleep_wake,UI_PAGE_TEXT,&s_settings);
+            add_return(&s_sleep_wake,&s_settings,&s_sleep_wake_back,0);
+            add_sleep_options(&s_sleep_wake);
+            SC7A20Algo_AddWakeSettingsItems(&s_sleep_wake);
+
+        AddPage("[System]",&s_sys,UI_PAGE_TEXT,&s_settings);
+            add_return(&s_sys,&s_settings,&s_system_back,0);
+            System_AddSettingsItems(&s_sys);
 
     AddPage("[Statistics]",&s_stats,UI_PAGE_TEXT,&s_home);
-    add_return(&s_stats,&s_home,&s_stats_back,0);
-    AddItem(" Power",UI_ITEM_PARENTS,0,&s_stat_power_item,&s_stats,&s_stat_power,0);
-    AddItem(" Battery",UI_ITEM_PARENTS,0,&s_stat_battery_item,&s_stats,&s_stat_battery,0);
-    AddItem(" Sensors",UI_ITEM_PARENTS,0,&s_stat_sensors_item,&s_stats,&s_stat_sensors,0);
-    AddItem(" System",UI_ITEM_PARENTS,0,&s_stat_system_item,&s_stats,&s_stat_system,0);
-    AddPage("[Power]",&s_stat_power,UI_PAGE_TEXT,&s_stats);
-    add_return(&s_stat_power,&s_stats,&s_stat_power_back,0);
-    PowerAlgo_AddStatisticsItems(&s_stat_power);
-    AddPage("[Battery]",&s_stat_battery,UI_PAGE_TEXT,&s_stats);
-    add_return(&s_stat_battery,&s_stats,&s_stat_battery_back,0);
-    AddPage("[Sensors]",&s_stat_sensors,UI_PAGE_TEXT,&s_stats);
-    add_return(&s_stat_sensors,&s_stats,&s_stat_sensors_back,0);
-    SC7A20Algo_AddStatisticsItems(&s_stat_sensors);
-    MMC5603Algo_AddStatisticsItems(&s_stat_sensors);
-    BMP180Algo_AddStatisticsItems(&s_stat_sensors);
-    AddPage("[System]",&s_stat_system,UI_PAGE_TEXT,&s_stats);
-    add_return(&s_stat_system,&s_stats,&s_stat_system_back,0);
-    System_AddStatisticsItems(&s_stat_system);
+        add_return(&s_stats,&s_home,&s_stats_back,0);
+        AddItem(" Power",UI_ITEM_PARENTS,0,&s_stat_power_item,&s_stats,&s_stat_power,0);
+        AddItem(" Battery",UI_ITEM_PARENTS,0,&s_stat_battery_item,&s_stats,&s_stat_battery,0);
+        AddItem(" Sensors",UI_ITEM_PARENTS,0,&s_stat_sensors_item,&s_stats,&s_stat_sensors,0);
+        AddItem(" System",UI_ITEM_PARENTS,0,&s_stat_system_item,&s_stats,&s_stat_system,0);
+
+        AddPage("[Power]",&s_stat_power,UI_PAGE_TEXT,&s_stats);
+            add_return(&s_stat_power,&s_stats,&s_stat_power_back,0);
+            PowerAlgo_AddStatisticsItems(&s_stat_power);
+
+        AddPage("[Battery]",&s_stat_battery,UI_PAGE_TEXT,&s_stats);
+            add_return(&s_stat_battery,&s_stats,&s_stat_battery_back,0);
+
+        AddPage("[Sensors]",&s_stat_sensors,UI_PAGE_TEXT,&s_stats);
+            add_return(&s_stat_sensors,&s_stats,&s_stat_sensors_back,0);
+            SC7A20Algo_AddStatisticsItems(&s_stat_sensors);
+            MMC5603Algo_AddStatisticsItems(&s_stat_sensors);
+            BMP180Algo_AddStatisticsItems(&s_stat_sensors);
+
+        AddPage("[System]",&s_stat_system,UI_PAGE_TEXT,&s_stats);
+            add_return(&s_stat_system,&s_stats,&s_stat_system_back,0);
+            System_AddStatisticsItems(&s_stat_system);
 
     AddPage("[Game]",&s_game,UI_PAGE_ICON,&s_home);
-    add_return(&s_game,&s_home,&s_game_back,0);
-    AddItem("-Dinosaur",UI_ITEM_WORD,img_dinosuar,&s_dino,&s_game,0,0);
+        add_return(&s_game,&s_home,&s_game_back,0);
+        AddItem("-Dinosaur",UI_ITEM_WORD,img_dinosuar,&s_dino,&s_game,0,0);
+
     AddPage("[Tools]",&s_tools,UI_PAGE_ICON,&s_home);
-    add_return(&s_tools,&s_home,&s_tools_back,0);
-    AddItem("-I2C Scanner",UI_ITEM_WORD,img_scan,&s_scanner,&s_tools,0,i2c_Scanner);
-    AddItem("-Diagnostics",UI_ITEM_WORD,img_burn_in,&s_tools_info,&s_tools,0,0);
+        add_return(&s_tools,&s_home,&s_tools_back,0);
+        AddItem("-I2C Scanner",UI_ITEM_WORD,img_scan,&s_scanner,&s_tools,0,i2c_Scanner);
+        AddItem("-Diagnostics",UI_ITEM_WORD,img_burn_in,&s_tools_info,&s_tools,0,0);
+}
+
+/* Called from foreground services, never modifies any ui_t directly.
+ * Radio supersedes Powerbank if both connections arrive close together. */
+void MiaoUi_RequestNavigate(ui_target_t target) {
+    uint8_t request=target==UI_TARGET_RADIO?1u:
+        target==UI_TARGET_POWERBANK?2u:0u;
+    if(request && (!s_nav_pending || request<s_nav_pending)) {
+        if(request==2u)s_power_nav_requested_at=Millis();
+        s_nav_pending=request;
+    }
+}
+
+void MiaoUi_ProcessNavigate(ui_t *ui) {
+    ui_item_t *item;
+    uint8_t request;
+    if(!ui || !s_nav_pending)return;
+    /* Powerbank yields a short arbitration window to a debounced MIC event. */
+    if(s_nav_pending==2u &&
+        (uint32_t)(Millis()-s_power_nav_requested_at)<100u)return;
+    request=s_nav_pending;
+    s_nav_pending=0u;
+    if(!ui->navBookmark.valid)s_nav_active=0u;
+    /* One bookmark: lower/equal priority never interrupts a temporary app. */
+    if(ui->navBookmark.valid && s_nav_active && request>=s_nav_active)
+        return;
+    item=request==1u?&s_radio:&s_powerbank;
+    if(UI_NavigateTo(ui,item,UI_NAV_PUSH))
+        s_nav_active=request;
+}
+
+/* Only a confirmed new PB0 falling edge opens Radio, once per insertion.
+ * PM first forwards EXTI sources; the foreground service waits 40 ms. */
+void MiaoUi_ExternalEventService(void) {
+    uint8_t events=pm_api_take_events();
+    uint32_t now=Millis();
+    if(LL_GPIO_IsInputPinSet(MIC_INDET_GPIO_Port,MIC_INDET_Pin)) {
+        s_mic_candidate=0u;
+        s_mic_latched=0u;
+    }
+    else if((events&PM_WAKE_MIC_INDET) && !s_mic_latched) {
+        s_mic_candidate=1u;
+        s_mic_edge_at=now;
+    }
+    if(s_mic_candidate && (uint32_t)(now-s_mic_edge_at)>=40u) {
+        s_mic_candidate=0u;
+        if(!LL_GPIO_IsInputPinSet(MIC_INDET_GPIO_Port,MIC_INDET_Pin)) {
+            s_mic_latched=1u;
+            if(System_AutoRadioNavigationEnabled())
+                MiaoUi_RequestNavigate(UI_TARGET_RADIO);
+        }
+    }
 }
 
 void MiaoUi_Setup(ui_t *ui) {
+    s_nav_pending=0u;s_nav_active=0u;
+    s_mic_candidate=0u;s_mic_latched=0u;
     Create_UI(ui,&s_powerbank);
 }

@@ -9,6 +9,7 @@
 #include "millis.h"
 #include "core/ui.h"
 #include "pm_api.h"
+#include "system_algo.h"
 #include <string.h>
 
 #define POWER_SW_SLEEP_BLOCK 0x08u /* separate from scanner (0x02) and radio (0x04) */
@@ -19,6 +20,21 @@ static uint8_t s_sw_phase,s_capacity_div,s_idle_verified,s_status_fresh;
 static uint8_t s_sw_owner_busy,s_cycle_ok;
 static uint32_t s_sw_seq_before;
 static uint32_t s_retry_at;
+static uint8_t s_port_baseline_valid,s_previous_connections;
+
+/* An insertion is a 0->1 transition in a successful live port snapshot.
+ * The initial snapshot is only a baseline, not a synthetic insert event. */
+static void sw6306_connection_update(void) {
+    uint8_t connected=SW6306_ConnectedPortMask();
+    if(s_port_baseline_valid) {
+        uint8_t newly_connected=(uint8_t)(connected &
+            (uint8_t)~s_previous_connections);
+        if(newly_connected && System_AutoPowerbankNavigationEnabled())
+            MiaoUi_RequestNavigate(UI_TARGET_POWERBANK);
+    }
+    s_previous_connections=connected;
+    s_port_baseline_valid=1u;
+}
 
 /*************************** SW6306 低功耗回调 ***************************/
 static uint8_t s_sw_low_power;
@@ -323,6 +339,7 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             s_status_fresh=0u;
             s_cycle_ok=1u;
             s_monitor.initialized=1u;
+            s_port_baseline_valid=0u; /* first successful PortStatusLoad */
             THRD_DELAY(100u);
             continue;
         }
@@ -351,6 +368,9 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             SW6306_OperationReset();
             THRD_SPAWN_NOARG(SW6306_PortStatusLoad);
             s_sw_owner_busy=0u;
+            if(SW6306_LastOperationOK() &&
+                SW6306_PortReadSequence()!=s_sw_seq_before)
+                sw6306_connection_update();
             s_idle_verified=(uint8_t)(SW6306_LastOperationOK() &&
                 SW6306_PortReadSequence()!=s_sw_seq_before &&
                 SW6306_TransportPortsIdle());
@@ -411,6 +431,7 @@ void PowerAlgo_Init(void) {
     memset(&s_monitor,0,sizeof(s_monitor));
     s_monitor.protocol="--";
     s_sw_phase=0u;s_capacity_div=1u;s_idle_verified=0u;
+    s_port_baseline_valid=0u;s_previous_connections=0u;
     s_status_fresh=0u;
     s_retry_at=Millis(); /* first service tick attempts SW6306_Init */
     s_sw_low_power=0u;s_sw_owner_busy=0u;

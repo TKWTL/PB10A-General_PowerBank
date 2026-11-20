@@ -344,6 +344,7 @@ typedef struct ui_item_t {
     } page;
     ui_item_pt lastItem, nextItem; // 上一个项目和下一个项目的指针
     ui_item_function itemFunction; // 函数指针，指向一个接受xpItem类型参数的函数
+    ui_item_function onLeave;      // WORD 等应用退出钩子（仅 MiaoUI 线程）
     int16_t x;
     int16_t y;
     int32_t animationX;   // Q10 定点
@@ -351,6 +352,17 @@ typedef struct ui_item_t {
     uint8_t functionState;
     const uint8_t *logo;
 } ui_item_t;
+
+/* One bookmark only: external applications can be temporary overlays. */
+typedef struct {
+    ui_item_pt item;    /* originating selection */
+    ui_item_pt target;  /* current temporary destination */
+    int headX,headY;
+    ui_cursor_param_t cursor;
+    ui_optionbar_param_t optionbar;
+    ui_scrollbar_t scrollbar;
+    uint8_t valid;
+} ui_nav_bookmark_t;
 
 /**
  * xMenu结构体定义
@@ -373,12 +385,18 @@ typedef struct ui_t {
     ui_dialog_param_t dialog;
     ui_optionbar_param_t optionbar;
     ui_scrollbar_t scrollbar;
+    ui_nav_bookmark_t navBookmark;
 } ui_t;
 
 void Create_Parameter(ui_t *ui);
 void Create_Text(ui_t *ui);
 void Create_MenuTree(ui_t *ui);
 void MiaoUi_Setup(ui_t *ui);
+/* Request layer owns the static MiaoUI item IDs; no ISR calls ui_loop(). */
+typedef enum { UI_TARGET_RADIO=0, UI_TARGET_POWERBANK=1 } ui_target_t;
+void MiaoUi_RequestNavigate(ui_target_t target);
+void MiaoUi_ProcessNavigate(ui_t *ui);
+void MiaoUi_ExternalEventService(void);
 
 #ifdef __cplusplus
 }

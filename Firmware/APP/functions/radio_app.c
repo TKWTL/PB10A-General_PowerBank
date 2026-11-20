@@ -516,6 +516,13 @@ static uint8_t radio_handle_menu(ui_t *ui,UI_ACTION action) {
     return 0u;
 }
 
+void Radio_AppOnLeave(ui_t *ui) {
+    (void)ui;
+    s_menu_open=0u;
+    s_view_entered=0u;
+    if(s_power_policy!=RADIO_POWER_ON)Radio_AppStop();
+}
+
 void Radio_AppRun(ui_t *ui) {
     UI_ACTION action;
     if(!ui)return;
@@ -528,9 +535,7 @@ void Radio_AppRun(ui_t *ui) {
         /* Long CONF is global BACK. In Radio ON mode the radio may keep
          * playing until the platform powers off, exactly like Collar's
          * background listening mode. */
-        s_menu_open=0u;
-        s_view_entered=0u;
-        if(s_power_policy!=RADIO_POWER_ON)Radio_AppStop();
+        Radio_AppOnLeave(ui);
         return; /* Preserve BACK so MiaoUI leaves the WORD page. */
     }
 
@@ -538,9 +543,7 @@ void Radio_AppRun(ui_t *ui) {
         Radio_AppStart();
     if(s_menu_open) {
         if(radio_handle_menu(ui,action)) {
-            s_menu_open=0u;
-            s_view_entered=0u;
-            if(s_power_policy!=RADIO_POWER_ON)Radio_AppStop();
+            Radio_AppOnLeave(ui);
             ui->action=UI_ACTION_BACK; /* request MiaoUI WORD exit */
             return;
         }

@@ -34,6 +34,7 @@ extern "C" {
 #include "ui_conf.h"
 
 void indevInit(void);
+void indevClearPending(void); /* Discard key actions captured before external navigation. */
 void indevService_10ms(void);
 UI_ACTION indevScan(const ui_t *ui);
 

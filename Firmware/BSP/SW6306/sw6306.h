@@ -1411,6 +1411,13 @@ uint8_t SW6306_ReadSystemStatus(void);          //读取REG0x18系统实时状�
 SW6306_RET SW6306_PortStatusLoad(SW6306_NOARG); //更新端口状态镜像寄存器(0x13,0x18,0x19,0x1C,0x1D)
 uint8_t SW6306_TransportPortsIdle(void);        //PT mode: verify current cached port snapshot (never performs I2C)
 uint32_t SW6306_PortReadSequence(void);        //increases only after a complete successful PortStatusLoad
+/* Actual observed connection/online indicators from the latest successful
+ * PortStatusLoad(), not SYS_STAT CxON/AxON path-enable bits. */
+#define SW6306_CONNECTED_C1 0x01u
+#define SW6306_CONNECTED_C2 0x02u
+#define SW6306_CONNECTED_A1 0x04u
+#define SW6306_CONNECTED_A2 0x08u
+uint8_t SW6306_ConnectedPortMask(void);
 uint8_t SW6306_LastOperationOK(void);          //1 if no I2C error latched by last SW6306 operation
 void SW6306_OperationReset(void);             //single actor calls this before launching a new top-level PT operation
 void SW6306_Invalidate(void);                 //RAM-only: request reinitialization after failed resume

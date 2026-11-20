@@ -12,6 +12,11 @@
 static uint8_t queue[KEY_QUEUE_SIZE],head,tail;
 static uint8_t conf_valid,conf_long,suppressed;
 static void clear_events(void){head=0u;tail=0u;}
+void indevClearPending(void) {
+    clear_events();
+    conf_valid=0u;conf_long=0u;
+    suppressed=0xFFu; /* held keys cannot act on the destination page */
+}
 static void queue_event(uint8_t ev) {
     uint8_t next=(uint8_t)((head+1u)%KEY_QUEUE_SIZE);
     if(next==tail)tail=(uint8_t)((tail+1u)%KEY_QUEUE_SIZE);

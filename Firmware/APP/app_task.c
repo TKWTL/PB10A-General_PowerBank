@@ -37,6 +37,7 @@ THRD_DECLARE(MiaoUiThread) {
     THRD_BEGIN;
     for(;;) {
         if(SSD1306_Display_IsReady() && !SSD1306_Display_FrameBusy() && !pm_api_ui_should_block()) {
+            MiaoUi_ProcessNavigate(&s_ui);
             Disp_ResumeRotation(&s_ui);
             ui_loop(&s_ui);
         }
@@ -69,6 +70,7 @@ THRD_DECLARE(SystemServiceThread) {
                 (Radio_AppIsActive() && !pm_api_ui_should_block()))
                 Radio_AppPoll();
         }
+        MiaoUi_ExternalEventService();
         beep_poll(now);
         THRD_DELAY(1u);
     }

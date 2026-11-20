@@ -67,6 +67,7 @@ void AddItem(const char *name, UI_ITEM_TYPE type, const uint8_t *image, ui_item_
     // 初始化项目的基本信息
     item->itemName = name; // 设置项目名称
     item->itemType = type; // 设置项目类型
+    item->onLeave = NULL;
 
     // 如果页面类型为图像且没有指定图像，则使用预设图像
     if(localPage->type == UI_PAGE_ICON && image != NULL)
@@ -939,6 +940,109 @@ static void Draw_UI(ui_t *ui, ui_page_t *Page, ui_item_t *nowItem, ui_item_t *ne
     Change_UIState(ui, UI_PAGE_DRAWING);
 }
 
+/* External event navigation is executed only in MiaoUiThread.
+ * The single bookmark stores the originating selection and viewport;
+ * a second PUSH replaces the temporary application without stacking RAM. */
+void UI_SetLeaveHook(ui_item_t *item, ui_item_function hook) {
+    if(item)item->onLeave=hook;
+}
+
+static void UI_LeaveCurrent(ui_t *ui) {
+    ui_item_t *item=ui->nowItem;
+    if(!item)return;
+    if(item->onLeave)item->onLeave(ui);
+    if((ui->menuState==UI_ITEM_RUNING || ui->menuState==UI_ITEM_DRAWING) &&
+        item->itemType==UI_ITEM_DATA && item->element && item->element->data) {
+        ui_data_t *data=item->element->data;
+        if((data->dataType==UI_DATA_INT || data->dataType==UI_DATA_FLOAT) &&
+            data->functionType==UI_DATA_FUNCTION_EXIT_EXECUTE && data->function)
+            data->function(ui); /* Commit pending parameter change once. */
+    }
+}
+
+uint8_t UI_NavigateTo(ui_t *ui, ui_item_t *target, ui_nav_mode_t mode) {
+    ui_page_t *page;
+    if(!ui || !ui->nowItem || !target || !(page=target->page.location))
+        return 0u;
+    if(target==ui->nowItem &&
+        (ui->menuState==UI_ITEM_RUNING || ui->menuState==UI_ITEM_DRAWING))
+        return 1u;
+    if(mode==UI_NAV_PUSH && !ui->navBookmark.valid) {
+        ui->navBookmark.item=ui->nowItem;
+        ui->navBookmark.headX=ui->headX;
+        ui->navBookmark.headY=ui->headY;
+        ui->navBookmark.cursor=ui->cursor;
+        ui->navBookmark.optionbar=ui->optionbar;
+        ui->navBookmark.scrollbar=ui->scrollbar;
+        ui->navBookmark.valid=1u;
+    }
+    else if(mode==UI_NAV_REPLACE)ui->navBookmark.valid=0u;
+    if(ui->navBookmark.valid)ui->navBookmark.target=target;
+    if(ui->menuState==UI_ITEM_RUNING || ui->menuState==UI_ITEM_DRAWING ||
+        ui->menuState==UI_ITEM_EXIT)UI_LeaveCurrent(ui);
+    indevClearPending();
+    ui->oldItem=target;
+    ui->nowItem=target;
+    ui->action=UI_ACTION_NONE;
+    ui->dialog.nowHigh=0u;ui->dialog.nowWide=0u;ui->dialog.times=0u;
+    ui->scrollbar.value=0;
+    ui->optionbar.nowLenght=0;
+    ui->optionbar.position=0;
+    ui->headX=UI_PAGE_INIT_X;
+    ui->headY=UI_PAGE_INIT_Y;
+    if(page->type==UI_PAGE_ICON)
+        ui->headX-=(int)(target->id*ui->imageSpace);
+    else
+        ui->headY-=(int)(target->id*ui->textSpace);
+    /* Derive cursor from the new viewport, not stale item coordinates.
+     * Multiplication also handles negative scroll offsets without a signed
+     * left-shift (which would be undefined behaviour in C). */
+    {
+        int x=page->type==UI_PAGE_ICON?
+            ui->headX+target->id*ui->imageSpace:UI_PAGE_INIT_X;
+        int y=page->type==UI_PAGE_TEXT?
+            ui->headY+target->id*ui->textSpace:UI_PAGE_INIT_Y;
+        ui->cursor.nowColumn=(int32_t)x*UI_FX_ONE;
+        ui->cursor.nowRow=(int32_t)(y-UI_FONT_HIGHT)*UI_FX_ONE;
+        ui->cursor.targrtColumn=x;
+        ui->cursor.targrtRow=y-UI_FONT_HIGHT;
+    }
+    page->pageState=UI_PAGE_STATIC;
+    ui->menuState=(target->itemType==UI_ITEM_WORD ||
+        target->itemType==UI_ITEM_DATA ||
+        target->itemType==UI_ITEM_WAVE ||
+        target->itemType==UI_ITEM_LOOP_FUNCTION ||
+        target->itemType==UI_ITEM_ONCE_FUNCTION)?
+        UI_ITEM_DRAWING:UI_PAGE_INIT;
+    return 1u;
+}
+
+uint8_t UI_NavigateBack(ui_t *ui) {
+    ui_item_t *item;
+    if(!ui || !ui->navBookmark.valid)return 0u;
+    if(ui->menuState==UI_ITEM_RUNING || ui->menuState==UI_ITEM_DRAWING ||
+        ui->menuState==UI_ITEM_EXIT)UI_LeaveCurrent(ui);
+    item=ui->navBookmark.item;
+    if(!item || !item->page.location) {
+        ui->navBookmark.valid=0u;
+        return 0u;
+    }
+    ui->nowItem=item;
+    ui->oldItem=item;
+    ui->headX=ui->navBookmark.headX;
+    ui->headY=ui->navBookmark.headY;
+    ui->cursor=ui->navBookmark.cursor;
+    ui->optionbar=ui->navBookmark.optionbar;
+    ui->scrollbar=ui->navBookmark.scrollbar;
+    ui->navBookmark.valid=0u;
+    ui->action=UI_ACTION_NONE;
+    ui->dialog.nowHigh=0u;ui->dialog.nowWide=0u;ui->dialog.times=0u;
+    ui->nowItem->page.location->pageState=UI_PAGE_STATIC;
+    /* A transient app or parameter editor is never restarted on return. */
+    ui->menuState=UI_PAGE_INIT;
+    return 1u;
+}
+
 void Create_element(ui_item_t *item, ui_element_t *element) {
     if(item == NULL || element == NULL) return;
 
@@ -1017,6 +1121,12 @@ static void Process_UI_Run(ui_t *ui, UI_ACTION Action) {
                  * Do it before the eight-frame fade/Draw_UI. The PM
                  * task will enter UI_OFF at its next 50ms poll, even
                  * if automatic sleep is blocked by active hardware. */
+                if(ui->navBookmark.valid && ui->navBookmark.target &&
+                    ui->nowItem->page.location==
+                        ui->navBookmark.target->page.location) {
+                    (void)UI_NavigateBack(ui);
+                    break;
+                }
                 if(ui->nowItem->page.location->parentPage == NULL){
                     pm_api_force_sleep(); /* Root BACK -> UI_OFF/STOP1. */
                     break;
@@ -1044,6 +1154,10 @@ static void Process_UI_Run(ui_t *ui, UI_ACTION Action) {
         }
         break;
     case UI_ITEM_EXIT:
+        /* A temporary external application returns to the saved page. */
+        if(ui->navBookmark.valid && ui->navBookmark.target==ui->nowItem &&
+            UI_NavigateBack(ui))break;
+        UI_LeaveCurrent(ui);
         // 退出应用时的初始化操作，并返回菜单运行状态
         Dialog_AnimationParam_Init(ui);
         Scrollbar_Init(ui);
@@ -1245,6 +1359,7 @@ void Create_UI(ui_t *ui, ui_item_t *item) {
     ui->menuState = UI_PAGE_INIT;
     ui->action = UI_ACTION_NONE;
     ui->bgColor = 0;
-    ui->rotation = 0;
+    ui->rotation = 1; /* Gravity-based Screen Flip enabled by default. */
+    ui->navBookmark.valid=0u;
     AnimationParam_Init(&ui->animation);
 }

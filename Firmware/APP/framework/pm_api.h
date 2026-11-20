@@ -11,6 +11,8 @@ extern "C" {
 #define PM_WAKE_MIC_INDET  0x04u
 #define PM_WAKE_SUB_INDET  0x08u
 void pm_api_on_exti_event(uint8_t source);
+/* Application consumer receives a separate copy of each PM-dispatched source. */
+uint8_t pm_api_take_events(void);
 void pm_api_init(void);
 void pm_api_poll(void);
 void pm_api_refresh_idle(void);

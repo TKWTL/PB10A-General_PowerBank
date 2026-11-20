@@ -51,7 +51,7 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 
 ### Seven icon entries
 
-Powerbank (app), Radio (app), Settings (TEXT: Display/Time/System), Statistics (TEXT: Power/Battery/Sensors/System), Game (ICON), Tools (ICON), About (WORD). Battery and game items remain placeholders; Sensors and System show measured telemetry.
+Powerbank (app), Radio (app), Settings (TEXT: Display/Sleep&Wake/Time/System), Statistics (TEXT: Power/Battery/Sensors/System), Game (ICON), Tools (ICON), About (WORD). Battery and game items remain placeholders; Sensors and System show measured telemetry.
 
 ### Board bring-up and ADC telemetry (2026-11)
 
@@ -298,8 +298,9 @@ rotation-mode API is unchanged.
 
 ### SC7A20 gravity rotation and STOP1 wake (2026-11-20)
 
-- Display > Screen Flip is an **auto-rotate permission**, default OFF. OFF
-  always uses the SSD1306 native `U8G2_R0`; ON uses the SC7A20's
+- Display > Screen Flip is an **auto-rotate permission**, default ON.
+  It precedes Background in the Display menu. OFF always uses the
+  SSD1306 native `U8G2_R0`; ON uses the SC7A20's
   confirmed orientation (`U8G2_R0` or `U8G2_R2`) in the MiaoUI thread
   only when the framebuffer is not owned by SPI DMA.
 - The board's flat, screen-upright attitude is **Z≈-1000 mg**; inverting
@@ -332,8 +333,9 @@ The CubeMX GPIO configuration enables **falling-edge** EXTI inputs for:
 - Five navigation keys: PC6, PA9, PA10, PA12, PA15, grouped as
   `PM_WAKE_KEY` (single source bit). Normal 10 ms button debouncing and
   action queuing remain in `indevService_10ms()`.
-- SC7A20 INT1: PB5/EXTI5, `PM_WAKE_SC7A20`. The PM thread accepts
-  sensor wake only when its sleep monitor is armed (Pickup/Motion enabled).
+- SC7A20 INT1: PB5/EXTI5, `PM_WAKE_SC7A20`. Every falling edge
+  wakes and refreshes the PM idle timer, even without Pickup/Motion
+  monitoring armed. Only the SC7A20 PM device decides sensor register mode.
 - `MIC_INDET`: PB0/EXTI0, `PM_WAKE_MIC_INDET`.
 - `SUB_INDET`: PA7/EXTI7, `PM_WAKE_SUB_INDET`. Aux-A insertion
   state and voltage/current are still polled by `ADC_RTC_AuxAThread`
@@ -343,16 +345,63 @@ The two insertion inputs have GPIO pull-ups and falling-edge interrupts,
 so a high-to-low transition requests wake. They do **not** presently
 handle unplug/rising edges or run connector-specific application logic.
 
-All EXTI handlers set only bits in the same volatile `s_irq_events`
-bitmask through `pm_api_on_exti_event()`. CubeMX-generated LL handlers
-also clear the corresponding EXTI pending flags. `pm_api_poll()` atomically takes and
-clears that bitmask every 50 ms, filters unarmed SC7A20 events, and
-notifies the PM controller. Valid events cancel a forced sleep request,
-refresh the idle timeout and start the post-wake key guard when the
-UI was blocked. Importantly, EXTI itself wakes the MCU out of WFI;
-the foreground PM polling step decides what happens to UI and services
-**after** the core resumes.
+All EXTI handlers set only bits in the volatile `s_irq_events` mask
+through `pm_api_on_exti_event()`. CubeMX-generated LL handlers also
+clear the pending flags. Every 50 ms, `pm_api_poll()` atomically takes
+and clears this mask, refreshes the idle timer and passes an independent
+copy into `s_app_events`. The foreground event service consumes that
+copy via `pm_api_take_events()`. No external IRQ is filtered out by
+the PM layer, including SC7A20 when wake monitoring is disabled.
+Physical EXTI wakes the CPU from STOP1; the foreground PM task
+subsequently controls UI and peripherals.
 
 The PM transition and SC7A20 sleep hooks do not perform I2C access
 inside interrupt handlers. Button contact bounce and sensor wake
 thresholds must still be verified on real hardware.
+
+### External event navigation / MiaoUI single bookmark (2026-11-20)
+
+- `MiaoUI/core/ui.h` exports `UI_NavigateTo(ui,target,UI_NAV_PUSH|
+  UI_NAV_REPLACE)` and `UI_NavigateBack(ui)`. The implementation stores
+  one bookmark (originating item, viewport, cursor, scroll/option bars)
+  in `ui_t`, not a dynamic stack. A temporary WORD application's BACK
+  and Exit restore that original menu instead of its normal parent.
+  External navigation from parameter editing calls its exit/commit hook
+  before leaving. Applications may register `UI_SetLeaveHook()`.
+- The PB10A request layer in `MiaoUI/ui_conf.c` owns the static `s_radio`
+  and `s_powerbank` items and exposes `MiaoUi_RequestNavigate(target)`.
+  That function records only a target ID; it never changes MiaoUI state.
+  `MiaoUi_ProcessNavigate()` is called only by `MiaoUiThread`, when
+  the OLED is ready, frame DMA idle and PM allows UI. The navigation
+  core drops pre-navigation button actions so they cannot select items
+  in the new page.
+- Single-slot arbitration: Radio has priority over Powerbank; the latter
+  waits 100 ms to allow a concurrent debounced headphone event to win.
+  A higher-priority target can replace a temporary lower-priority
+  application without losing the original bookmark. No nested stack.
+- `Settings > System`: `Headphone Auto UI` and `Port Auto UI` are
+  independent, default-OFF, RAM-only switches. They control page changes,
+  not the Radio power policy or SW6306 output mode. Radio's MiaoUI leave
+  hook resets its view state; `ON` keeps running in the background,
+  while `OFF` remains off when merely opening the page.
+- PB0/MIC_INDET falling-edge event goes through PM's foreground event
+  consumer. After **40 ms** it confirms the pin is still low and submits
+  Radio only if the auto-switch is enabled. One connection can trigger
+  only once; returning to high re-arms the next insertion. A headset
+  already plugged in at boot does not generate a synthetic event.
+- SW6306's existing 100 ms staggered task needs no new I2C scan.
+  Its successful `PortStatusLoad()` snapshot already contains TYPEC
+  (0x19) and PORT_STA (0x1D). `SW6306_ConnectedPortMask()` uses C1/C2
+  Source/Sink/CC/online flags and A1/A2 online flags, **not** SYS_STAT
+  path-ON bits. The first successful read establishes a baseline, later
+  complete reads identify 0->1 connections, and failed reads do not
+  update it. The unpowered passive A-port case can remain undetectable.
+- **PB5 is wired to SC7A20 INT1, not SW6306 INT.** SW6306 attachment
+  must be confirmed by the polling coroutine; do not assume PB5 is
+  a SW6306 port-change interrupt.
+- All navigation actions, including returning from a temporary Radio
+  screen, occur only on the UI coroutine. STOP1 wake does not invoke
+  screen drawing or I2C in EXTI interrupt handlers.
+
+Keil compile and physical insertion, simultaneous-event, UI animation
+and STOP1 integration testing were not performed.

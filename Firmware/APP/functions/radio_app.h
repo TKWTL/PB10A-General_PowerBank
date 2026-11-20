@@ -3,6 +3,8 @@
 #include "ui_conf.h"
 /* Nonblocking Collar-Radio-style five-item menu and FM control. */
 void Radio_AppRun(ui_t *ui);
+/* MiaoUI leave hook: exit the view without forcing ON-mode radio off. */
+void Radio_AppOnLeave(ui_t *ui);
 /* Boot: enqueue ENABLE=0; MCO is disabled only after IRQ completion.
  * Returns 1 if the asynchronous request was accepted. */
 uint8_t Radio_AppInitLowPower(void);

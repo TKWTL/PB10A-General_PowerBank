@@ -7,13 +7,16 @@
 #include "main.h"
 #include "core/ui.h"
 static ui_item_t s_click_item,s_mute_item,s_reset_item;
+static ui_item_t s_radio_auto_item,s_power_auto_item;
 static ui_item_t s_vdda_item,s_temp_item;
 static ui_data_t s_vdda_data,s_temp_data;
 static ui_element_t s_vdda_element,s_temp_element;
 static int s_vdda_mv,s_die_temp_c10;
 static ui_data_t s_click_data,s_mute_data;
+static ui_data_t s_radio_auto_data,s_power_auto_data;
 static ui_element_t s_click_element,s_mute_element;
-static uint8_t s_click_on,s_muted;
+static ui_element_t s_radio_auto_element,s_power_auto_element;
+static uint8_t s_click_on,s_muted,s_radio_auto,s_power_auto;
 static void system_click_changed(ui_t *ui)
 { (void)ui;beep_set_key_enabled(s_click_on); }
 static void system_mute_changed(ui_t *ui)
@@ -47,6 +50,22 @@ void System_AddSettingsItems(ui_page_t *page) {
     s_mute_element.data=&s_mute_data;
     Create_element(&s_mute_item,&s_mute_element);
     AddItem(" Mute Beep",UI_ITEM_DATA,0,&s_mute_item,page,0,0);
+    s_radio_auto_data.name=" Headphone Auto UI";
+    s_radio_auto_data.ptr=&s_radio_auto;
+    s_radio_auto_data.dataType=UI_DATA_SWITCH;
+    s_radio_auto_data.actionType=UI_DATA_ACTION_RW;
+    s_radio_auto_element.data=&s_radio_auto_data;
+    Create_element(&s_radio_auto_item,&s_radio_auto_element);
+    AddItem(" Headphone Auto UI",UI_ITEM_DATA,0,&s_radio_auto_item,page,0,0);
+
+    s_power_auto_data.name=" Port Auto UI";
+    s_power_auto_data.ptr=&s_power_auto;
+    s_power_auto_data.dataType=UI_DATA_SWITCH;
+    s_power_auto_data.actionType=UI_DATA_ACTION_RW;
+    s_power_auto_element.data=&s_power_auto_data;
+    Create_element(&s_power_auto_item,&s_power_auto_element);
+    AddItem(" Port Auto UI",UI_ITEM_DATA,0,&s_power_auto_item,page,0,0);
+
     AddItem(" System Reset",UI_ITEM_ONCE_FUNCTION,0,&s_reset_item,page,0,system_reset_selected);
 }
 
@@ -68,3 +87,6 @@ void System_AddStatisticsItems(ui_page_t *page) {
 void System_Poll(void) {
     PowerAlgo_GetSystemAdc(&s_vdda_mv,&s_die_temp_c10,0);
 }
+
+uint8_t System_AutoRadioNavigationEnabled(void){return s_radio_auto;}
+uint8_t System_AutoPowerbankNavigationEnabled(void){return s_power_auto;}

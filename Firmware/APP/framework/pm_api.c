@@ -7,11 +7,11 @@
 #include "pm_sleep_timer.h"
 #include "millis.h"
 #include "main.h"
-#include "sc7a20_algo.h"
 #define PM_DEFAULT_TIMEOUT_MS 60000u
 static pm_controller_t s_ctrl;
 static uint8_t s_ready,s_block_mask,s_paused,s_forced;
 static volatile uint8_t s_irq_events;
+static uint8_t s_app_events; /* PM-dispatched sources for foreground services */
 static uint8_t s_refresh_request,s_wake_guard;
 static uint32_t s_wake_at;
 void pm_api_init(void) {
@@ -32,6 +32,15 @@ void pm_api_on_exti_event(uint8_t source) {
     __disable_irq();
     s_irq_events|=source;
     __set_PRIMASK(primask);
+}
+uint8_t pm_api_take_events(void) {
+    uint32_t primask=__get_PRIMASK();
+    uint8_t events;
+    __disable_irq();
+    events=s_app_events;
+    s_app_events=0u;
+    __set_PRIMASK(primask);
+    return events;
 }
 void pm_api_wake_from_key(void){pm_api_on_exti_event(PM_WAKE_KEY);}
 void pm_api_on_key_irq(void){pm_api_on_exti_event(PM_WAKE_KEY);}
@@ -70,11 +79,10 @@ void pm_api_poll(void) {
     __disable_irq();
     events=s_irq_events;
     s_irq_events=0u;
+    /* Every external interrupt is activity, including an unarmed sensor
+     * edge. Services receive the same sources after PM consumes them. */
+    s_app_events|=events;
     __set_PRIMASK(primask);
-    /* Sensor edges have wake semantics only while its STOP1 monitor is armed.
-     * MIC and SUB insertion edges, like keys, are unconditional wake inputs. */
-    if((events&PM_WAKE_SC7A20) && !SC7A20Algo_WakeIRQ())
-        events&=(uint8_t)~PM_WAKE_SC7A20;
     if(events) {
         /* Do not suppress a RUN key or plug-in as post-STOP input. */
         uint8_t waking=pm_controller_is_ui_blocked(&s_ctrl)?1u:0u;

@@ -362,6 +362,24 @@ SW6306_RET SW6306_PortStatusLoad(SW6306_NOARG) {
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
+/* Interpret the last *successful* PortStatusLoad() snapshot.
+ * Type-C CC orientation/source/sink and PORT_STA online flags are
+ * connection evidence; path-enable bits alone are not. */
+uint8_t SW6306_ConnectedPortMask(void) {
+    uint8_t mask=0u;
+    uint8_t port=SW6306_Status.port_stat;
+    uint8_t typec=SW6306_Status.typec_stat;
+    if((port&(SW6306_PORT_STA_C1SRC|SW6306_PORT_STA_C1SNK|SW6306_PORT_STA_C1OL)) ||
+        (typec&(SW6306_TYPEC_C1MSK|SW6306_TYPEC_C1_CC1|SW6306_TYPEC_C1_CC2)))
+        mask|=SW6306_CONNECTED_C1;
+    if((port&(SW6306_PORT_STA_C2SRC|SW6306_PORT_STA_C2SNK|SW6306_PORT_STA_C2OL)) ||
+        (typec&(SW6306_TYPEC_C2MSK|SW6306_TYPEC_C2_CC1|SW6306_TYPEC_C2_CC2)))
+        mask|=SW6306_CONNECTED_C2;
+    if(port&SW6306_PORT_STA_A1OL)mask|=SW6306_CONNECTED_A1;
+    if(port&SW6306_PORT_STA_A2OL)mask|=SW6306_CONNECTED_A2;
+    return mask;
+}
+
 /* 运输模式安全门：重新读取实时端口状态；任一读操作失败即拒绝。
  * A口禁止VBUS插拔检测，不能识别所有已插但未供电的被动A口连接；
  * 已打开A1、检测到A1在线的情况禁止运输；物理端口存在标志不能表示设备插入。

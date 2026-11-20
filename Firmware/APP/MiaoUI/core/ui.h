@@ -46,6 +46,13 @@ void Draw_Scrollbar(ui_t *ui, uint16_t x, uint16_t y, uint16_t w, uint16_t h, ui
 void Create_element(ui_item_t *item, ui_element_t *element);
 void Create_UI(ui_t *ui, ui_item_t *item);
 
+/* Only the UI coroutine may execute navigation; callers outside it submit
+ * target IDs using MiaoUi_RequestNavigate() in ui_conf.h. */
+typedef enum { UI_NAV_REPLACE=0, UI_NAV_PUSH=1 } ui_nav_mode_t;
+uint8_t UI_NavigateTo(ui_t *ui, ui_item_t *target, ui_nav_mode_t mode);
+uint8_t UI_NavigateBack(ui_t *ui);
+void UI_SetLeaveHook(ui_item_t *item, ui_item_function hook);
+
 void ui_loop(ui_t *ui);
 
 #ifdef __cplusplus
