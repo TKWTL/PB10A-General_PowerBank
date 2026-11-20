@@ -786,8 +786,8 @@ SW6306_RET SW6306_SetMaxOutputPower(SW6306_ARGS(uint8_t watt))
     SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_POSET, watt);
     SW6306_Status.pomax_set = watt;
     s_pomax_target = watt;
-    /* 功率设置与协议能力同步：高压20/21V档<=2A，低于40W继续按功率降低；
-     * 其它档位不套2A上限，只按各档原上限与POSET折算。 */
+    /* 功率设置与协议能力同步：每档按 min(POSET/电压, 档位允许电流)
+     * 计算，不再对 20V Fix / 21V PPS / 21V UFCS 人为限制为 2A。 */
     SW6306_SPAWN_NOARG(SW6306_PDCurrentSet);
     SW6306_SPAWN_NOARG(SW6306_UFCSCurrentSet);
     SW6306_MUTEX_GIVE;
@@ -1242,36 +1242,37 @@ SW6306_RET SW6306_IbusForceCtrlSet(SW6306_ARGS(uint8_t status))//设置是否强
 }
 
 /********************************初始化区**************************************/
-static uint16_t sw6306_power_current_ma(uint8_t watt, uint16_t voltage_mv,
-                                               uint16_t max_ma, uint16_t step_ma,
-                                               uint8_t high_voltage_2a)
-{
-    uint32_t ma;
+/* 依据 POSET (W) 与档位最高电压 (mV) 计算输出电流上限。
+ * 整数计算避免浮点，并向下对齐到协议规定步进；使用 uint32_t
+ * 防止 W * 1000000 发生 16 位溢出。
+ * 100W: 20V Fix = 5000mA, 21V PPS/UFCS = 4750mA (50mA 步进)。
+ * 实际对外能力仍应由芯片依据线缆 E-marker 与端口状态限制。 */
+static uint16_t sw6306_power_current_ma(uint8_t watt, uint16_t voltage_mv, uint16_t max_ma, uint16_t step_ma) {
+    uint32_t current_ma = (uint32_t)watt * 1000000UL / voltage_mv;
 
-    /* 20/21V 三个高压档：>=40W 也最多2A；<40W按20V基准同步降低。
-     * 其它档位不套2A上限，只受POSET对应功率和各档原始最大电流约束。 */
-    if (high_voltage_2a) {
-        ma = (watt >= 40U) ? 2000UL : (uint32_t)watt * 50UL;
-    } else {
-        ma = (uint32_t)watt * 1000000UL / voltage_mv;
+    if (current_ma > max_ma) {
+        current_ma = max_ma;
     }
-    if (ma > max_ma) ma = max_ma;
-    ma = (ma / step_ma) * step_ma;
-    if (ma < step_ma) ma = step_ma;
-    return (uint16_t)ma;
+
+    current_ma = (current_ma / step_ma) * step_ma;
+    if (current_ma < step_ma) {
+        current_ma = step_ma;
+    }
+
+    return (uint16_t)current_ma;
 }
 
 static SW6306_RET SW6306_PDCurrentSet(SW6306_NOARG)
 {
-    uint16_t i5   = sw6306_power_current_ma(s_pomax_target,  5000U, SW6306_PD_5V_FIX_CURR,  10U, 0U);
-    uint16_t i9   = sw6306_power_current_ma(s_pomax_target,  9000U, SW6306_PD_9V_FIX_CURR,  10U, 0U);
-    uint16_t i12  = sw6306_power_current_ma(s_pomax_target, 12000U, SW6306_PD_12V_FIX_CURR, 10U, 0U);
-    uint16_t i15  = sw6306_power_current_ma(s_pomax_target, 15000U, SW6306_PD_15V_FIX_CURR, 10U, 0U);
-    uint16_t i20  = sw6306_power_current_ma(s_pomax_target, 20000U, SW6306_PD_20V_FIX_CURR, 10U, 1U);
-    uint16_t pps0 = sw6306_power_current_ma(s_pomax_target,  6000U, SW6306_PD_PPS0_CURR, 50U, 0U);
-    uint16_t pps1 = sw6306_power_current_ma(s_pomax_target, 11000U, SW6306_PD_PPS1_CURR, 50U, 0U);
-    uint16_t pps2 = sw6306_power_current_ma(s_pomax_target, 16000U, SW6306_PD_PPS2_CURR, 50U, 0U);
-    uint16_t pps3 = sw6306_power_current_ma(s_pomax_target, 21000U, SW6306_PD_PPS3_CURR, 50U, 1U);
+    uint16_t i5   = sw6306_power_current_ma(s_pomax_target,  5000U, SW6306_PD_5V_FIX_CURR,  10U);
+    uint16_t i9   = sw6306_power_current_ma(s_pomax_target,  9000U, SW6306_PD_9V_FIX_CURR,  10U);
+    uint16_t i12  = sw6306_power_current_ma(s_pomax_target, 12000U, SW6306_PD_12V_FIX_CURR, 10U);
+    uint16_t i15  = sw6306_power_current_ma(s_pomax_target, 15000U, SW6306_PD_15V_FIX_CURR, 10U);
+    uint16_t i20  = sw6306_power_current_ma(s_pomax_target, 20000U, SW6306_PD_20V_FIX_CURR, 10U);
+    uint16_t pps0 = sw6306_power_current_ma(s_pomax_target,  6000U, SW6306_PD_PPS0_CURR, 50U);
+    uint16_t pps1 = sw6306_power_current_ma(s_pomax_target, 11000U, SW6306_PD_PPS1_CURR, 50U);
+    uint16_t pps2 = sw6306_power_current_ma(s_pomax_target, 16000U, SW6306_PD_PPS2_CURR, 50U);
+    uint16_t pps3 = sw6306_power_current_ma(s_pomax_target, 21000U, SW6306_PD_PPS3_CURR, 50U);
     SW6306_FUNC_BEGIN;
 
     SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PD5);
@@ -1317,9 +1318,9 @@ static SW6306_RET SW6306_PDSet(SW6306_NOARG)
 
 static SW6306_RET SW6306_UFCSCurrentSet(SW6306_NOARG)
 {
-    uint16_t i5  = sw6306_power_current_ma(s_pomax_target,  5000U, SW6306_UFCS_5V_MAX_MA,  50U, 0U);
-    uint16_t i10 = sw6306_power_current_ma(s_pomax_target, 10000U, SW6306_UFCS_10V_MAX_MA, 50U, 0U);
-    uint16_t i21 = sw6306_power_current_ma(s_pomax_target, 21000U, SW6306_UFCS_20V_MAX_MA, 50U, 1U);
+    uint16_t i5  = sw6306_power_current_ma(s_pomax_target,  5000U, SW6306_UFCS_5V_MAX_MA,  50U);
+    uint16_t i10 = sw6306_power_current_ma(s_pomax_target, 10000U, SW6306_UFCS_10V_MAX_MA, 50U);
+    uint16_t i21 = sw6306_power_current_ma(s_pomax_target, 21000U, SW6306_UFCS_20V_MAX_MA, 50U);
     SW6306_FUNC_BEGIN;
 
     SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_C_UFCS0);
