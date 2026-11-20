@@ -23,10 +23,12 @@ static void add_return(ui_page_t *page,ui_page_t *parent,ui_item_t *item,uint8_t
     (void)icon;
     AddItem("[Back]",UI_ITEM_RETURN,page->type==UI_PAGE_ICON?img_home:0,item,page,parent,0);
 }
+
 void Create_Parameter(ui_t *ui) {
     Create_Disp_Parameters(ui);
     Create_TimeSet_Parameters(ui);
 }
+
 void Create_Text(ui_t *ui) {
     (void)ui;
     s_about_text.ptr="PB10A General Powerbank\nSTM32G070 / MiaoUI\nTKWTL open firmware";
@@ -42,6 +44,7 @@ void Create_Text(ui_t *ui) {
     s_tools_text.fontWidth=UI_FONT_WIDTH;
     s_tools_el.text=&s_tools_text;Create_element(&s_tools_info,&s_tools_el);
 }
+
 void Create_MenuTree(ui_t *ui) {
     (void)ui;
     AddPage("[PB10A]",&s_home,UI_PAGE_ICON,0);
@@ -88,6 +91,7 @@ void Create_MenuTree(ui_t *ui) {
     AddItem("-I2C Scanner",UI_ITEM_WORD,img_scan,&s_scanner,&s_tools,0,i2c_Scanner);
     AddItem("-Diagnostics",UI_ITEM_WORD,img_burn_in,&s_tools_info,&s_tools,0,0);
 }
+
 void MiaoUi_Setup(ui_t *ui) {
     Create_UI(ui,&s_powerbank);
 }

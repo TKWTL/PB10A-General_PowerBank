@@ -1,6 +1,6 @@
 /* PB10A cooperative power manager. State transitions from PB02B/IH01A.
-* Low-power hooks may asynchronously return PENDING.
-*/
+ * Low-power hooks may asynchronously return PENDING.
+ */
 #include "pm_api.h"
 #include "pm_controller.h"
 #include "pm_device.h"
@@ -19,9 +19,11 @@ void pm_api_init(void) {
     pm_device_register_all();
     s_ready=1u;
 }
+
 void pm_api_refresh_idle(void) {
     if(!pm_sleep_timer_is_forced())s_refresh_request=1u;
 }
+
 void pm_api_wake_from_key(void){s_key_irq=1u;}
 void pm_api_on_key_irq(void){s_key_irq=1u;}
 void pm_api_force_sleep(void) {
@@ -30,15 +32,18 @@ void pm_api_force_sleep(void) {
     pm_sleep_timer_force_expire();
     pm_controller_mark_ui_active(&s_ctrl,0u);
 }
+
 void pm_api_set_sleep_timeout(int seconds) {
     pm_api_init();
     if(seconds<=0)pm_sleep_timer_disable();
     else pm_sleep_timer_set((uint32_t)seconds*1000u);
 }
+
 void pm_api_set_sleep_block(uint8_t mask,uint8_t enabled) {
     if(enabled)s_block_mask|=mask;
     else s_block_mask&=(uint8_t)~mask;
 }
+
 uint8_t pm_api_get_block_mask(void){return s_block_mask;}
 uint8_t pm_api_ui_should_block(void)
 {return s_ready && pm_controller_is_ui_blocked(&s_ctrl);}
@@ -51,7 +56,7 @@ void pm_api_poll(void) {
     pm_api_init();
     if(s_key_irq) {
         /* A normal RUN key must not activate the post-STOP input guard.
-        * Otherwise every navigation key is swallowed for 200 ms. */
+         * Otherwise every navigation key is swallowed for 200 ms. */
         uint8_t waking=pm_controller_is_ui_blocked(&s_ctrl)?1u:0u;
         s_key_irq=0u;
         pm_sleep_timer_clear_force();
@@ -73,8 +78,8 @@ void pm_api_poll(void) {
     previous=s_ctrl.state;
     next=pm_controller_step(&s_ctrl);
     /* A device ERROR can cancel a forced sleep before STOP1. Clear the
-    * forced-expiry latch once recovery reaches RUN, or PM will loop
-    * indefinitely back into UI_OFF. */
+     * forced-expiry latch once recovery reaches RUN, or PM will loop
+     * indefinitely back into UI_OFF. */
     if(s_forced && next==PM_STATE_RUN && !s_ctrl.transition_pending) {
         pm_sleep_timer_clear_force();
         s_forced=0u;

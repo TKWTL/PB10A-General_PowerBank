@@ -1,6 +1,6 @@
 /* PB10A interim SW6306 telemetry page.
-* The UI never performs I2C: it displays the coherent foreground cache
-* updated by the independent 100ms SW6306 service coroutine. */
+ * The UI never performs I2C: it displays the coherent foreground cache
+ * updated by the independent 100ms SW6306 service coroutine. */
 #include "powerbank_app.h"
 #include "power_algo.h"
 #include "display/dispDriver.h"
@@ -41,7 +41,7 @@ void Powerbank_AppRun(ui_t *ui) {
             (unsigned)m.vbat_mv,(unsigned)m.ibat_ma);
         Disp_DrawStr(0u,35u,line);
         if(m.capacity_valid)
-        (void)snprintf(line,sizeof(line),"CAP %3u%%", (unsigned)m.capacity_pct);
+            (void)snprintf(line,sizeof(line),"CAP %3u%%", (unsigned)m.capacity_pct);
         else (void)snprintf(line,sizeof(line),"CAP --%%");
         Disp_DrawStr(0u,47u,line);
         (void)snprintf(line,sizeof(line),"PROTO: %.15s",

@@ -1,9 +1,9 @@
 /* PB10A non-blocking FM app, adapted from Collar-Radio's radio.c.
-* Default main view: physical UP/DOWN adjust volume, LEFT/RIGHT
-* tune/search lower/higher. CONF release opens the five-row radio menu.
-* The global long-CONF BACK leaves this MiaoUI WORD application.
-* Background radio in ON mode is polled by the system coroOS thread.
-*/
+ * Default main view: physical UP/DOWN adjust volume, LEFT/RIGHT
+ * tune/search lower/higher. CONF release opens the five-row radio menu.
+ * The global long-CONF BACK leaves this MiaoUI WORD application.
+ * Background radio in ON mode is polled by the system coroOS thread.
+ */
 #include "radio_app.h"
 #include "core/ui.h" /* MiaoUI Q10 PID animations */
 #include "rda5807m.h"
@@ -31,8 +31,8 @@ static uint8_t s_mode=RADIO_MODE_PRESET,s_power_policy=RADIO_POWER_AUTO;
 static uint8_t s_menu_open,s_menu_index,s_full_scan,s_view_entered;
 static uint16_t s_scan_last_freq;
 /* Collar-Radio disp_value1 status/footer slide and two-dimensional
-* menu cursor PID. PB10A UI_Animation uses the same tuned coefficients
-* in Q10 fixed-point rather than float. State must persist per frame. */
+ * menu cursor PID. PB10A UI_Animation uses the same tuned coefficients
+ * in Q10 fixed-point rather than float. State must persist per frame. */
 static int32_t s_slide_q,s_cursor_y_q,s_cursor_w_q;
 static ui_animation_param_t s_slide_pid,s_cursor_y_pid,s_cursor_w_pid;
 static void radio_copy_pid(ui_animation_param_t *dst,
@@ -40,11 +40,13 @@ static void radio_copy_pid(ui_animation_param_t *dst,
     *dst=*ref;
     dst->error=0;dst->sum_error=0;dst->last_error=0;
 }
+
 static void radio_enter_main(ui_t *ui) {
     s_menu_open=0u;
     s_slide_q=UI_FX(12); /* top starts 12px above; footer 12px below */
     radio_copy_pid(&s_slide_pid,&ui->animation.cursor_ani);
 }
+
 static void radio_enter_menu(ui_t *ui) {
     s_menu_index=0u;s_menu_open=1u;
     s_cursor_y_q=UI_FX(0);s_cursor_w_q=UI_FX(0);
@@ -74,7 +76,7 @@ static uint8_t radio_write16(uint8_t reg,uint16_t value) {
     return I2C_RegWrite(RDA5807_Wr_REG_Addr,reg,data,2u);
 }
 /* Enforce radio sleep at firmware startup; RCLK is provided only during
-* the power-down I2C command and when the app explicitly starts radio. */
+ * the power-down I2C command and when the app explicitly starts radio. */
 uint8_t Radio_AppInitLowPower(void) {
     uint8_t result;
     LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE,LL_RCC_MCO1_DIV_1);
@@ -84,13 +86,15 @@ uint8_t Radio_AppInitLowPower(void) {
     s_state=RADIO_OFF;s_view_entered=0u;
     return (uint8_t)(result==I2C_OK);
 }
+
 static uint8_t radio_read16(uint8_t reg,uint16_t *value) {
     uint8_t data[2];
     if(!value || I2C_RegRead(RDA5807_Wr_REG_Addr,reg,data,2u)!=I2C_OK)
-    return I2C_ERROR;
+        return I2C_ERROR;
     *value=(uint16_t)(((uint16_t)data[0]<<8)|data[1]);
     return I2C_OK;
 }
+
 static void radio_save_station(uint16_t freq) {
     uint8_t i,j;
     if(s_station_count>=RADIO_MAX_STATIONS)return;
@@ -107,6 +111,7 @@ static uint8_t radio_marker_x(uint16_t frequency) {
     x=((uint32_t)(frequency-3440u)*5u)/36u;
     return x>127u?127u:(uint8_t)x;
 }
+
 static void radio_fail(uint8_t why) {
     s_state=RADIO_ERROR;
     s_error_code=why;
@@ -115,6 +120,7 @@ static void radio_fail(uint8_t why) {
     LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_NOCLOCK,LL_RCC_MCO1_DIV_1);
     pm_api_set_sleep_block(RADIO_PM_BLOCK,0u);
 }
+
 static uint8_t radio_read_status(uint16_t *status,uint16_t *signal) {
     uint8_t ok=I2C_ERROR;
     if(I2C_TransactionBegin()!=I2C_OK)return I2C_ERROR;
@@ -124,7 +130,7 @@ static uint8_t radio_read_status(uint16_t *status,uint16_t *signal) {
     return ok;
 }
 /* Collar-Radio SEEK_UP/SEEK_DOWN sequence; unlike StartSeek(), this does
-* not rely on a previous STC bit being set to accept the request. */
+ * not rely on a previous STC bit being set to accept the request. */
 static void radio_seek(uint8_t upward) {
     uint8_t ok=I2C_ERROR;
     if(I2C_TransactionBegin()!=I2C_OK){radio_fail(4u);return;}
@@ -163,6 +169,7 @@ static void radio_tune(uint16_t freq) {
     s_last_query=s_state_at-RADIO_QUERY_MS;
     s_first_seek_pending=0u;
 }
+
 static void radio_volume_step(uint8_t up) {
     uint8_t v;
     uint16_t reg;
@@ -172,14 +179,16 @@ static void radio_volume_step(uint8_t up) {
     if(v==s_volume)return;
     reg=(uint16_t)((Register[3]&~RDA5807_REG05_VOL_MSK)|v);
     if(radio_write16(RDA5807_REG05,reg)!=I2C_OK)
-    {radio_fail(4u);return;}
+        {radio_fail(4u);return;}
     Register[3]=reg;s_volume=v;
 }
+
 static uint8_t radio_has_station(uint16_t freq) {
     uint8_t i;
     for(i=0;i<s_station_count;i++)if(s_stations[i]==freq)return 1u;
     return 0u;
 }
+
 static void radio_toggle_station(uint16_t freq) {
     uint8_t i,j;
     for(i=0;i<s_station_count;i++) {
@@ -191,21 +200,23 @@ static void radio_toggle_station(uint16_t freq) {
     }
     radio_save_station(freq);
 }
+
 static void radio_move_station(uint8_t up) {
     uint8_t i;
     if(s_station_count==0u){radio_seek(up);return;}
     if(up) {
         for(i=0u;i<s_station_count;i++)
-        if(s_stations[i]>s_freq_units){radio_tune(s_stations[i]);return;}
+            if(s_stations[i]>s_freq_units){radio_tune(s_stations[i]);return;}
         radio_tune(s_stations[0]);
     }
     else {
         for(i=s_station_count;i>0u;i--)
-        if(s_stations[i-1u]<s_freq_units)
-        {radio_tune(s_stations[i-1u]);return;}
+            if(s_stations[i-1u]<s_freq_units)
+                {radio_tune(s_stations[i-1u]);return;}
         radio_tune(s_stations[s_station_count-1u]);
     }
 }
+
 static void radio_main_frequency(uint8_t up) {
     if(s_state!=RADIO_READY)return;
     if(s_mode==RADIO_MODE_FREQ) {
@@ -217,6 +228,7 @@ static void radio_main_frequency(uint8_t up) {
     else if(s_mode==RADIO_MODE_PRESET)radio_move_station(up);
     else radio_seek(up);
 }
+
 static void radio_start_full_scan(void) {
     if(s_state==RADIO_OFF || s_state==RADIO_ERROR)return;
     s_station_count=0u;
@@ -225,6 +237,7 @@ static void radio_start_full_scan(void) {
     radio_tune(3480u);
     s_first_seek_pending=1u; /* after tune completes, start SEEK_UP */
 }
+
 void Radio_AppStart(void) {
     if(s_state!=RADIO_OFF)return;
     s_error_code=0u;s_search_failed=0u;s_first_seek_pending=1u;
@@ -235,14 +248,15 @@ void Radio_AppStart(void) {
     pm_api_set_sleep_block(RADIO_PM_BLOCK,1u); /* MCO clock must not stop */
     LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE,LL_RCC_MCO1_DIV_1);
     if(radio_write16(RDA5807_REG02,RDA5807_REG02_SRST)!=I2C_OK)
-    {radio_fail(1u);return;}
+        {radio_fail(1u);return;}
     s_state=RADIO_RESET_WAIT;
     s_state_at=Millis();
 }
+
 void Radio_AppStop(void) {
     if(s_state!=RADIO_OFF) {
         /* The I2C command may need the external 32kHz MCO reference,
-        * including when trying to recover from RADIO_ERROR. */
+         * including when trying to recover from RADIO_ERROR. */
         LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE,LL_RCC_MCO1_DIV_1);
         Register[0]&=(uint16_t)~(RDA5807_REG02_ENABLE|
             RDA5807_REG02_DMUTE|RDA5807_REG02_SEEK);
@@ -254,6 +268,7 @@ void Radio_AppStop(void) {
     s_full_scan=0u;
     s_state=RADIO_OFF;
 }
+
 void Radio_AppPoll(void) {
     uint32_t now=Millis();
     uint16_t status=0u, signal=0u;
@@ -267,7 +282,7 @@ void Radio_AppPoll(void) {
             RDA5807_REG02_DHIZ|RDA5807_REG02_SEEKUP);
         Register[0]&=(uint16_t)~RDA5807_REG02_SEEK;
         if(radio_write16(RDA5807_REG02,Register[0])!=I2C_OK)
-        {radio_fail(2u);return;}
+            {radio_fail(2u);return;}
         s_state=RADIO_POWER_WAIT;s_state_at=now;
         return;
     }
@@ -286,7 +301,7 @@ void Radio_AppPoll(void) {
         return;
     }
     if(s_state!=RADIO_TUNE_WAIT && s_state!=RADIO_SEARCH && s_state!=RADIO_READY)
-    return;
+        return;
     if((uint32_t)(now-s_last_query)<RADIO_QUERY_MS)return;
     s_last_query=now;
     if(radio_read_status(&status,&signal)!=I2C_OK){radio_fail(5u);return;}
@@ -325,6 +340,7 @@ void Radio_AppPoll(void) {
         }
     }
 }
+
 uint8_t Radio_AppIsActive(void)
 {return s_state!=RADIO_OFF && s_state!=RADIO_ERROR;}
 uint8_t Radio_AppIsReady(void)
@@ -332,14 +348,14 @@ uint8_t Radio_AppIsReady(void)
 uint8_t Radio_AppIsSearching(void)
 {return s_state==RADIO_SEARCH;}
 /* Collar-Radio Radio_Run() visual structure, kept in its original positions:
-* top signal/headphone/volume/battery status, 24px centre frequency,
-* 43/45/47px dial and station markers, RTC time/date at bottom.
-* Only unknown battery fill is omitted until a battery telemetry service exists.
-* This is a single-pass MiaoUI callback, not Collar's blocking while(1).
-*/
+ * top signal/headphone/volume/battery status, 24px centre frequency,
+ * 43/45/47px dial and station markers, RTC time/date at bottom.
+ * Only unknown battery fill is omitted until a battery telemetry service exists.
+ * This is a single-pass MiaoUI callback, not Collar's blocking while(1).
+ */
 /* Collar-Radio original geometry: PID-driven disp_value1 slides the
-* status icons upward from offscreen and the RTC footer downward into view.
-* Here s_slide_q persists between cooperative frames in fixed-point Q10. */
+ * status icons upward from offscreen and the RTC footer downward into view.
+ * Here s_slide_q persists between cooperative frames in fixed-point Q10. */
 void Radio_AppDraw(ui_t *ui) {
     uint8_t fg,i,x;
     int16_t slide;
@@ -368,7 +384,7 @@ void Radio_AppDraw(ui_t *ui) {
 
     Disp_SetFont(font_radio_h24w12);
     if(s_state==RADIO_SEARCH)
-    Disp_DrawStr(4u,37u,"Seeking...");
+        Disp_DrawStr(4u,37u,"Seeking...");
     else if(s_state==RADIO_RESET_WAIT || s_state==RADIO_POWER_WAIT ||
         s_state==RADIO_TUNE_WAIT)
     Disp_DrawStr(10u,37u,"Tuning...");
@@ -384,11 +400,11 @@ void Radio_AppDraw(ui_t *ui) {
     else {
         fraction=(uint16_t)((s_freq_units%40u)*25u);
         if((fraction%10u)==0u)
-        (void)snprintf(buf,sizeof(buf),"%u.%02u",
+            (void)snprintf(buf,sizeof(buf),"%u.%02u",
             (unsigned)(s_freq_units/40u),
             (unsigned)(fraction/10u));
         else
-        (void)snprintf(buf,sizeof(buf),"%u.%03u",
+            (void)snprintf(buf,sizeof(buf),"%u.%03u",
             (unsigned)(s_freq_units/40u),(unsigned)fraction);
         textwidth=Disp_GetUTF8Width(buf);
         x=(textwidth>=122u)?2u:(uint8_t)((122u-textwidth)/2u);
@@ -422,8 +438,8 @@ void Radio_AppDraw(ui_t *ui) {
 }
 /* Collar-Radio 5-row settings menu; no blocking while(1). */
 /* The original five-row Collar-Radio menu, including its animated
-* 10-pixel XOR selection box (PID position AND PID text-width).
-* The earlier fixed full-row outline was not equivalent. */
+ * 10-pixel XOR selection box (PID position AND PID text-width).
+ * The earlier fixed full-row outline was not equivalent. */
 static void radio_draw_menu(ui_t *ui) {
     static const char *const fixed_labels[RADIO_MENU_COUNT]={
         "Return","Power Mode:","Radio Mode:",0,"Exit Radio Page"
@@ -453,22 +469,22 @@ static void radio_draw_menu(ui_t *ui) {
         else if(i==2u)Disp_DrawStr(74u,y,mode);
         else if(i==3u) {
             if(s_mode==RADIO_MODE_PRESET)
-            (void)snprintf(option,sizeof(option),"-All Clear and Seek-");
+                (void)snprintf(option,sizeof(option),"-All Clear and Seek-");
             else
-            (void)snprintf(option,sizeof(option),"%s",
+                (void)snprintf(option,sizeof(option),"%s",
                 radio_has_station(s_freq_units)?
                 "-Remove from List-":"-Add to station List-");
             Disp_DrawStr(1u,y,option);
         }
         if(i==s_menu_index)
-        selected_label=i==3u?option:fixed_labels[i];
+            selected_label=i==3u?option:fixed_labels[i];
     }
     width_target=(uint16_t)(selected_label?
         Disp_GetUTF8Width(selected_label)+2u:2u);
     if(width_target>UI_HOR_RES)width_target=UI_HOR_RES;
 
     /* Collar's UI_Animation label-width + Y-position pair, with its
-    * actual MiaoUI PID coefficients copied at menu entry. */
+     * actual MiaoUI PID coefficients copied at menu entry. */
     s_cursor_w_q=UI_Animation(UI_FX(width_target),
         s_cursor_w_q,&s_cursor_w_pid);
     s_cursor_y_q=UI_Animation(UI_FX((int32_t)(10u+s_menu_index*10u)),
@@ -479,12 +495,13 @@ static void radio_draw_menu(ui_t *ui) {
     Disp_SetDrawColor(&fg);
     Disp_SendBuffer();
 }
+
 static uint8_t radio_handle_menu(ui_t *ui,UI_ACTION action) {
     if(action==UI_ACTION_MINUS)
-    s_menu_index=s_menu_index? (uint8_t)(s_menu_index-1u):
+        s_menu_index=s_menu_index? (uint8_t)(s_menu_index-1u):
     (RADIO_MENU_COUNT-1u);
     else if(action==UI_ACTION_PLUS)
-    s_menu_index=(uint8_t)((s_menu_index+1u)%RADIO_MENU_COUNT);
+        s_menu_index=(uint8_t)((s_menu_index+1u)%RADIO_MENU_COUNT);
     else if(action==UI_ACTION_ENTER) {
         switch(s_menu_index) {
         case 0u:radio_enter_main(ui);break;
@@ -497,7 +514,7 @@ static uint8_t radio_handle_menu(ui_t *ui,UI_ACTION action) {
         case 3u:
             if(s_state==RADIO_READY) {
                 if(s_mode==RADIO_MODE_PRESET)
-                {radio_start_full_scan();s_menu_open=0u;}
+                    {radio_start_full_scan();s_menu_open=0u;}
                 else radio_toggle_station(s_freq_units);
             }
             break;
@@ -506,6 +523,7 @@ static uint8_t radio_handle_menu(ui_t *ui,UI_ACTION action) {
     }
     return 0u;
 }
+
 void Radio_AppRun(ui_t *ui) {
     UI_ACTION action;
     if(!ui)return;
@@ -516,8 +534,8 @@ void Radio_AppRun(ui_t *ui) {
     action=ui->action;
     if(action==UI_ACTION_BACK) {
         /* Long CONF is global BACK. In Radio ON mode the radio may keep
-        * playing until the platform powers off, exactly like Collar's
-        * background listening mode. */
+         * playing until the platform powers off, exactly like Collar's
+         * background listening mode. */
         s_menu_open=0u;
         s_view_entered=0u;
         if(s_power_policy!=RADIO_POWER_ON)Radio_AppStop();
@@ -525,7 +543,7 @@ void Radio_AppRun(ui_t *ui) {
     }
 
     if(s_state==RADIO_OFF && s_power_policy!=RADIO_POWER_OFF)
-    Radio_AppStart();
+        Radio_AppStart();
     if(s_menu_open) {
         if(radio_handle_menu(ui,action)) {
             s_menu_open=0u;

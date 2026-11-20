@@ -1,11 +1,11 @@
 /* Power state controller: drives the policy and calls the device hooks on the
-* state transitions.
-*
-* Ported from Pocket_PowerBank (Applications/framework/pm_controller.c): the
-* only difference against the NUEDC_2025B original is the fixed
-* pm_controller_resume_idle() (see the comment there), which the latter
-* framework fixed after the first project hit "sleeps the moment the
-* charging/discharging block is released". */
+ * state transitions.
+ *
+ * Ported from Pocket_PowerBank (Applications/framework/pm_controller.c): the
+ * only difference against the NUEDC_2025B original is the fixed
+ * pm_controller_resume_idle() (see the comment there), which the latter
+ * framework fixed after the first project hit "sleeps the moment the
+ * charging/discharging block is released". */
 #include "pm_controller.h"
 
 #include "pm_device.h"
@@ -20,9 +20,10 @@ static pm_hook_result_t pm_handle_transition(pm_power_state_t from,pm_power_stat
         (from==PM_STATE_UI_OFF && to==PM_STATE_SLEEP_PREPARE))
     return pm_device_prepare_all();
     if(from==PM_STATE_SLEEP_PREPARE && to==PM_STATE_DEEPSLEEP)
-    return pm_device_suspend_all();
+        return pm_device_suspend_all();
     return PM_HOOK_DONE;
 }
+
 void pm_controller_init(pm_controller_t *ctx, uint32_t idle_timeout_ms) {
     if (ctx == 0) {
         return;
@@ -170,7 +171,7 @@ pm_power_state_t pm_controller_step(pm_controller_t *ctx) {
         ctx->transition_pending=0;
     }
     if(ctx->state==PM_STATE_DEEPSLEEP && next==PM_STATE_SLEEP_PENDING)
-    ctx->post_hold_ticks=PM_PENDING_HOLD_TICKS;
+        ctx->post_hold_ticks=PM_PENDING_HOLD_TICKS;
     else if(ctx->post_hold_ticks>0)--ctx->post_hold_ticks;
     ctx->state=next;ctx->wake_latched=0;return ctx->state;
 }

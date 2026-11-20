@@ -1,7 +1,7 @@
 /* 5-key PB10A adapter; Collar-Radio Buttons drives the 10ms scan.
-* A short CONF release emits ENTER; CONF held 700ms emits BACK once.
-* Repeating directions are queued until MiaoUI can draw a new frame.
-*/
+ * A short CONF release emits ENTER; CONF held 700ms emits BACK once.
+ * Repeating directions are queued until MiaoUI can draw a new frame.
+ */
 #include "indev/indevDriver.h"
 #include "buttons.h"
 #include "pm_api.h"
@@ -17,10 +17,12 @@ static void queue_event(uint8_t ev) {
     if(next==tail)tail=(uint8_t)((tail+1u)%KEY_QUEUE_SIZE);
     queue[head]=ev;head=next;
 }
+
 void indevInit(void) {
     Key_Init();clear_events();
     conf_valid=0u;conf_long=0u;suppressed=0u;
 }
+
 void indevService_10ms(void) {
     uint8_t i,blocked;
     KeyEdge_t edge;
@@ -32,11 +34,11 @@ void indevService_10ms(void) {
         KeyState_t state=KEY_GetState((KeyIndex_t)i);
         edge=Key_EdgeDetect((KeyIndex_t)i);
         if(state==KeyState_Release || state==KeyState_None)
-        suppressed&=(uint8_t)~bit;
+            suppressed&=(uint8_t)~bit;
         else if(blocked)suppressed|=bit;
         if(i==KeyIndex_CONF) {
             if(edge==KeyEdge_Rising)
-            {conf_valid=(uint8_t)(!blocked && !(suppressed&bit));conf_long=0u;}
+                {conf_valid=(uint8_t)(!blocked && !(suppressed&bit));conf_long=0u;}
             else if(edge==KeyEdge_Holding && conf_valid && !blocked) {
                 clear_events();queue_event(KEY_EVENT_BACK);
                 conf_long=1u;pm_api_refresh_idle();
@@ -52,11 +54,12 @@ void indevService_10ms(void) {
         else {
             uint8_t repeat=KEY_GetDASClick((KeyIndex_t)i);
             if(repeat && !blocked && !(suppressed&bit))
-            {queue_event(i);pm_api_refresh_idle();}
+                {queue_event(i);pm_api_refresh_idle();}
         }
     }
     if(blocked)conf_valid=0u;
 }
+
 static UI_ACTION translate(uint8_t event,const ui_t *ui) {
     uint8_t is_text=(uint8_t)(ui && ui->nowItem && ui->nowItem->page.location &&
         ui->nowItem->page.location->type==UI_PAGE_TEXT);
@@ -70,11 +73,12 @@ static UI_ACTION translate(uint8_t event,const ui_t *ui) {
     default:return UI_ACTION_NONE;
     }
 }
+
 UI_ACTION indevScan(const ui_t *ui) {
     UI_ACTION result;
     uint8_t ev;
     if(pm_api_ui_should_block() || pm_api_is_unstable_wake())
-    {clear_events();return UI_ACTION_NONE;}
+        {clear_events();return UI_ACTION_NONE;}
     if(head==tail)return UI_ACTION_NONE;
     ev=queue[tail];tail=(uint8_t)((tail+1u)%KEY_QUEUE_SIZE);
     result=translate(ev,ui);
