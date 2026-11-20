@@ -404,18 +404,48 @@ uint8_t SW6306_IsPortA2ON(void) {
 }
 
 SW6306_RET SW6306_PowerLoad(SW6306_NOARG) {
+#ifdef SW6306_USE_PROTOTHREAD
+    /* Read all fields privately, then publish only on complete success. */
+    static uint8_t t[9];
+#endif
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
-    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_STRG_VBUS_CHG);//切换低地址
-    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_VBUS_CHG, &SW6306_Status.vbus_chg);//0x0E
-    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_QCSTAT, &SW6306_Status.qcstat);//0x0F
-    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_BUSILIM_CHG, &SW6306_Status.ibuslim_chg);//0x10
-    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_BATILIM_CHG, &SW6306_Status.ibatlim_chg);//0x11
-    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_TYPEA_QCIN, &SW6306_Status.typea_qcin);//0x1C
-    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_CTRG_PISET, &SW6306_Status.pimax_set);//0x45
-    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_CTRG_POSET, &SW6306_Status.pomax_set);//0x4F
-    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_POMAX, &SW6306_Status.pomax);//0x51
-    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_PIMAX, &SW6306_Status.pimax);//0x52
+    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_STRG_VBUS_CHG);
+#ifdef SW6306_USE_PROTOTHREAD
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead,SW6306_STRG_VBUS_CHG,&t[0]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead,SW6306_STRG_QCSTAT,&t[1]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead,SW6306_STRG_BUSILIM_CHG,&t[2]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead,SW6306_STRG_BATILIM_CHG,&t[3]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead,SW6306_STRG_TYPEA_QCIN,&t[4]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead,SW6306_CTRG_PISET,&t[5]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead,SW6306_CTRG_POSET,&t[6]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead,SW6306_STRG_POMAX,&t[7]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead,SW6306_STRG_PIMAX,&t[8]);
+    if(s_io_failed) {
+        sw6306_i2c_failed();
+        SW6306_FUNC_ABORT;
+    }
+    SW6306_Status.vbus_chg=t[0];
+    SW6306_Status.qcstat=t[1];
+    SW6306_Status.ibuslim_chg=t[2];
+    SW6306_Status.ibatlim_chg=t[3];
+    SW6306_Status.typea_qcin=t[4];
+    SW6306_Status.pimax_set=t[5];
+    SW6306_Status.pomax_set=t[6];
+    SW6306_Status.pomax=t[7];
+    SW6306_Status.pimax=t[8];
+    sw6306_i2c_succeeded();
+#else
+    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_VBUS_CHG, &SW6306_Status.vbus_chg);
+    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_QCSTAT, &SW6306_Status.qcstat);
+    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_BUSILIM_CHG, &SW6306_Status.ibuslim_chg);
+    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_BATILIM_CHG, &SW6306_Status.ibatlim_chg);
+    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_TYPEA_QCIN, &SW6306_Status.typea_qcin);
+    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_CTRG_PISET, &SW6306_Status.pimax_set);
+    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_CTRG_POSET, &SW6306_Status.pomax_set);
+    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_POMAX, &SW6306_Status.pomax);
+    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_PIMAX, &SW6306_Status.pimax);
+#endif
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
@@ -916,7 +946,7 @@ uint8_t SW6306_GetMaxOutputPowerSetting(void) {
 /* 端口快充总开关（0x11F PORTQC）：0=使能快充，1=禁止快充。
  * A 口仅输出方向；C 口可选输入/输出。 */
 SW6306_RET SW6306_PortFastChargeSet(SW6306_ARGS(sw6306_port_t port, sw6306_port_dir_t dir, uint8_t enable)) {
-    uint8_t mask = 0;
+    static uint8_t mask;
     SW6306_FUNC_BEGIN;
 
     switch(port) {
@@ -941,10 +971,10 @@ SW6306_RET SW6306_PortFastChargeSet(SW6306_ARGS(sw6306_port_t port, sw6306_port_
  * 极性注意：绝大多数协议 0=使能/1=禁止（active low）；VOOC 系列相反（active HIGH，1=使能/0=禁止）。
  * 手册无独立开关的方向（QC sink、FCP sink、PE sink、SFCP sink、SVOOC sink）不操作直接返回。 */
 SW6306_RET SW6306_ProtocolEnable(SW6306_ARGS(sw6306_proto_t proto, sw6306_proto_dir_t dir, uint8_t enable)) {
-    uint16_t reg = 0;
-    uint8_t mask = 0;
-    uint8_t active_high = 0;
+    static uint16_t reg;
+    static uint8_t mask,active_high;
     SW6306_FUNC_BEGIN;
+    reg=0u;mask=0u;active_high=0u;
 
     switch(proto) {
     case SW6306_PROTO_PD:
@@ -1018,10 +1048,10 @@ default:
 /* 高压/低压SCP source独立开关：REG0x12A[1:0]，0=使能、1=禁止。
  * 只写目标位，保持QC/FCP/AFC及reserved位不变。 */
 SW6306_RET SW6306_SCPSourceSet(SW6306_ARGS(uint8_t hv_enable, uint8_t lv_enable)) {
-    const uint8_t mask = SW6306_P_DPDM3_NOSCP_HV | SW6306_P_DPDM3_NOSCP_LV;
-    uint8_t value = (hv_enable ? 0U : SW6306_P_DPDM3_NOSCP_HV) |
-    (lv_enable ? 0U : SW6306_P_DPDM3_NOSCP_LV);
+    static const uint8_t mask = SW6306_P_DPDM3_NOSCP_HV | SW6306_P_DPDM3_NOSCP_LV;
+    static uint8_t value;
     SW6306_FUNC_BEGIN;
+    value=(hv_enable ? 0u : SW6306_P_DPDM3_NOSCP_HV)|(lv_enable ? 0u : SW6306_P_DPDM3_NOSCP_LV);
     SW6306_MUTEX_TAKE;
     SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_P_DPDM3);
     SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_P_DPDM3, mask, value);
@@ -1032,11 +1062,10 @@ SW6306_RET SW6306_SCPSourceSet(SW6306_ARGS(uint8_t hv_enable, uint8_t lv_enable)
 /* PD source让位设置：REG0x133[5:3]，0=响应、1=不响应。
  * 不修改同寄存器的PD source开关bit7和reserved位。 */
 SW6306_RET SW6306_PDSourceYieldSet(SW6306_ARGS(uint8_t scp, uint8_t vooc, uint8_t ufcs)) {
-    const uint8_t mask = SW6306_PD0_NOSCP | SW6306_PD0_NOVOOC | SW6306_PD0_NOUFCS;
-    uint8_t value = (scp ? 0U : SW6306_PD0_NOSCP) |
-    (vooc ? 0U : SW6306_PD0_NOVOOC) |
-    (ufcs ? 0U : SW6306_PD0_NOUFCS);
+    static const uint8_t mask = SW6306_PD0_NOSCP | SW6306_PD0_NOVOOC | SW6306_PD0_NOUFCS;
+    static uint8_t value;
     SW6306_FUNC_BEGIN;
+    value=(scp ? 0u : SW6306_PD0_NOSCP)|(vooc ? 0u : SW6306_PD0_NOVOOC)|(ufcs ? 0u : SW6306_PD0_NOUFCS);
     SW6306_MUTEX_TAKE;
     SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PD0);
     SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_PD0, mask, value);
@@ -1047,7 +1076,7 @@ SW6306_RET SW6306_PDSourceYieldSet(SW6306_ARGS(uint8_t scp, uint8_t vooc, uint8_
 /* PPS 档位开关：操作 0x134 PD1 的 NOPPS1/NOPPS3（active low：1=禁止/0=使能）。
  * 只提供 PPS1/PPS3 两个档位；PPS0/PPS2 始终不使用（Init 已禁止 NOPPS0/NOPPS2） */
 SW6306_RET SW6306_PPSEnable(SW6306_ARGS(sw6306_pps_t pps, uint8_t enable)) {
-    uint8_t mask;
+    static uint8_t mask;
     SW6306_FUNC_BEGIN;
     switch (pps) {
     case SW6306_PPS_1: mask = SW6306_PD1_NOPPS1; break;
