@@ -1,7 +1,7 @@
 /*
- * MiaoUI display adaptation for PB10A SSD1306, 128x64.
- * Original MiaoUI display abstraction copyright/license: MIT, JFeng-Z.
- */
+* MiaoUI display adaptation for PB10A SSD1306, 128x64.
+* Original MiaoUI display abstraction copyright/license: MIT, JFeng-Z.
+*/
 #include "display/dispDriver.h"
 #include "core/ui.h"
 #include "ssd1306_display.h"
@@ -10,12 +10,11 @@ u8g2_t u8g2;
 /* SSD1306 contrast levels are mapped to 0..255. */
 int Contrast = 5;
 
-static uint8_t disp_contrast_raw(int level)
-{
+static uint8_t disp_contrast_raw(int level) {
     if(level < 0)
-        level = 0;
+    level = 0;
     else if(level > 15)
-        level = 15;
+    level = 15;
 
     return (uint8_t)(level * level + 2 * level);
 }
@@ -26,20 +25,17 @@ static ui_item_t s_rotation_item;
 static ui_item_t s_burnin_item;
 
 /* Adapted from DPC27A service_pages.c: a pass-based MiaoUI WORD page.
- * An action is left unconsumed so the UI state machine exits on ANY key. */
-static void Disp_BurninPage(ui_t *ui)
-{
+* An action is left unconsumed so the UI state machine exits on ANY key. */
+static void Disp_BurninPage(ui_t *ui) {
     static uint8_t white_shown;
 
     if(ui == 0) return;
-    if(ui->action != UI_ACTION_NONE)
-    {
+    if(ui->action != UI_ACTION_NONE) {
         white_shown = 0u;
         return;
     }
 
-    if(!white_shown)
-    {
+    if(!white_shown) {
         uint8_t white = 1u;
         Disp_SetMaxClipWindow();
         Disp_SetDrawColor(&white);
@@ -49,8 +45,7 @@ static void Disp_BurninPage(ui_t *ui)
     }
 }
 
-void Create_Disp_Parameters(ui_t *ui)
-{
+void Create_Disp_Parameters(ui_t *ui) {
     static ui_data_t contrast_data;
     static ui_data_t background_data;
     static ui_data_t rotation_data;
@@ -87,16 +82,14 @@ void Create_Disp_Parameters(ui_t *ui)
     Create_element(&s_rotation_item, &rotation_element);
 }
 
-void Add_Disp_Items(ui_page_t *parent_page)
-{
+void Add_Disp_Items(ui_page_t *parent_page) {
     AddItem(" Contrast", UI_ITEM_DATA, 0, &s_contrast_item, parent_page, 0, 0);
     AddItem(" Background", UI_ITEM_DATA, 0, &s_background_item, parent_page, 0, 0);
     AddItem(" Burn-in Test", UI_ITEM_WORD, 0, &s_burnin_item, parent_page, 0, Disp_BurninPage);
     AddItem(" Screen Flip", UI_ITEM_DATA, 0, &s_rotation_item, parent_page, 0, 0);
 }
 
-uint8_t diapInit(void)
-{
+uint8_t diapInit(void) {
     if(!SSD1306_Display_Begin(&u8g2))return 0u;
     u8g2_SetFont(&u8g2, UI_FONT);
     SSD1306_Display_RequestContrast(disp_contrast_raw(Contrast));
@@ -106,19 +99,16 @@ uint8_t diapInit(void)
 
 static uint32_t s_flush_count = 0u;
 
-void Disp_SendBuffer(void)
-{
+void Disp_SendBuffer(void) {
     s_flush_count++;
     SSD1306_Display_RequestFlush(u8g2_GetBufferPtr(&u8g2));
 }
 
-uint32_t Disp_GetFlushCount(void)
-{
+uint32_t Disp_GetFlushCount(void) {
     return s_flush_count;
 }
 
-void Disp_UpdateDisplayArea(uint8_t tx, uint8_t ty, uint8_t tw, uint8_t th)
-{
+void Disp_UpdateDisplayArea(uint8_t tx, uint8_t ty, uint8_t tw, uint8_t th) {
     (void)tx;
     (void)ty;
     (void)tw;
@@ -126,22 +116,19 @@ void Disp_UpdateDisplayArea(uint8_t tx, uint8_t ty, uint8_t tw, uint8_t th)
     Disp_SendBuffer();
 }
 
-void Disp_SetContrast(ui_t *ui)
-{
+void Disp_SetContrast(ui_t *ui) {
     (void)ui;
     SSD1306_Display_RequestContrast(disp_contrast_raw(Contrast));
 }
 
-void Disp_SetContrast2(uint8_t contrast)
-{
+void Disp_SetContrast2(uint8_t contrast) {
     if(contrast > 15u)
-        contrast = 15u;
+    contrast = 15u;
     Contrast = (int)contrast;
     SSD1306_Display_RequestContrast(disp_contrast_raw(Contrast));
 }
 
-void Disp_SetPowerSave(uint8_t is_enable)
-{
+void Disp_SetPowerSave(uint8_t is_enable) {
     SSD1306_Display_RequestPowerSave(is_enable);
 }
 
@@ -169,27 +156,22 @@ void Disp_SetBufferCurrTileRow(uint8_t row) { u8g2_SetBufferCurrTileRow(&u8g2, r
 uint16_t Disp_DrawUTF8(uint16_t x, uint16_t y, const char *str) { return u8g2_DrawUTF8(&u8g2, x, y, str); }
 uint16_t Disp_GetUTF8Width(const char *str) { return u8g2_GetUTF8Width(&u8g2, str); }
 
-void Disp_SetRotation(uint8_t rotation)
-{
+void Disp_SetRotation(uint8_t rotation) {
     u8g2_SetDisplayRotation(&u8g2, rotation ? U8G2_R0 : U8G2_R2);
 }
 
-void Disp_SetRotationMode(uint8_t rotation_mode)
-{
+void Disp_SetRotationMode(uint8_t rotation_mode) {
     static const u8g2_cb_t *const rotations[4] = {U8G2_R0, U8G2_R1, U8G2_R2, U8G2_R3};
     u8g2_SetDisplayRotation(&u8g2, rotations[rotation_mode & 3U]);
 }
 
-void Disp_ResumeRotation(ui_t *ui)
-{
+void Disp_ResumeRotation(ui_t *ui) {
     if(ui != 0)
-        Disp_SetRotation(ui->rotation);
+    Disp_SetRotation(ui->rotation);
 }
 
-void Disp_UpdateRotation(ui_t *ui, uint8_t rotation_state)
-{
-    if(ui != 0)
-    {
+void Disp_UpdateRotation(ui_t *ui, uint8_t rotation_state) {
+    if(ui != 0) {
         ui->rotation = rotation_state ? 1U : 0U;
         Disp_ResumeRotation(ui);
     }

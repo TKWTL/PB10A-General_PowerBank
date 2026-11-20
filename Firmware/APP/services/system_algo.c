@@ -1,6 +1,6 @@
 /* PB10A system service adapted from IH01A/framework/system.c.
- * Hardware: TIM3_CH4/PB1 buzzer; Cortex-M0+ NVIC reset, no heater hook.
- */
+* Hardware: TIM3_CH4/PB1 buzzer; Cortex-M0+ NVIC reset, no heater hook.
+*/
 #include "system_algo.h"
 #include "beep_algo.h"
 #include "time_algo.h"
@@ -20,15 +20,13 @@ static void system_click_changed(ui_t *ui)
 { (void)ui;beep_set_key_enabled(s_click_on); }
 static void system_mute_changed(ui_t *ui)
 { (void)ui;beep_set_muted(s_muted); }
-void System_Reset(void)
-{
+void System_Reset(void) {
     beep_stop();
     NVIC_SystemReset();
 }
 static void system_reset_selected(ui_t *ui)
 { (void)ui;System_Reset(); }
-void System_AddSettingsItems(ui_page_t *page)
-{
+void System_AddSettingsItems(ui_page_t *page) {
     if(!page)return;
     s_click_on=beep_get_key_enabled();
     s_click_data.name=" Click Beep";
@@ -52,8 +50,7 @@ void System_AddSettingsItems(ui_page_t *page)
     AddItem(" Mute Beep",UI_ITEM_DATA,0,&s_mute_item,page,0,0);
     AddItem(" System Reset",UI_ITEM_ONCE_FUNCTION,0,&s_reset_item,page,0,system_reset_selected);
 }
-static void system_uptime_page(ui_t *ui)
-{
+static void system_uptime_page(ui_t *ui) {
     uint8_t fg;
     if(!ui||ui->action!=UI_ACTION_NONE)return;
     Disp_ClearBuffer();
@@ -63,14 +60,12 @@ static void system_uptime_page(ui_t *ui)
     Disp_DrawStr(0,13,s_uptime_text);
     Disp_SendBuffer();
 }
-void System_AddStatisticsItems(ui_page_t *page)
-{
+void System_AddStatisticsItems(ui_page_t *page) {
     if(!page)return;
     AddItem(" Uptime",UI_ITEM_WORD,0,&s_uptime_item,page,0,system_uptime_page);
     s_stats_ready=1u;s_last_poll=Millis()-100u;
 }
-void System_Poll(void)
-{
+void System_Poll(void) {
     uint32_t seconds,now=Millis();
     char value[24];
     if(!s_stats_ready||(uint32_t)(now-s_last_poll)<100u)return;
