@@ -17,6 +17,7 @@ static uint8_t s_io_failed; /* sticky until SW6306_OperationReset */
 void SW6306_OperationReset(void) { s_io_failed=0u; }
 uint8_t SW6306_LastOperationOK(void) { return (uint8_t)(s_io_failed==0u); }
 uint32_t SW6306_PortReadSequence(void) { return s_port_read_seq; }
+void SW6306_Invalidate(void) { SW6306_Status.initialized=0u;SW6306_Status.unlocked=0u; }
 static void sw6306_i2c_failed(void) {
     if (s_i2c_fail_groups < SW6306_I2C_FAILURE_LIMIT) ++s_i2c_fail_groups;
     if (s_i2c_fail_groups >= SW6306_I2C_FAILURE_LIMIT)

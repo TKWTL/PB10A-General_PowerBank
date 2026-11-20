@@ -1397,6 +1397,7 @@ uint8_t SW6306_TransportPortsIdle(void);        //PT mode: verify current cached
 uint32_t SW6306_PortReadSequence(void);        //increases only after a complete successful PortStatusLoad
 uint8_t SW6306_LastOperationOK(void);          //1 if no I2C error latched by last SW6306 operation
 void SW6306_OperationReset(void);             //single actor calls this before launching a new top-level PT operation
+void SW6306_Invalidate(void);                 //RAM-only: request reinitialization after failed resume
 uint8_t SW6306_IsPortC1ON(void);                //读取C1口通路是否打开
 uint8_t SW6306_IsPortC2ON(void);                //读取C2口通路是否打开
 uint8_t SW6306_IsPortA1ON(void);                //读取A1口通路是否打开
