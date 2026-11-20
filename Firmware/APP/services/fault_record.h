@@ -3,8 +3,8 @@
 #include <stdint.h>
 
 /* Fixed-size snapshot retained over NVIC_SystemReset() in the scatter-file
-* RW_NOINIT area. Not persistent over power loss or firmware downloads.
-*/
+ * RW_NOINIT area. Not persistent over power loss or firmware downloads.
+ */
 typedef enum {
     FAULT_REASON_NMI = 1u,
     FAULT_REASON_HARDFAULT = 2u,
