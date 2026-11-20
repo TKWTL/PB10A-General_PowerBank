@@ -9,57 +9,51 @@
 void SystemClock_Config(void);
 static uint32_t adc_internal,oled_started;
 static uint8_t suspended,oled_target,oled_valid;
-static pm_hook_result_t oled_power(uint8_t off)
-{
- uint32_t now=Millis();
- if(!oled_valid || oled_target!=off)
- {
-  oled_target=off;oled_valid=1;oled_started=now;
-  SSD1306_Display_RequestPowerSave(off);
- }
- if(SSD1306_Display_PowerSettled(off))return PM_HOOK_DONE;
- if(SSD1306_Display_InitState()==SSD1306_INIT_FAILED ||
-    (uint32_t)(now-oled_started)>OLED_PM_TIMEOUT_MS)
-  return PM_HOOK_ERROR;
- return PM_HOOK_PENDING;
+static pm_hook_result_t oled_power(uint8_t off) {
+    uint32_t now=Millis();
+    if(!oled_valid || oled_target!=off) {
+        oled_target=off;oled_valid=1;oled_started=now;
+        SSD1306_Display_RequestPowerSave(off);
+    }
+    if(SSD1306_Display_PowerSettled(off))return PM_HOOK_DONE;
+    if(SSD1306_Display_InitState()==SSD1306_INIT_FAILED ||
+        (uint32_t)(now-oled_started)>OLED_PM_TIMEOUT_MS)
+    return PM_HOOK_ERROR;
+    return PM_HOOK_PENDING;
 }
 static pm_hook_result_t oled_prepare(void *ctx)
 {(void)ctx;return oled_power(1);}
 static pm_hook_result_t oled_resume(void *ctx)
 {(void)ctx;return oled_power(0);}
-static pm_hook_result_t stm32_suspend(void *ctx)
-{
- (void)ctx;
- if(suspended)return PM_HOOK_DONE;
- if(I2C_BusIsLocked() || SSD1306_Display_FrameBusy() ||
-    SPI1_DmaTxState()!=SPI1_DMA_IDLE)return PM_HOOK_PENDING;
- adc_internal=ADC1_COMMON->CCR & (ADC_CCR_VREFEN|ADC_CCR_TSEN);
- ADC1_COMMON->CCR &= ~(ADC_CCR_VREFEN|ADC_CCR_TSEN);
- HAL_SuspendTick();suspended=1;return PM_HOOK_DONE;
+static pm_hook_result_t stm32_suspend(void *ctx) {
+    (void)ctx;
+    if(suspended)return PM_HOOK_DONE;
+    if(I2C_BusIsLocked() || SSD1306_Display_FrameBusy() ||
+        SPI1_DmaTxState()!=SPI1_DMA_IDLE)return PM_HOOK_PENDING;
+    adc_internal=ADC1_COMMON->CCR & (ADC_CCR_VREFEN|ADC_CCR_TSEN);
+    ADC1_COMMON->CCR &= ~(ADC_CCR_VREFEN|ADC_CCR_TSEN);
+    HAL_SuspendTick();suspended=1;return PM_HOOK_DONE;
 }
-static void stm32_restore(void)
-{
- ADC1_COMMON->CCR=(ADC1_COMMON->CCR & ~(ADC_CCR_VREFEN|ADC_CCR_TSEN))
-                  |adc_internal;
- HAL_ResumeTick();suspended=0;
+static void stm32_restore(void) {
+    ADC1_COMMON->CCR=(ADC1_COMMON->CCR & ~(ADC_CCR_VREFEN|ADC_CCR_TSEN))
+    |adc_internal;
+    HAL_ResumeTick();suspended=0;
 }
-static void stm32_deepsleep(void *ctx)
-{
- (void)ctx;
- HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON,PWR_STOPENTRY_WFI);
- SystemClock_Config();
- if(suspended)stm32_restore();
+static void stm32_deepsleep(void *ctx) {
+    (void)ctx;
+    HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON,PWR_STOPENTRY_WFI);
+    SystemClock_Config();
+    if(suspended)stm32_restore();
 }
 static pm_hook_result_t stm32_resume(void *ctx)
 {(void)ctx;if(suspended)stm32_restore();return PM_HOOK_DONE;}
 static const pm_device_node_t oled_node={
- "oled",oled_prepare,0,oled_resume,0,230u,0,0
+    "oled",oled_prepare,0,oled_resume,0,230u,0,0
 };
 static const pm_device_node_t platform_node={
- "stm32g070",0,stm32_suspend,stm32_resume,0,250u,stm32_deepsleep,0
+    "stm32g070",0,stm32_suspend,stm32_resume,0,250u,stm32_deepsleep,0
 };
-void pm_device_register_builtin(void)
-{
- (void)pm_device_register(&oled_node);
- (void)pm_device_register(&platform_node);
+void pm_device_register_builtin(void) {
+    (void)pm_device_register(&oled_node);
+    (void)pm_device_register(&platform_node);
 }

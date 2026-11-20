@@ -1,14 +1,12 @@
 /* Power state machine - identical in both reference frameworks (verified with
- * git diff on 2026-09-14), so this file is a faithful copy. */
+* git diff on 2026-09-14), so this file is a faithful copy. */
 #include "pm_policy.h"
 
-static uint8_t pm_allow_depth(pm_sleep_depth_t depth)
-{
+static uint8_t pm_allow_depth(pm_sleep_depth_t depth) {
     return (depth <= (pm_sleep_depth_t)PM_MAX_SLEEP_DEPTH) ? 1 : 0;
 }
 
-pm_power_state_t pm_policy_next_state(pm_power_state_t current, const pm_policy_input_t *in)
-{
+pm_power_state_t pm_policy_next_state(pm_power_state_t current, const pm_policy_input_t *in) {
     if (in == 0) {
         return PM_STATE_RUN;
     }
