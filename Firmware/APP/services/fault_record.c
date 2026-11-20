@@ -1,12 +1,12 @@
 /* Minimal fatal-fault recorder for STM32G070 (also G071 compatible).
-* NEVER log by UART, OLED, I2C, malloc, printf, or Flash programming here.
-* IRQs are masked before writing; magic is stored last for atomic validity.
-*
-* The scatter file maps .noinit to the last 256 bytes of 36KB G070 SRAM.
-* If SRAM parity is enabled through Option Bytes, SRAM shrinks to 32KB:
-* the scatter layout and startup parity initialization MUST be redesigned
-* first. Do NOT enable SRAM parity with the current 36KB scatter layout.
-*/
+ * NEVER log by UART, OLED, I2C, malloc, printf, or Flash programming here.
+ * IRQs are masked before writing; magic is stored last for atomic validity.
+ *
+ * The scatter file maps .noinit to the last 256 bytes of 36KB G070 SRAM.
+ * If SRAM parity is enabled through Option Bytes, SRAM shrinks to 32KB:
+ * the scatter layout and startup parity initialization MUST be redesigned
+ * first. Do NOT enable SRAM parity with the current 36KB scatter layout.
+ */
 #include "fault_record.h"
 #include "main.h"
 
@@ -15,8 +15,8 @@
 #define FAULT_RECORD_XOR_SALT  0xA5F0231Du
 
 /* Real .noinit object prevents the linker reporting an unused RW_NOINIT.
-* 'used' also retains the symbol for debugger/watch inspection.
-* No initializer: C runtime must not touch this reserved SRAM area. */
+ * 'used' also retains the symbol for debugger/watch inspection.
+ * No initializer: C runtime must not touch this reserved SRAM area. */
 volatile FaultRecord_t g_fault_record
 __attribute__((section(".noinit"), used, aligned(4)));
 
@@ -29,7 +29,7 @@ static uint32_t fault_checksum(uint32_t version, uint32_t reason,
 
 uint8_t FaultRecord_IsValid(void) {
     /* Do not trust uninitialized SRAM across cold power-on. On devices
-    * with SRAM parity enabled even the first read needs parity setup. */
+     * with SRAM parity enabled even the first read needs parity setup. */
     if(g_fault_record.magic != FAULT_RECORD_MAGIC ||
         g_fault_record.version != FAULT_RECORD_VERSION)
     return 0u;

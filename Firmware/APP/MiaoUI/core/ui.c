@@ -1,29 +1,29 @@
 /*
-* This file is part of the MiaoUI Library.
-*
-* Copyright (c) 2025, JFeng-Z, <2834294740@qq.com>
-*
-* Permission is hereby granted, free of charge, to any person obtaining
-* a copy of this software and associated documentation files (the
-* 'Software'), to deal in the Software without restriction, including
-* without limitation the rights to use, copy, modify, merge, publish,
-* distribute, sublicense, and/or sell copies of the Software, and to
-* permit persons to whom the Software is furnished to do so, subject to
-* the following conditions:
-*
-* The above copyright notice and this permission notice shall be
-* included in all copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,
-* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
-* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
-* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-*
-* Created on: 2025-02-08
-*/
+ * This file is part of the MiaoUI Library.
+ *
+ * Copyright (c) 2025, JFeng-Z, <2834294740@qq.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * 'Software'), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+ * CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+ * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ *
+ * Created on: 2025-02-08
+ */
 #include "core/ui.h"
 #include "display/dispDriver.h"
 #include "indev/indevDriver.h"
@@ -41,20 +41,20 @@ void disable_logging(const char *s){
 }
 
 /**
-* 添加项目到页面
-*
-* 该函数用于向指定的页面添加一个新的项目。项目包括名称、类型、元素、图像等信息，
-* 并且可以设置项目的功能回调。添加的项目将按照链表的形式管理，同时维护页面上项目的数量。
-*
-* @param name 项目名称，不可为NULL。
-* @param type 项目类型，如数据、开关、文本等。
-* @param Element 项目关联的元素，根据项目类型不同，包含不同的数据。
-* @param image 项目显示的图像，如果为NULL，则使用预设图像。
-* @param item 待添加的项目结构体。
-* @param localPage 项目所在的页面结构体。
-* @param nextPage 项目跳转的下一个页面结构体，如果无跳转，则为NULL。
-* @param function 项目对应的函数指针，用于处理项目特定的功能。
-*/
+ * 添加项目到页面
+ *
+ * 该函数用于向指定的页面添加一个新的项目。项目包括名称、类型、元素、图像等信息，
+ * 并且可以设置项目的功能回调。添加的项目将按照链表的形式管理，同时维护页面上项目的数量。
+ *
+ * @param name 项目名称，不可为NULL。
+ * @param type 项目类型，如数据、开关、文本等。
+ * @param Element 项目关联的元素，根据项目类型不同，包含不同的数据。
+ * @param image 项目显示的图像，如果为NULL，则使用预设图像。
+ * @param item 待添加的项目结构体。
+ * @param localPage 项目所在的页面结构体。
+ * @param nextPage 项目跳转的下一个页面结构体，如果无跳转，则为NULL。
+ * @param function 项目对应的函数指针，用于处理项目特定的功能。
+ */
 void AddItem(const char *name, UI_ITEM_TYPE type, const uint8_t *image, ui_item_t *item, ui_page_t *localPage, ui_page_t *nextPage, ui_item_function function) {
     // 检查输入参数的有效性
     // 参数检验
@@ -70,12 +70,12 @@ void AddItem(const char *name, UI_ITEM_TYPE type, const uint8_t *image, ui_item_
 
     // 如果页面类型为图像且没有指定图像，则使用预设图像
     if(localPage->type == UI_PAGE_ICON && image != NULL)
-    item->logo = image;
+        item->logo = image;
 
     item->page.location = localPage; // 设置项目所在页面
 
     if(function != NULL)
-    item->itemFunction = function; // 设置项目关联的函数
+        item->itemFunction = function; // 设置项目关联的函数
 
     // 初始化项目链接信息
     /* 初始化项目下一个项为NULL */
@@ -84,15 +84,15 @@ void AddItem(const char *name, UI_ITEM_TYPE type, const uint8_t *image, ui_item_
     // 设置跳转页面的父项目为当前项目
     /* 设置跳转页面的父级项目 */
     if (nextPage != NULL)
-    nextPage->item.parent = item;
+        nextPage->item.parent = item;
     else // 如果没有下一个页面，则设置为当前页面
-    nextPage = localPage;
+        nextPage = localPage;
     item->page.jumpPage = nextPage; // 设置项目跳转页面
 
     // 如果页面为空，则初始化项目链表
     /* 链式结构创建项目 */
     if (localPage->item.head == NULL) // 如果是首个项目
-    {
+        {
         // 初始化项目链表头部和尾部
         item->lastItem = item;
         localPage->item.head = item;
@@ -100,7 +100,7 @@ void AddItem(const char *name, UI_ITEM_TYPE type, const uint8_t *image, ui_item_
         localPage->length = 0; // 初始化项目计数
     }
     else // 如果不是首个项目
-    {
+        {
         // 将新项目连接到链表尾部
         // 连接新项目到链表尾部
         item->lastItem = localPage->item.tail;                // 新项目上一个项指向当前尾项目
@@ -117,13 +117,13 @@ void AddItem(const char *name, UI_ITEM_TYPE type, const uint8_t *image, ui_item_
 }
 
 /**
-* @brief 向页面中添加一个新页面。
-*
-* @param name 新页面的名称。
-* @param page 指向新页面结构体的指针。
-* @param type 新页面的类型。
-* @param parent 所属的上级页面。
-*/
+ * @brief 向页面中添加一个新页面。
+ *
+ * @param name 新页面的名称。
+ * @param page 指向新页面结构体的指针。
+ * @param type 新页面的类型。
+ * @param parent 所属的上级页面。
+ */
 void AddPage(const char *name, ui_page_t *page, UI_PAGE_TYPE type, ui_page_t *parent) {
     // 初始化新页面的基本信息
     page->pageName = name;
@@ -136,16 +136,16 @@ void AddPage(const char *name, ui_page_t *page, UI_PAGE_TYPE type, ui_page_t *pa
 }
 
 /**
-* @brief PID实现的动画（Q10 定点整数版，无 FPU）
-*
-* @param targrt    目标坐标值（Q10 定点）。
-* @param now       当前坐标值（Q10 定点）。
-* @param obj       PID参数（kp/ki/kd 均为 Q10）。
-*
-* 旧版用 float，会把 __addsf3/__subsf3/__mulsf3/__divsf3/__floatsisf…
-* 等软浮点库全部拉进镜像（实测 ~3.7 KB）。所有量改用 Q10 整数后，
-* 只需 32 位乘加与算术右移，精度 1/1024 像素，手感不变。
-*/
+ * @brief PID实现的动画（Q10 定点整数版，无 FPU）
+ *
+ * @param targrt    目标坐标值（Q10 定点）。
+ * @param now       当前坐标值（Q10 定点）。
+ * @param obj       PID参数（kp/ki/kd 均为 Q10）。
+ *
+ * 旧版用 float，会把 __addsf3/__subsf3/__mulsf3/__divsf3/__floatsisf…
+ * 等软浮点库全部拉进镜像（实测 ~3.7 KB）。所有量改用 Q10 整数后，
+ * 只需 32 位乘加与算术右移，精度 1/1024 像素，手感不变。
+ */
 #define UI_ANIM_SUM_MAX   (1 << 22)   /* 积分项限幅：防 ki*sum_error 溢出 */
 
 int32_t UI_Animation(int32_t targrt, int32_t now, ui_animation_param_t *obj) {
@@ -158,9 +158,9 @@ int32_t UI_Animation(int32_t targrt, int32_t now, ui_animation_param_t *obj) {
     // 积分环节，累加误差
     obj->sum_error += obj->error;
     if(obj->sum_error > UI_ANIM_SUM_MAX)
-    obj->sum_error = UI_ANIM_SUM_MAX;
+        obj->sum_error = UI_ANIM_SUM_MAX;
     else if(obj->sum_error < -UI_ANIM_SUM_MAX)
-    obj->sum_error = -UI_ANIM_SUM_MAX;
+        obj->sum_error = -UI_ANIM_SUM_MAX;
     // 微分环节，计算误差变化率
     delta_error = obj->error - obj->last_error;
 
@@ -173,56 +173,56 @@ int32_t UI_Animation(int32_t targrt, int32_t now, ui_animation_param_t *obj) {
     obj->last_error = obj->error;
 
     /* 收敛死区：误差已小于半个像素时直接吸附到目标。
-    * 整数 PID 的步进会被 >>10 吃掉（约 1/1024 像素），不吸附就会永远差
-    * 那么一点点，而画图那边一旦向下取整就变成可见的 1 px 偏差。 */
+     * 整数 PID 的步进会被 >>10 吃掉（约 1/1024 像素），不吸附就会永远差
+     * 那么一点点，而画图那边一旦向下取整就变成可见的 1 px 偏差。 */
     if(((targrt - x) < (UI_FX_ONE / 2)) && ((x - targrt) < (UI_FX_ONE / 2)))
-    x = targrt;
+        x = targrt;
 
     return x;
 }
 
 /**
-* @brief 定点动画是否已到位
-*
-* 整数 PID 在误差极小时步进会被右移吃掉（1/1024 像素级死区），
-* 不会严格等于目标值，因此用 1 像素以内作为到位判据。
-*/
+ * @brief 定点动画是否已到位
+ *
+ * 整数 PID 在误差极小时步进会被右移吃掉（1/1024 像素级死区），
+ * 不会严格等于目标值，因此用 1 像素以内作为到位判据。
+ */
 static uint8_t UI_IsAnimationDone(int32_t now, int32_t target) {
     int32_t d = now - target;
 
     if(d < 0)
-    d = -d;
+        d = -d;
 
     return (d <= UI_FX_ONE) ? 1u : 0u;
 }
 
 /**
-* 使用圆形函数实现的缓动效果，既适用于渐入也适用于渐出。
-*
-* @param t 当前时间，表示动画的进度。
-* @param b 初始值，动画开始前的位置。
-* @param c 变化量，动画结束时的总变化。
-* @param d 持续时间，动画的总时长。
-* @return 返回动画当前位置的整数像素。
-*
-* 旧版是 float 版圆形缓动，这里用 Q12 中间精度的 smoothstep 多项式
-* y = b + c·x²·(3-2x) 实现（与上一版无 FPU 的 float 实现数学上等价），
-* 全程整数运算。c 最大 128，中间量不超 int32。
-*/
+ * 使用圆形函数实现的缓动效果，既适用于渐入也适用于渐出。
+ *
+ * @param t 当前时间，表示动画的进度。
+ * @param b 初始值，动画开始前的位置。
+ * @param c 变化量，动画结束时的总变化。
+ * @param d 持续时间，动画的总时长。
+ * @return 返回动画当前位置的整数像素。
+ *
+ * 旧版是 float 版圆形缓动，这里用 Q12 中间精度的 smoothstep 多项式
+ * y = b + c·x²·(3-2x) 实现（与上一版无 FPU 的 float 实现数学上等价），
+ * 全程整数运算。c 最大 128，中间量不超 int32。
+ */
 int easeInOutCirc(int t, int b, int c, int d) {
     int32_t x_q;    /* Q12: 0 ~ 4096 */
     int32_t sq_q;   /* x²，Q12 */
     int32_t s_q;    /* 3-2x，Q12 */
 
     if(d <= 0)
-    return b + c;
+        return b + c;
 
     if(t <= 0)
-    x_q = 0;
+        x_q = 0;
     else if(t >= d)
-    x_q = (int32_t)(UI_FX_ONE << 2);
+        x_q = (int32_t)(UI_FX_ONE << 2);
     else
-    x_q = ((int32_t)t << 12) / d;
+        x_q = ((int32_t)t << 12) / d;
 
     sq_q = (x_q * x_q) >> 12;
     s_q = (int32_t)((UI_FX_ONE << 2) * 3) - (2 * x_q);
@@ -231,11 +231,11 @@ int easeInOutCirc(int t, int b, int c, int d) {
 }
 
 /**
-* @brief 定点数显示：把“缩放整数 value / 10^decimals”写成字符串
-*
-* 项目不再使用 %f（无 FPU，且已用自研整数 printf 替掉软浮点 printf），
-* 所有浮点显示统一走这个函数，UI 数据项用 UI_DATA_FLOAT + decimals 描述。
-*/
+ * @brief 定点数显示：把“缩放整数 value / 10^decimals”写成字符串
+ *
+ * 项目不再使用 %f（无 FPU，且已用自研整数 printf 替掉软浮点 printf），
+ * 所有浮点显示统一走这个函数，UI 数据项用 UI_DATA_FLOAT + decimals 描述。
+ */
 void UI_FmtScaled(char *buf, size_t size, int32_t value, uint8_t decimals) {
     uint32_t mag;
     const char *sign = "";
@@ -303,14 +303,14 @@ static void Optionbar_Init(ui_t *ui) {
 }
 
 /**
-* 绘制对话框
-* @param x 对话框左上角x坐标
-* @param y 对话框左上角y坐标
-* @param w 对话框宽度
-* @param h 对话框高度
-* 该函数首先绘制对话框的边框，然后绘制对话框的背景盒。
-* 使用了OLED显示设备的相关函数来完成绘制操作。
-*/
+ * 绘制对话框
+ * @param x 对话框左上角x坐标
+ * @param y 对话框左上角y坐标
+ * @param w 对话框宽度
+ * @param h 对话框高度
+ * 该函数首先绘制对话框的边框，然后绘制对话框的背景盒。
+ * 使用了OLED显示设备的相关函数来完成绘制操作。
+ */
 static void Draw_Dialog(ui_t *ui, uint16_t x,uint16_t y,uint16_t Now_w,uint16_t Now_h,int16_t targrtW,int16_t targrtH) {
     uint8_t bgC = ui->bgColor;
     Disp_SetDrawColor(&bgC);
@@ -325,18 +325,18 @@ static void Draw_Dialog(ui_t *ui, uint16_t x,uint16_t y,uint16_t Now_w,uint16_t 
 }
 
 /**
-* @brief 显示一个按指定尺寸缩放的对话框。
-*
-* 此函数用于在应用绘制状态时，通过线性动画效果展示一个对话框的缩放过程。函数首先检查当前是否处于应用绘制状态，
-* 如果是，则根据设定的时间和目标尺寸计算当前对话框的宽度和高度，并进行绘制。当动画时间达到预设的对话框显示时间
-* 后，将状态切换到应用运行状态，并返回true。整个过程通过OLED发送缓冲区来更新显示。
-*
-* @param x 对话框的x坐标。
-* @param y 对话框的y坐标。
-* @param targrtW 目标对话框的宽度。
-* @param targrtH 目标对话框的高度。
-* @return uint8_t 如果动画时间达到预设的对话框显示时间，则返回true；否则返回false。
-*/
+ * @brief 显示一个按指定尺寸缩放的对话框。
+ *
+ * 此函数用于在应用绘制状态时，通过线性动画效果展示一个对话框的缩放过程。函数首先检查当前是否处于应用绘制状态，
+ * 如果是，则根据设定的时间和目标尺寸计算当前对话框的宽度和高度，并进行绘制。当动画时间达到预设的对话框显示时间
+ * 后，将状态切换到应用运行状态，并返回true。整个过程通过OLED发送缓冲区来更新显示。
+ *
+ * @param x 对话框的x坐标。
+ * @param y 对话框的y坐标。
+ * @param targrtW 目标对话框的宽度。
+ * @param targrtH 目标对话框的高度。
+ * @return uint8_t 如果动画时间达到预设的对话框显示时间，则返回true；否则返回false。
+ */
 uint8_t Dialog_Show(ui_t *ui, int16_t x,int16_t y,int16_t targrtW,int16_t targrtH) {
 
     // 当前处于应用绘制状态时，处理对话框的缩放动画
@@ -388,20 +388,20 @@ uint8_t Notifications(ui_t *ui, int16_t x,int16_t y,int16_t targrtW,int16_t targ
 }
 
 /**
-* 绘制一个滚动条
-* 该函数根据给定的参数，在OLED屏幕上绘制一个滚动条。滚动条的可见部分的长度
-* 会根据当前值在最小值和最大值之间动态调整。
-* 同时也会改动参数的值
-* @param x 滚动条左上角的x坐标
-* @param y 滚动条左上角的y坐标
-* @param w 滚动条的宽度
-* @param h 滚动条的高度
-* @param r 滚动条圆角的半径
-* @param data->min 滚动条代表的最小值
-* @param data->max 滚动条代表的最大值
-* @param data->step 滚动条的步进值
-* @param NowValue 滚动条当前的值
-*/
+ * 绘制一个滚动条
+ * 该函数根据给定的参数，在OLED屏幕上绘制一个滚动条。滚动条的可见部分的长度
+ * 会根据当前值在最小值和最大值之间动态调整。
+ * 同时也会改动参数的值
+ * @param x 滚动条左上角的x坐标
+ * @param y 滚动条左上角的y坐标
+ * @param w 滚动条的宽度
+ * @param h 滚动条的高度
+ * @param r 滚动条圆角的半径
+ * @param data->min 滚动条代表的最小值
+ * @param data->max 滚动条代表的最大值
+ * @param data->step 滚动条的步进值
+ * @param NowValue 滚动条当前的值
+ */
 void Draw_Scrollbar(ui_t *ui, uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t r, int step) {
     uint8_t color = ui->bgColor;
     int32_t temp_q = 0;   /* Q10 定点的滚动条长度 */
@@ -435,7 +435,7 @@ void Draw_Scrollbar(ui_t *ui, uint16_t x, uint16_t y, uint16_t w, uint16_t h, ui
                 if(span != 0) {
                     int delta = (*pv - data->min);
                     if(delta < 0)
-                    delta = -delta;
+                        delta = -delta;
                     temp_q = UI_FX((delta * bar_w) / span);
                 }
                 temp_q += UI_FX(6);
@@ -453,38 +453,38 @@ default:
     ui->scrollbar.value = UI_Animation(temp_q, ui->scrollbar.value, &ui->animation.scrollbar_ani);
 
     /* 防积分饱和与越界：整数 PID 贴近目标时会推过头一两帧，数据条一旦画得比
-    * 轨道还长，超出轨道右端的那截白尖落在“擦除盒”之外，之后每一帧都擦不掉——
-    * 表现为轨道右端残留一块白条（其左缘是擦除端帽留下的凹三角），数据条拉满时
-    * 又正好与它重合。到位即吸附并清零积分项，绘制宽度再钳在 [0, w] 之内。 */
+     * 轨道还长，超出轨道右端的那截白尖落在“擦除盒”之外，之后每一帧都擦不掉——
+     * 表现为轨道右端残留一块白条（其左缘是擦除端帽留下的凹三角），数据条拉满时
+     * 又正好与它重合。到位即吸附并清零积分项，绘制宽度再钳在 [0, w] 之内。 */
     if(((temp_q - ui->scrollbar.value) < (UI_FX_ONE / 2)) &&
         ((ui->scrollbar.value - temp_q) < (UI_FX_ONE / 2))) {
         ui->scrollbar.value = temp_q;
         ui->animation.scrollbar_ani.sum_error = 0;
     }
     if(ui->scrollbar.value > UI_FX((int32_t)w))
-    ui->scrollbar.value = UI_FX((int32_t)w);
+        ui->scrollbar.value = UI_FX((int32_t)w);
     else if(ui->scrollbar.value < 0)
-    ui->scrollbar.value = 0;
+        ui->scrollbar.value = 0;
 
     /* u8g2_DrawRBox() 在 w < 2r 时内部 ww = w - 2r 会无符号下溢，把中段当成
-    * 超大宽度画出一条横贯全屏的白条（动画从 0 生长的头几帧、或数值为 0 时
-    * 都会命中）。这条越界白条落在擦除轨道(0..w)之外的两端，之后每帧都擦不
-    * 掉：进弹窗一次就在左右两端各留一块残迹，右侧那块最大，且其左缘正是擦
-    * 除轨道端帽的凹弧（数据条拉满时又和它重合）。宽度不足 2r 时直接不画，
-    * 动画长到 6px（=2r，恰好也是本控件的最小可见长度）再开始绘制。 */
+     * 超大宽度画出一条横贯全屏的白条（动画从 0 生长的头几帧、或数值为 0 时
+     * 都会命中）。这条越界白条落在擦除轨道(0..w)之外的两端，之后每帧都擦不
+     * 掉：进弹窗一次就在左右两端各留一块残迹，右侧那块最大，且其左缘正是擦
+     * 除轨道端帽的凹弧（数据条拉满时又和它重合）。宽度不足 2r 时直接不画，
+     * 动画长到 6px（=2r，恰好也是本控件的最小可见长度）再开始绘制。 */
     if(UI_FXI(ui->scrollbar.value) >= (int32_t)(2u * r))
-    Disp_DrawRBox(x, y, (uint16_t)UI_FXI(ui->scrollbar.value), h, r);
+        Disp_DrawRBox(x, y, (uint16_t)UI_FXI(ui->scrollbar.value), h, r);
 #if ( UI_USE_FREERTOS == 1 )
     if(data->dataRootMutex != NULL)xSemaphoreGive(*data->dataRootMutex);
 #endif
 }
 
 /**
-* @brief 使屏幕上的内容逐渐消失的函数
-*
-* @param disapper 一个用于控制消失程度的参数，初始值建议为0，每次调用本函数会自动增加
-* @return uint8_t 返回调整后的disapper值，用于下次调用时继续消失过程
-*/
+ * @brief 使屏幕上的内容逐渐消失的函数
+ *
+ * @param disapper 一个用于控制消失程度的参数，初始值建议为0，每次调用本函数会自动增加
+ * @return uint8_t 返回调整后的disapper值，用于下次调用时继续消失过程
+ */
 static uint8_t UI_Disapper(ui_t *ui, uint8_t disapper) {
     short disapper_temp = 0;
     // 计算屏幕缓冲区的总长度
@@ -498,7 +498,7 @@ static uint8_t UI_Disapper(ui_t *ui, uint8_t disapper) {
         }
     }
     else // 如果背景色不是黑色，执行或操作，让像素点逐渐变亮从而消失
-    {
+        {
         for( int i = 0; i < length; i++) {
             p[i] = p[i] | (rand()%0xff) >> disapper; // 通过或操作使像素点变亮
         }
@@ -506,7 +506,7 @@ static uint8_t UI_Disapper(ui_t *ui, uint8_t disapper) {
 
     disapper += 2; // 每次调用使消失程度增加，以便逐渐完成消失过程
     if(disapper >= 8) // 当消失程度达到最大值时重置为0，准备下一次调用
-    {
+        {
         disapper = 0;
     }
 
@@ -516,15 +516,15 @@ static uint8_t UI_Disapper(ui_t *ui, uint8_t disapper) {
 }
 
 /**
-* @brief 绘制选项位置
-*
-* 该函数用于在OLED屏幕上动态绘制选项的位置，实现类似选项滑动选择的效果。
-* 根据当前项和下一个项的信息，计算并绘制出选项的滑动过程。
-*
-* @param nowItem 当前选项项的指针
-* @param next_item 下一个选项项的指针
-* @return uint8_t 如果绘制过程完成（达到设定的时间），返回true；否则返回false。
-*/
+ * @brief 绘制选项位置
+ *
+ * 该函数用于在OLED屏幕上动态绘制选项的位置，实现类似选项滑动选择的效果。
+ * 根据当前项和下一个项的信息，计算并绘制出选项的滑动过程。
+ *
+ * @param nowItem 当前选项项的指针
+ * @param next_item 下一个选项项的指针
+ * @return uint8_t 如果绘制过程完成（达到设定的时间），返回true；否则返回false。
+ */
 static uint8_t Draw_TextPage_Optionbar(ui_t *ui, ui_item_t *now_Item, ui_item_t *next_item) {
     (void)now_Item;
     // 根据下一个项的id和位置长度，计算其理论绘制长度（整数比例，不开 float）
@@ -539,7 +539,7 @@ static uint8_t Draw_TextPage_Optionbar(ui_t *ui, ui_item_t *now_Item, ui_item_t 
     Disp_DrawLine(UI_HOR_RES - 7, 0, UI_HOR_RES - 7, (uint16_t)UI_FXI(ui->optionbar.position));
     // 根据计算出的长度，绘制当前选项的高亮框
     if(UI_FXI(ui->optionbar.nowLenght) > 3)   // 边的长度必须大于圆角宽度+1，不然会显示异常
-    Disp_DrawRBox(UI_HOR_RES - 10, 0, 6, (uint16_t)UI_FXI(ui->optionbar.nowLenght), 2);
+        Disp_DrawRBox(UI_HOR_RES - 10, 0, 6, (uint16_t)UI_FXI(ui->optionbar.nowLenght), 2);
 
     if(UI_IsAnimationDone(ui->optionbar.nowLenght, ui->optionbar.targetLenght) &&
         (ui->optionbar.position == UI_FX(UI_VER_RES))) {
@@ -654,13 +654,13 @@ static void Calculate_PageState(ui_t *ui, ui_page_t *Page, ui_item_t *now_Item,u
     switch (Page->type) {
     case UI_PAGE_TEXT:
         if (next_item->y - UI_FONT_HIGHT > (ui->textSpace*(UI_VER_RES/ui->textSpace) - ui->textSpace) || next_item->y - UI_FONT_HIGHT < 0)  // 防止光标溢出可视范围
-        {
+            {
             Page->pageState = UI_PAGE_MOVING;
         }
         break;
     case UI_PAGE_ICON:
         if (next_item->x > (ui->imageSpace*(UI_HOR_RES/ui->imageSpace) - ui->imageSpace) || next_item->x < 0)  // 防止光标溢出可视范围
-        {
+            {
             Page->pageState = UI_PAGE_MOVING;
         }
         break;
@@ -671,8 +671,8 @@ default:
 
 //勘误：修复了非菜单第一项返回时位置错误的问题
 /* The selection rectangle is inset relative to the OLED edge and has one
-* pixel of padding on each side of the text. Clamp to the title clip width.
-* Pixel advance is measured after translation using the active U8g2 font. */
+ * pixel of padding on each side of the text. Clamp to the title clip width.
+ * Pixel advance is measured after translation using the active U8g2 font. */
 static uint16_t UI_TextCursorWidth(const ui_page_t *page, const char *english) {
     const uint16_t available = (uint16_t)
     ((page->wideText ? UI_HOR_RES - 10u : UI_TITLE_X1) - UI_TITLE_X0);
@@ -693,7 +693,7 @@ static void Calculate_Cursor(ui_t *ui, ui_page_t *Page, ui_item_t *now_Item,ui_i
         ui->cursor.nowWide  = UI_FX(UI_TextCursorWidth(Page, now_Item->itemName));
         ui->cursor.targrtRow = next_item->y - UI_FONT_HIGHT;
         if (ui->cursor.targrtRow > (ui->textSpace*(UI_VER_RES/ui->textSpace) - ui->textSpace) || ui->cursor.targrtRow < 0)  // 防止光标溢出可视范围
-        {
+            {
             if(abs(now_Item->id - next_item->id) == 1)ui->cursor.targrtRow = now_Item->y - UI_FONT_HIGHT;
         }
         break;
@@ -701,7 +701,7 @@ static void Calculate_Cursor(ui_t *ui, ui_page_t *Page, ui_item_t *now_Item,ui_i
         // 根据选项的id差值计算目标行位置，并限制在可视范围内
         ui->cursor.targrtColumn = next_item->x;
         if (ui->cursor.targrtColumn > (ui->imageSpace*(UI_HOR_RES/ui->imageSpace) - ui->imageSpace) || ui->cursor.targrtColumn < 0)  // 防止光标溢出可视范围
-        {
+            {
             if(abs(now_Item->id - next_item->id) == 1)ui->cursor.targrtColumn = now_Item->x;
         }
         break;
@@ -709,6 +709,7 @@ default:
         break;
     }
 }
+
 static void Draw_TextPage(ui_t *ui, ui_page_t *Page, ui_item_t *now_Item, ui_item_t *next_item) {
     (void)now_Item;
     ui_item_t *temp_item = Page->item.head;
@@ -777,19 +778,19 @@ static void Draw_TextPage(ui_t *ui, ui_page_t *Page, ui_item_t *now_Item, ui_ite
             switch (temp_item->rollState) {
             case UI_ITEM_ROLL_STOP:
                 if (Disp_GetUTF8Width((temp_item->itemName)) > (text_right - UI_TITLE_X0))
-                temp_item->rollState = UI_ITEM_ROLL_FORWARD;
+                    temp_item->rollState = UI_ITEM_ROLL_FORWARD;
                 break;
 
             case UI_ITEM_ROLL_FORWARD:
                 temp_item->x--;
                 if ((Disp_GetUTF8Width((temp_item->itemName)) + temp_item->x) < (text_right - UI_TITLE_X0))
-                temp_item->rollState = UI_ITEM_ROLL_BACKWARD;
+                    temp_item->rollState = UI_ITEM_ROLL_BACKWARD;
                 break;
 
             case UI_ITEM_ROLL_BACKWARD:
                 temp_item->x++;
                 if (temp_item->x > 0)
-                temp_item->rollState = UI_ITEM_ROLL_STOP;
+                    temp_item->rollState = UI_ITEM_ROLL_STOP;
                 break;
 
         default:
@@ -803,10 +804,10 @@ static void Draw_TextPage(ui_t *ui, ui_page_t *Page, ui_item_t *now_Item, ui_ite
     }
 
     /* Font metrics differ slightly between CJK and ASCII.
-    * CJK: extend top by 1px, preserve the existing bottom boundary.
-    * ASCII: preserve the existing top and extend bottom by 1px.
-    * Both selection rectangles remain 13px tall; the row animation
-    * tracks the chosen locale while horizontal padding stays unchanged. */
+     * CJK: extend top by 1px, preserve the existing bottom boundary.
+     * ASCII: preserve the existing top and extend bottom by 1px.
+     * Both selection rectangles remain 13px tall; the row animation
+     * tracks the chosen locale while horizontal padding stays unchanged. */
     cursor_target_row = (int16_t)(UI_FXI(selected_anim_y) - UI_FONT_HIGHT
         + UI_TEXT_CURSOR_Y_OFFSET - UI_TEXT_CURSOR_TOP_PADDING
         - (0 ? 1 : 0));
@@ -829,7 +830,7 @@ static void Draw_ImagePage(ui_t *ui, ui_page_t *Page, ui_item_t *nowItem, ui_ite
     Draw_ImagePage_Optionbar(ui, nowItem, next_item);
 
     /* 顶部状态行:与 dashboard 第一行完全一致(坐标不动)。图标与进度条已
-    * 整体下移 16px 为它让位——仅适配 128x80 逻辑画布。 */
+     * 整体下移 16px 为它让位——仅适配 128x80 逻辑画布。 */
     if(ui->nowItem->page.location != next_item->page.location) {
         for (uint16_t i = 0; i <= Page->length; i++) {
             temp_item->animationX = 0;
@@ -839,7 +840,7 @@ static void Draw_ImagePage(ui_t *ui, ui_page_t *Page, ui_item_t *nowItem, ui_ite
     for (uint16_t i = 0; i <= Page->length; i++) {
         temp_item->animationX = UI_Animation(UI_FX(temp_item->x), temp_item->animationX, &ui->animation.imagePage_ani);
         if(temp_item->animationX >= -UI_FX(UI_IMG_WIDTH) && temp_item->animationX <= UI_FX(UI_HOR_RES + UI_IMG_WIDTH)) //超出屏幕范围则不绘制
-        {
+            {
             //绘制图标
             color = ui->bgColor^0x01;
             Disp_SetDrawColor(&color);
@@ -859,20 +860,20 @@ static void Draw_ImagePage(ui_t *ui, ui_page_t *Page, ui_item_t *nowItem, ui_ite
     case UI_ITEM_ROLL_STOP: // 如果项目处于静止状态
         // 检查项目名称是否需要开始滚动
         if(Disp_GetUTF8Width((next_item->itemName)) > UI_HOR_RES)
-        next_item->rollState = UI_ITEM_ROLL_FORWARD; // 如果名称宽度大于项目区域宽度，改变状态为向前滚动
+            next_item->rollState = UI_ITEM_ROLL_FORWARD; // 如果名称宽度大于项目区域宽度，改变状态为向前滚动
         else tital_x = 0;
         break;
     case UI_ITEM_ROLL_FORWARD: // 如果项目处于向前滚动状态
         tital_x --; // 向左移动项目
         // 检查是否需要改变滚动方向
         if((Disp_GetUTF8Width((next_item->itemName)) + tital_x) < UI_HOR_RES)
-        next_item->rollState = UI_ITEM_ROLL_BACKWARD; // 如果项目移出左边界，改变状态为向后滚动
+            next_item->rollState = UI_ITEM_ROLL_BACKWARD; // 如果项目移出左边界，改变状态为向后滚动
         break;
     case UI_ITEM_ROLL_BACKWARD: // 如果项目处于向后滚动状态
         tital_x ++; // 向右移动项目
         // 检查项目是否完全回到视图内
         if(tital_x > 0)
-        next_item->rollState = UI_ITEM_ROLL_STOP; // 如果项目完全回到视图内，改变状态为向前滚动
+            next_item->rollState = UI_ITEM_ROLL_STOP; // 如果项目完全回到视图内，改变状态为向前滚动
         break;
     default: // 默认情况下不做任何操作
         break;
@@ -889,15 +890,15 @@ static void Draw_ImagePage(ui_t *ui, ui_page_t *Page, ui_item_t *nowItem, ui_ite
 }
 
 /**
-* 绘制菜单界面
-* 该函数负责在 OLED 屏幕上绘制菜单界面，包括计算各项的位置、绘制背景、选项及其高亮显示。
-* 根据不同的菜单状态（如页面移动、选项切换），动态调整选项的显示位置，实现平滑的动画效果。
-* @param pos 当前页面位置
-* @param Page 当前页面结构体
-* @param LineSpacing 行间距
-* @param nowItem 当前选中项
-* @param next_item 下一个将要选中的项
-*/
+ * 绘制菜单界面
+ * 该函数负责在 OLED 屏幕上绘制菜单界面，包括计算各项的位置、绘制背景、选项及其高亮显示。
+ * 根据不同的菜单状态（如页面移动、选项切换），动态调整选项的显示位置，实现平滑的动画效果。
+ * @param pos 当前页面位置
+ * @param Page 当前页面结构体
+ * @param LineSpacing 行间距
+ * @param nowItem 当前选中项
+ * @param next_item 下一个将要选中的项
+ */
 static void Draw_UI(ui_t *ui, ui_page_t *Page, ui_item_t *nowItem, ui_item_t *next_item) {
     uint8_t color = ui->bgColor;
 
@@ -909,7 +910,7 @@ static void Draw_UI(ui_t *ui, ui_page_t *Page, ui_item_t *nowItem, ui_item_t *ne
     // TEXT page: glyph advance + left/right margins, capped to the title clip.
     // ICON page uses a separate underline and does not need the width.
     if(Page->type == UI_PAGE_TEXT)
-    ui->cursor.targrtWide = UI_TextCursorWidth(Page, next_item->itemName);
+        ui->cursor.targrtWide = UI_TextCursorWidth(Page, next_item->itemName);
     // 开始绘制菜单界面
     //清屏
     Disp_SetDrawColor(&color); // 设置背景颜色
@@ -945,10 +946,10 @@ void Create_element(ui_item_t *item, ui_element_t *element) {
 }
 
 /**
-* @brief 根据菜单方向运行处理菜单逻辑
-*
-* @param Dir 菜单操作方向，包括上、下、进入等操作
-*/
+ * @brief 根据菜单方向运行处理菜单逻辑
+ *
+ * @param Dir 菜单操作方向，包括上、下、进入等操作
+ */
 static void Process_UI_Run(ui_t *ui, UI_ACTION Action) {
     uint8_t disapper = 0;
     uint8_t i;
@@ -975,7 +976,7 @@ static void Process_UI_Run(ui_t *ui, UI_ACTION Action) {
             break;
         case UI_ACTION_ENTER:
             if(ui->nowItem != NULL && ui->nowItem->itemType == UI_ITEM_PARENTS)//当前项非空且为父项时，进入下一级菜单
-            {
+                {
                 // 避免重复状态改变
                 if(ui->action != UI_ACTION_ENTER) Change_UIState(ui, UI_PAGE_RUNING);
 
@@ -991,7 +992,7 @@ static void Process_UI_Run(ui_t *ui, UI_ACTION Action) {
                 }
             }
             else if(ui->nowItem != NULL && ui->nowItem->itemType == UI_ITEM_RETURN)//返回上一级菜单
-            {
+                {
                 // 避免重复状态改变
                 if(ui->action != UI_ACTION_ENTER) Change_UIState(ui, UI_PAGE_RUNING);
 
@@ -1005,7 +1006,7 @@ static void Process_UI_Run(ui_t *ui, UI_ACTION Action) {
                 }
             }
             else // 如果当前项为空或非父项，则进入应用绘制状态
-            {
+                {
                 UI_Disapper(ui, 1);
                 Change_UIState(ui, UI_ITEM_DRAWING);
             }
@@ -1013,9 +1014,9 @@ static void Process_UI_Run(ui_t *ui, UI_ACTION Action) {
         case UI_ACTION_BACK:
             if(ui->nowItem != NULL){
                 /* Root BACK means explicit screen-off, NOT navigation.
-                * Do it before the eight-frame fade/Draw_UI. The PM
-                * task will enter UI_OFF at its next 50ms poll, even
-                * if automatic sleep is blocked by active hardware. */
+                 * Do it before the eight-frame fade/Draw_UI. The PM
+                 * task will enter UI_OFF at its next 50ms poll, even
+                 * if automatic sleep is blocked by active hardware. */
                 if(ui->nowItem->page.location->parentPage == NULL){
                     pm_api_force_sleep(); /* Root BACK -> UI_OFF/STOP1. */
                     break;
@@ -1051,7 +1052,7 @@ static void Process_UI_Run(ui_t *ui, UI_ACTION Action) {
             disapper = UI_Disapper(ui, disapper); // 执行UI淡出操作
         }
         if(ui->nowItem != NULL) // 确保now_item非空
-        {
+            {
             Draw_UI(ui, ui->nowItem->page.location, ui->nowItem, ui->nowItem);
         }
         break;
@@ -1071,11 +1072,11 @@ default:
 }
 
 /**
-* @brief 处理应用程序的运行状态。
-* 对给定的项目(item)根据其类型(UI_ITEM_TYPE)和当前的菜单状态(Direction)执行相应的操作。
-* @param item 指向要处理的项目的指针。
-* @param Direction 当前菜单的方向或状态。
-*/
+ * @brief 处理应用程序的运行状态。
+ * 对给定的项目(item)根据其类型(UI_ITEM_TYPE)和当前的菜单状态(Direction)执行相应的操作。
+ * @param item 指向要处理的项目的指针。
+ * @param Direction 当前菜单的方向或状态。
+ */
 static void Process_App_Run(ui_t *ui, ui_item_t *item, UI_ACTION Action) {
     if (item == NULL) return; // 检查空指针，避免未定义行为
 
@@ -1096,7 +1097,7 @@ static void Process_App_Run(ui_t *ui, ui_item_t *item, UI_ACTION Action) {
                     if (item->itemFunction == NULL) ParameterSetting_Widget(ui);
                     else (item->itemFunction)(ui); //执行项目的函数
                     if(ui->action == UI_ACTION_ENTER || ui->action == UI_ACTION_BACK)//退出项目
-                    {
+                        {
                         if(ui->nowItem->element->data->functionType == UI_DATA_FUNCTION_EXIT_EXECUTE) {
                             if(ui->nowItem->element->data->function != NULL) ui->nowItem->element->data->function(ui);
 #if ( UI_USE_FREERTOS == 1 )
@@ -1123,8 +1124,8 @@ static void Process_App_Run(ui_t *ui, ui_item_t *item, UI_ACTION Action) {
         if (item->itemFunction == NULL) Text_Widget(ui);
         else (item->itemFunction)(ui);
         /* BACK(CONF 长按)强制离开函数页:dashboard/小恐龙/烧屏页都只是被菜单
-        * 调用的绘制函数,页面本身若吞掉了该 action(如烧屏说明页),这里重新
-        * 置回,保证"长按=回到上一级"。 */
+         * 调用的绘制函数,页面本身若吞掉了该 action(如烧屏说明页),这里重新
+         * 置回,保证"长按=回到上一级"。 */
         if(Action == UI_ACTION_BACK) ui->action = UI_ACTION_BACK;
         if(ui->action != UI_ACTION_NONE) Change_UIState(ui, UI_ITEM_EXIT); // 如果项目状态为进入菜单，则改变菜单状态为函数退出
         break;
@@ -1154,11 +1155,11 @@ default:
 }
 
 /**
-* 菜单任务处理函数
-* 该函数负责根据当前按钮扫描结果更新菜单状态，并进行相应的绘制或处理操作。
-* 无参数
-* 无返回值
-*/
+ * 菜单任务处理函数
+ * 该函数负责根据当前按钮扫描结果更新菜单状态，并进行相应的绘制或处理操作。
+ * 无参数
+ * 无返回值
+ */
 void ui_loop(ui_t *ui) {
     UI_ACTION Action = indevScan(ui); // 根据当前页面类型映射五向按键
     if (ui->menuState == UI_PAGE_INIT) {
@@ -1178,7 +1179,7 @@ void ui_loop(ui_t *ui) {
             // 在这两个状态下，处理应用程序运行逻辑
             Process_App_Run(ui, ui->nowItem, Action);
             if (ui->menuState != UI_ITEM_DRAWING)
-            Process_UI_Run(ui, Action);
+                Process_UI_Run(ui, Action);
             break;
 
         case UI_PAGE_RUNING:
@@ -1195,10 +1196,10 @@ void ui_loop(ui_t *ui) {
 }
 
 /* TKWTL的注释
-* 该函数为动画的动效参数赋初值
-* kp越大，动画变动越快，但会冲过头
-* ki为0时会产生静差
-*/
+ * 该函数为动画的动效参数赋初值
+ * kp越大，动画变动越快，但会冲过头
+ * ki为0时会产生静差
+ */
 static void AnimationParam_Init(ui_animation_t *Ani) {
     /* PID 参数均为 Q10 定点：0.25 -> 256，0.03 -> 31，0.01 -> 10 … */
     Ani->optionbar_ani.kp = 256;

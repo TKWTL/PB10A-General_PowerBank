@@ -1,5 +1,5 @@
 /* Ordered, resumable device PM. A completed node is not repeated while
-* the next hook reports PENDING. Resume walks nodes in reverse order. */
+ * the next hook reports PENDING. Resume walks nodes in reverse order. */
 #include "pm_device.h"
 #define PM_DEVICE_MAX 16u
 enum {NONE=0,PREPARE,SUSPEND,RESUME};
@@ -12,9 +12,10 @@ int pm_device_register(const pm_device_node_t *node) {
     for(j=0;j<count;j++)if(nodes[j]==node)return 0;
     i=count;
     while(i>0 && nodes[i-1]->order>node->order)
-    {nodes[i]=nodes[i-1];--i;}
+        {nodes[i]=nodes[i-1];--i;}
     nodes[i]=node;++count;return 0;
 }
+
 static pm_hook_result_t walk(uint8_t p) {
     pm_hook_result_t r;
     const pm_device_node_t *n;
@@ -35,6 +36,7 @@ static pm_hook_result_t walk(uint8_t p) {
     phase=NONE;
     return resume_error?PM_HOOK_ERROR:PM_HOOK_DONE;
 }
+
 pm_hook_result_t pm_device_prepare_all(void){return walk(PREPARE);}
 pm_hook_result_t pm_device_suspend_all(void){return walk(SUSPEND);}
 pm_hook_result_t pm_device_resume_all(void){return walk(RESUME);}

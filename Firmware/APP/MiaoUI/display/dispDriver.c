@@ -1,7 +1,7 @@
 /*
-* MiaoUI display adaptation for PB10A SSD1306, 128x64.
-* Original MiaoUI display abstraction copyright/license: MIT, JFeng-Z.
-*/
+ * MiaoUI display adaptation for PB10A SSD1306, 128x64.
+ * Original MiaoUI display abstraction copyright/license: MIT, JFeng-Z.
+ */
 #include "display/dispDriver.h"
 #include "core/ui.h"
 #include "ssd1306_display.h"
@@ -12,9 +12,9 @@ int Contrast = 5;
 
 static uint8_t disp_contrast_raw(int level) {
     if(level < 0)
-    level = 0;
+        level = 0;
     else if(level > 15)
-    level = 15;
+        level = 15;
 
     return (uint8_t)(level * level + 2 * level);
 }
@@ -25,7 +25,7 @@ static ui_item_t s_rotation_item;
 static ui_item_t s_burnin_item;
 
 /* Adapted from DPC27A service_pages.c: a pass-based MiaoUI WORD page.
-* An action is left unconsumed so the UI state machine exits on ANY key. */
+ * An action is left unconsumed so the UI state machine exits on ANY key. */
 static void Disp_BurninPage(ui_t *ui) {
     static uint8_t white_shown;
 
@@ -123,7 +123,7 @@ void Disp_SetContrast(ui_t *ui) {
 
 void Disp_SetContrast2(uint8_t contrast) {
     if(contrast > 15u)
-    contrast = 15u;
+        contrast = 15u;
     Contrast = (int)contrast;
     SSD1306_Display_RequestContrast(disp_contrast_raw(Contrast));
 }
@@ -167,7 +167,7 @@ void Disp_SetRotationMode(uint8_t rotation_mode) {
 
 void Disp_ResumeRotation(ui_t *ui) {
     if(ui != 0)
-    Disp_SetRotation(ui->rotation);
+        Disp_SetRotation(ui->rotation);
 }
 
 void Disp_UpdateRotation(ui_t *ui, uint8_t rotation_state) {

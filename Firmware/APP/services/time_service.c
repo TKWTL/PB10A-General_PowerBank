@@ -1,6 +1,6 @@
 /* Collar-Radio style RTC time/date editing, adapted to PB10A HAL RTC.
-* Never directly cast packed HAL RTC structures to MiaoUI int pointers.
-*/
+ * Never directly cast packed HAL RTC structures to MiaoUI int pointers.
+ */
 #include "time_service.h"
 #include "rtc.h"
 #include "core/ui.h"
@@ -15,12 +15,14 @@ void RTC_UpdateTime(void) {
     sTime.WeekDay=d.WeekDay;sTime.Hours=t.Hours;
     sTime.Minutes=t.Minutes;sTime.Seconds=t.Seconds;
 }
+
 static uint8_t days_in_month(int y,int m) {
     static const uint8_t ds[12]={31,28,31,30,31,30,31,31,30,31,30,31};
     if(m<1 || m>12)return 0u;
     if(m==2 && (y%4)==0)return 29u; /* 2000-2099 */
     return ds[m-1];
 }
+
 static uint8_t weekday(int y,int m,int day) {
     /* RTC_WEEKDAY_MONDAY=1...SUNDAY=7; 2000-01-01 was Saturday. */
     int d=5,yy,mm;
@@ -29,6 +31,7 @@ static uint8_t weekday(int y,int m,int day) {
     d+=day-1;
     return (uint8_t)(d%7+1);
 }
+
 void SetTime(ui_t *ui) {
     RTC_TimeTypeDef t={0};
     RTC_DateTypeDef d={0};
@@ -48,8 +51,9 @@ void SetTime(ui_t *ui) {
     t.DayLightSaving=RTC_DAYLIGHTSAVING_NONE;
     t.StoreOperation=RTC_STOREOPERATION_RESET;
     if(HAL_RTC_SetDate(&hrtc,&d,RTC_FORMAT_BIN)==HAL_OK)
-    (void)HAL_RTC_SetTime(&hrtc,&t,RTC_FORMAT_BIN);
+        (void)HAL_RTC_SetTime(&hrtc,&t,RTC_FORMAT_BIN);
 }
+
 static ui_item_t s_time_item,s_back,s_fields[6];
 static ui_page_t s_time_page;
 static ui_data_t s_data[6];
@@ -74,6 +78,7 @@ void Create_TimeSet_Parameters(ui_t *ui) {
         Create_element(&s_fields[i],&s_element[i]);
     }
 }
+
 void Add_TimeSet_Items(ui_page_t *parent) {
     uint8_t i;
     static const char *const labels[6]={
@@ -83,5 +88,5 @@ void Add_TimeSet_Items(ui_page_t *parent) {
     AddPage("[Time]",&s_time_page,UI_PAGE_TEXT,parent);
     AddItem("[Return]",UI_ITEM_RETURN,0,&s_back,&s_time_page,parent,0);
     for(i=0u;i<6u;i++)
-    AddItem(labels[i],UI_ITEM_DATA,0,&s_fields[i],&s_time_page,0,0);
+        AddItem(labels[i],UI_ITEM_DATA,0,&s_fields[i],&s_time_page,0,0);
 }

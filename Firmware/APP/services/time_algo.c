@@ -1,10 +1,10 @@
 /* PB10A RTC-aligned time algorithm, imported from IH01A time_service, adapted from Collar-Radio Algorithms/time.c:
-* keep the safe field-by-field copy of HAL RTC's packed time/date,
-* discard wall-clock editing UI, FM/FreeRTOS integration and floats.
-*
-* All HAL_RTC_GetTime calls MUST be followed by HAL_RTC_GetDate to
-* unlock shadow registers. Only called from cooperative foreground.
-*/
+ * keep the safe field-by-field copy of HAL RTC's packed time/date,
+ * discard wall-clock editing UI, FM/FreeRTOS integration and floats.
+ *
+ * All HAL_RTC_GetTime calls MUST be followed by HAL_RTC_GetDate to
+ * unlock shadow registers. Only called from cooperative foreground.
+ */
 #include "time_algo.h"
 #include "rtc.h"
 #include <stdio.h>
@@ -34,7 +34,7 @@ uint8_t Time_CalendarToSeconds(const Time_Calendar *calendar,
         calendar->second > 59u) return 0u;
 
     for(m=1u; m<calendar->month; ++m)
-    day_of_year += Time_DaysInMonth(calendar->year, m);
+        day_of_year += Time_DaysInMonth(calendar->year, m);
     day_of_year += calendar->day - 1u;
     y = calendar->year - 2000u;
     /* Leap years: 2000, 2004...2096; 2100 excluded by validation. */

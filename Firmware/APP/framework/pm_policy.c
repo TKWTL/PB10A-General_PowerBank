@@ -1,5 +1,5 @@
 /* Power state machine - identical in both reference frameworks (verified with
-* git diff on 2026-09-14), so this file is a faithful copy. */
+ * git diff on 2026-09-14), so this file is a faithful copy. */
 #include "pm_policy.h"
 
 static uint8_t pm_allow_depth(pm_sleep_depth_t depth) {

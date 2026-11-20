@@ -21,6 +21,7 @@ static pm_hook_result_t oled_power(uint8_t off) {
     return PM_HOOK_ERROR;
     return PM_HOOK_PENDING;
 }
+
 static pm_hook_result_t oled_prepare(void *ctx)
 {(void)ctx;return oled_power(1);}
 static pm_hook_result_t oled_resume(void *ctx)
@@ -34,17 +35,20 @@ static pm_hook_result_t stm32_suspend(void *ctx) {
     ADC1_COMMON->CCR &= ~(ADC_CCR_VREFEN|ADC_CCR_TSEN);
     HAL_SuspendTick();suspended=1;return PM_HOOK_DONE;
 }
+
 static void stm32_restore(void) {
     ADC1_COMMON->CCR=(ADC1_COMMON->CCR & ~(ADC_CCR_VREFEN|ADC_CCR_TSEN))
     |adc_internal;
     HAL_ResumeTick();suspended=0;
 }
+
 static void stm32_deepsleep(void *ctx) {
     (void)ctx;
     HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON,PWR_STOPENTRY_WFI);
     SystemClock_Config();
     if(suspended)stm32_restore();
 }
+
 static pm_hook_result_t stm32_resume(void *ctx)
 {(void)ctx;if(suspended)stm32_restore();return PM_HOOK_DONE;}
 static const pm_device_node_t oled_node={
