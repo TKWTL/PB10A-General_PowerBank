@@ -3,11 +3,11 @@
 #include <stdint.h>
 
 /* TIM3 input clock = 64 MHz, prescaler = 63 -> timer tick = 1 MHz.
- * Compute ARR in constant expressions when defining a sound, not at runtime:
- * e.g. BEEP_ARR_HZ(2700u) == 369 (approximately 2703 Hz).
- * A 0 ARR encodes a timed rest; duration_ms == 0 ends the sequence.
- * No division occurs when advancing between notes.
- */
+* Compute ARR in constant expressions when defining a sound, not at runtime:
+* e.g. BEEP_ARR_HZ(2700u) == 369 (approximately 2703 Hz).
+* A 0 ARR encodes a timed rest; duration_ms == 0 ends the sequence.
+* No division occurs when advancing between notes.
+*/
 #define BEEP_TICK_HZ        1000000u
 #define BEEP_ARR_HZ(hz)    ((uint16_t)((BEEP_TICK_HZ+((hz)/2u))/(hz)-1u))
 #define BEEP_REST          0u
@@ -16,7 +16,7 @@
 #define BEEP_SEQUENCE_MAX_STEPS 64u
 
 /* Rounded equal-temperament note names, translated to ARR at compile time.
- * Custom frequency constants may use BEEP_ARR_HZ(hz) directly. */
+* Custom frequency constants may use BEEP_ARR_HZ(hz) directly. */
 #define BEEP_C4  BEEP_ARR_HZ(262u)
 #define BEEP_CS4 BEEP_ARR_HZ(277u)
 #define BEEP_D4  BEEP_ARR_HZ(294u)
@@ -49,7 +49,7 @@ typedef struct {
 } beep_note_t;
 
 /* Sequence pointers are NOT copied: provide static const / ROM arrays.
- * Enqueue from foreground only; coroOS is cooperative, not thread preemptive. */
+* Enqueue from foreground only; coroOS is cooperative, not thread preemptive. */
 void beep_init(void);
 uint8_t beep_enqueue(const beep_note_t *sequence); /* 1 accepted, 0 full/invalid */
 void beep_poll(uint32_t now_ms);
@@ -60,7 +60,7 @@ uint8_t beep_note_index(void);        /* 0-based index of current note */
 void beep_set_key_enabled(uint8_t enabled);
 uint8_t beep_get_key_enabled(void);
 /* Independent global mute. Enabling immediately stops output and clears
- * queued audio; callers can unmute without changing the Click Beep setting. */
+* queued audio; callers can unmute without changing the Click Beep setting. */
 void beep_set_muted(uint8_t muted);
 uint8_t beep_is_muted(void);
 void beep_key_click(void);            /* opt-in/out 100ms at ~2.7kHz */

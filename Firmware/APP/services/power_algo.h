@@ -4,8 +4,8 @@
 #include "ui_conf.h"
 /* SW6306 plus auxiliary A-port PA6 and ADC1 DMA telemetry. */
 /* Task-facing SW6306 monitor, based on PB02B 100ms staggered LOAD.
- * The displayed BUS voltage/current is the shared SW6306 BUS ADC, not
- * individual per-port current measurements. All getters read RAM only. */
+* The displayed BUS voltage/current is the shared SW6306 BUS ADC, not
+* individual per-port current measurements. All getters read RAM only. */
 typedef struct {
     uint16_t vbus_mv,ibus_ma,vbat_mv,ibat_ma;
     uint8_t capacity_pct,capacity_valid;
