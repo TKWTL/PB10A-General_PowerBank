@@ -2,6 +2,7 @@
 #define PB10A_POWER_ALGO_H
 #include <stdint.h>
 #include "ui_conf.h"
+#include "coroOS.h"
 /* SW6306 plus auxiliary A-port PA6 and ADC1 DMA telemetry. */
 /* Task-facing SW6306 monitor, based on PB02B 100ms staggered LOAD.
  * The displayed BUS voltage/current is the shared SW6306 BUS ADC, not
@@ -15,7 +16,8 @@ typedef struct {
     uint32_t sample_ms;
 } power_monitor_t;
 void PowerAlgo_Init(void);
-void PowerAlgo_Service100ms(void);
+/* SW6306 owner thread: cooperative Init/ADC/Status/Port/Power/Capacity. */
+char PowerAlgo_SW6306Thread(coro_pt_t *pt);
 void PowerAlgo_GetMonitor(power_monitor_t *out);
 uint8_t PowerAlgo_AdcIsSuspended(void);
 uint8_t PowerAlgo_AdcBeginScan(void);

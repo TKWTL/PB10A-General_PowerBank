@@ -95,21 +95,10 @@ THRD_DECLARE(PowerADCThread) {
     }
     THRD_END;
 }
-/* PB02B-derived 100ms staggered SW6306 read groups, independent of UI. */
-THRD_DECLARE(SW6306ServiceThread) {
-    THRD_BEGIN;
-    for(;;) {
-        if(!pm_api_ui_should_block())
-            PowerAlgo_Service100ms();
-        THRD_DELAY(100u);
-    }
-    THRD_END;
-}
-
 /*************************** 线程表与入口 ***************************/
 static const coro_thread_fn_t s_threads[] = {
     OledServiceThread, MiaoUiThread, PowerManagerThread,
-    SystemServiceThread, PowerADCThread, SW6306ServiceThread
+    SystemServiceThread, PowerADCThread, PowerAlgo_SW6306Thread
 };
 
 void APP_TaskInit(void) {
