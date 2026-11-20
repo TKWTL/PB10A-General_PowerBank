@@ -30,7 +30,7 @@ Board-level current and wake reliability still require measurement.
 
 ### Devices, RTC and scanning
 
-SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) and RDA5807 (Collar-Radio-derived) use the HAL I2C1 adapter retained in `Core/Src/i2c.c` / `Core/Inc/i2c.h` USER CODE sections. SW6306 now initializes and is refreshed by an independent 100ms coroOS service thread. The I2C Scanner WORD page has regained the original Collar-Radio title and 16x8 address matrix. The Collar-Radio style Time page offers aligned integer date/time edits via HAL RTC. RTC uses backup-register DR0 validity marking so CubeMX-generated default time/date is applied only on a fresh backup domain. RTC fields refresh every second outside active parameter editing; RTC uses LSE in the current CubeMX configuration. STOP1 and all hardware peripherals remain untested on board.
+SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) and RDA5807 (Collar-Radio-derived) use the HAL I2C1 adapter retained in `Core/Src/i2c.c` / `Core/Inc/i2c.h` USER CODE sections. SW6306 now initializes and is refreshed by an independent 100ms coroOS service thread. The I2C Scanner WORD page has regained the original Collar-Radio title and 16x8 address matrix. The Collar-Radio style Time page offers aligned integer date/time edits via HAL RTC. RTC uses backup-register DR0 validity marking so CubeMX-generated default time/date is applied only on a fresh backup domain. RTC fields refresh every 500 ms outside active parameter editing; RTC uses LSE in the current CubeMX configuration. STOP1 and all hardware peripherals remain untested on board.
 
 
 ### Application versus service separation
@@ -63,7 +63,7 @@ scheduler; Radio starts only when its menu application is entered.
 The fifth coroOS task, `ADC_RTC_AuxAThread` in `APP/app_task.c`,
 owns ADC calibration before its `for(;;)`, a four-rank DMA scan,
 HAL IRQ completion waiting, Aux-A status/enable management and RTC
-refresh. The base delay is 500 ms; RTC reads occur every second.
+refresh. The base delay is 500 ms; RTC reads occur every cycle (500 ms).
 `RTC_IsEditing()` prevents the time editor's pending changes from being
 overwritten; the RTC setter remains a normal service function.
 
@@ -288,3 +288,10 @@ parity bits. No option bytes have been changed by this commit.
   factory-calibrated HAL conversion helpers, using the existing 500ms DMA scan.
 - Conversion timing, sensor scaling, STOP1 transitions and UI fields still
   require hardware verification; this edit has not been board-tested.
+
+### Display flip orientation
+
+The SSD1306 display BSP initializes u8g2 with `U8G2_R0`.
+In Display > Screen Flip, setting 0 retains that native orientation;
+setting 1 selects `U8G2_R2` (180°). The generic R0/R1/R2/R3
+rotation-mode API is unchanged.

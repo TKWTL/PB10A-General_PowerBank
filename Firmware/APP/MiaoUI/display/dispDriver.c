@@ -157,7 +157,8 @@ uint16_t Disp_DrawUTF8(uint16_t x, uint16_t y, const char *str) { return u8g2_Dr
 uint16_t Disp_GetUTF8Width(const char *str) { return u8g2_GetUTF8Width(&u8g2, str); }
 
 void Disp_SetRotation(uint8_t rotation) {
-    u8g2_SetDisplayRotation(&u8g2, rotation ? U8G2_R0 : U8G2_R2);
+    /* Match SSD1306_Display_Begin(): flip 0 is the native U8G2_R0. */
+    u8g2_SetDisplayRotation(&u8g2, rotation ? U8G2_R2 : U8G2_R0);
 }
 
 void Disp_SetRotationMode(uint8_t rotation_mode) {

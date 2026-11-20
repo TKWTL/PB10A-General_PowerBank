@@ -75,21 +75,16 @@ THRD_DECLARE(SystemServiceThread) {
 }
 /* ADC/DMA, RTC and auxiliary USB-A share a 500 ms service cadence.
  * The ADC settles by IRQ while the other coroOS threads continue running.
- * RTC readout is halved to 1 Hz; the Time editor keeps its own write API. */
-static uint8_t s_rtc_divider;
+ * Refresh RTC each cycle; the Time editor keeps its own write API. */
 THRD_DECLARE(ADC_RTC_AuxAThread) {
     THRD_BEGIN;
     PowerAlgo_AdcInit();
-    s_rtc_divider=0u;
     RTC_UpdateTime();
     for(;;) {
         if(!PowerAlgo_AdcIsSuspended() && PowerAlgo_AdcBeginScan()) {
             THRD_UNTIL(PowerAlgo_AdcScanSettled());
         }
-        if(++s_rtc_divider>=2u) {
-            s_rtc_divider=0u;
-            if(!RTC_IsEditing(&s_ui))RTC_UpdateTime();
-        }
+        if(!RTC_IsEditing(&s_ui))RTC_UpdateTime();
         PowerAlgo_AuxA_Service();
         System_Poll();
         THRD_DELAY(500u);
