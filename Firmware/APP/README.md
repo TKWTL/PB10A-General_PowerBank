@@ -30,7 +30,7 @@ Board-level current and wake reliability still require measurement.
 
 ### Devices, RTC and scanning
 
-SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) and RDA5807 (Collar-Radio-derived) are integrated under BSP with a blocking HAL I2C1 adapter. SW6306 now initializes and is refreshed by an independent 100ms coroOS service thread. The I2C Scanner WORD page has regained the original Collar-Radio title and 16x8 address matrix. The Collar-Radio style Time page offers aligned integer date/time edits via HAL RTC. RTC uses backup-register DR0 validity marking so CubeMX-generated default time/date is applied only on a fresh backup domain. RTC fields refresh every second outside active parameter editing; RTC currently uses LSI and is not crystal-accurate. STOP1 and all hardware peripherals remain untested on board.
+SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) and RDA5807 (Collar-Radio-derived) use the HAL I2C1 adapter retained in `Core/Src/i2c.c` / `Core/Inc/i2c.h` USER CODE sections. SW6306 now initializes and is refreshed by an independent 100ms coroOS service thread. The I2C Scanner WORD page has regained the original Collar-Radio title and 16x8 address matrix. The Collar-Radio style Time page offers aligned integer date/time edits via HAL RTC. RTC uses backup-register DR0 validity marking so CubeMX-generated default time/date is applied only on a fresh backup domain. RTC fields refresh every second outside active parameter editing; RTC currently uses LSI and is not crystal-accurate. STOP1 and all hardware peripherals remain untested on board.
 
 
 ### Application versus service separation
@@ -41,13 +41,13 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 ## Architecture (2026-11)
 
 - `APP/app_task.c` registers coroOS tasks and polls shared services
-- `Scheduler/coroOS.*` is the stackless cooperative scheduler inspired by Adam Dunkels' Protothreads (not FreeRTOS, no priorities)
+- `Scheduler/coroOS.*` now wraps the actual Protothreads 1.4 (`Scheduler/pt1.4/pt.h`, `pt-sem.h`, `lc-switch.h`), as in Handheld-Fan; six tasks are retained (not FreeRTOS, no priorities)
 - `APP/services/*_algo.c` holds reusable beep, RTC and system algorithms; `time_service.c` retains the MiaoUI calendar editor
 - `APP/functions/` hosts independent user-facing MiaoUI applications. Powerbank displays cached SW6306 voltage, current, percentage and protocol; Radio is forced low-power at boot and starts only when its WORD page is entered (or kept running in explicit background ON mode)
 - `APP/i18n.c/h` defines a shared localization interface and placeholder English-only catalog
 - `BSP/BMP180` ports Collar-Radio compensation code with Cortex-M0+ safe endian calibration; `BSP/MMC5603` supports register I/O, product ID and low-power configuration
-- `BSP/I2C` has one I2C1 HAL handle, IRQ-driven transfers and nested transaction-level locking. The legacy synchronous API waits in the foreground for each interrupt completion, so during those waits other coroOS threads **do not run**. This must not be confused with true nonblocking coroutine I2C; migrating the sensor drivers to yielding protothreads is future work
-- In the I2C transaction layer, `I2C_TransactionBegin/End` must bracket any multi-frame register sequence. A driver must not yield while holding that lock. When a transfer times out and abort cannot complete, further I2C operations fail closed until reset
+- `Core/Src/i2c.c` USER CODE owns the HAL I2C1 transfer adapter and IRQ completion, including new `ASYNC_I2C_Transmit/Receive`, asynchronous scanner probe and bounded abort handling. Old `BSP/I2C/bsp_i2c.c/.h` were removed and Keil references updated. Legacy `I2C_RegRead/Write` remain synchronous **for unmigrated sensor and SW6306 drivers**, so those calls still stall other coroOS tasks. `SW6306_USE_PROTOTHREAD` remains disabled until its direct read/write call sites and stack-backed buffers are refactored; do not enable it in isolation
+- In the I2C transaction layer, synchronous `I2C_TransactionBegin/End` brackets non-yielding legacy transactions. Asynchronous operations use an independent single-in-flight admission check and persistent completion flags; on timeout, a stalled abort poisons the HAL adapter until reset. Do not use stack buffers for asynchronous transfers
 
 ### Seven icon entries
 

@@ -14,6 +14,10 @@ extern "C" {
 // 定义 SW6306_USE_PROTOTHREAD 以启用协作式挂起（protothread + coroOS）。
 //  - 未定义：阻塞式 API（返回类型为 void）。
 //  - 已定义：协作式 API（返回类型为 char，并额外带 struct pt *pt 参数）。
+/* NOT enabled until all direct I2C calls and stack-backed buffers in the
+ * SW6306 driver have been migrated. Uncommenting alone is unsafe.
+ * The underlying pt.h / coroOS wrapper and Core I2C async API are ready.
+ */
 //#define SW6306_USE_PROTOTHREAD
 
 /* 连续I²C失败保护：整组寄存器读取失败5次才重初始化；
@@ -22,8 +26,11 @@ extern "C" {
 #define SW6306_I2C_FAILURE_LIMIT 5U
 #endif
 
-/*包含自己的I2C驱动库*/
+/* HAL I2C is owned by Firmware/Core/i2c.c USER CODE sections. */
 #include "i2c.h"
+#ifdef SW6306_USE_PROTOTHREAD
+#include "coroOS.h"
+#endif
 
 /* SW6306将0x000~0x0FF与0x100~0x1FF映射到同一个8位I2C寄存器地址空间，
  * 由0x24[7]/0x1FF寄存器切换页。驱动内部保留16位逻辑地址，用于判断页；

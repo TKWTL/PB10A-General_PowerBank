@@ -11,7 +11,7 @@ APP  ──►  BSP  ──►  Peripheral  ──►  Core / Drivers
 
 | 目录 | 放什么 | 不放什么 |
 |---|---|---|
-| `Core/` | CubeMX 生成的外设初始化、中断向量、时钟；手写代码只写在 `USER CODE BEGIN/END` 之间 | 业务逻辑、模块间调用 |
+| `Core/` | CubeMX 生成的外设初始化、中断向量和时钟；I²C HAL 适配 API 与回调在对应 `USER CODE BEGIN/END` 区 | 应用业务策略；修改 CubeMX 管理的初始化段 |
 | `Drivers/` | STM32G0xx HAL/LL 与 CMSIS 头文件 | 任何手写代码 |
 | `APP/framework/` | 系统启动流程、时钟/时间基准、事件/任务调度、低功耗状态机、看门狗 | 具体外设寄存器操作 |
 | `APP/algorithm/` | 协议解析、滤波与标定、状态估计、参数换算等纯计算模块（尽量不依赖 HAL） | 直接读写 GPIO |

@@ -767,7 +767,7 @@ SW6306_RET SW6306_Unlock_Nolock(SW6306_NOARG) {
     SW6306_FUNC_END;
 }
 
-/* 设置最大输出功率（单位W，最大100W）。
+/* 设置最大输出功率（单位W，PB10A试验设为105W）。
  * 写 POSET 后立即按新功率重算 PD/PPS/UFCS Source 电流并重播能力。 */
 SW6306_RET SW6306_SetMaxOutputPower(SW6306_ARGS(uint8_t watt)) {
     SW6306_FUNC_BEGIN;
@@ -1229,7 +1229,7 @@ SW6306_RET SW6306_IbusForceCtrlSet(SW6306_ARGS(uint8_t status))//设置是否强
 /* 依据 POSET (W) 与档位最高电压 (mV) 计算输出电流上限。
  * 整数计算避免浮点，并向下对齐到协议规定步进；使用 uint32_t
  * 防止 W * 1000000 发生 16 位溢出。
- * 100W: 20V Fix = 5000mA, 21V PPS/UFCS = 4750mA (50mA 步进)。
+ * 105W试验设置：20V Fix = 5000mA，21V PPS/UFCS = 5000mA。
  * 实际对外能力仍应由芯片依据线缆 E-marker 与端口状态限制。 */
 static uint16_t sw6306_power_current_ma(uint8_t watt, uint16_t voltage_mv, uint16_t max_ma, uint16_t step_ma) {
     uint32_t current_ma = (uint32_t)watt * 1000000UL / voltage_mv;
