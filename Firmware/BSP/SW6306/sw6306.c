@@ -30,6 +30,7 @@ static uint8_t s_pomax_target = SW6306_OUTPUT_POWER_MAX;   // 运行时最大输
 /* 功率设置会立即重算并重播协议电流能力；实现定义在初始化区。 */
 static SW6306_RET SW6306_PDCurrentSet(SW6306_NOARG);
 static SW6306_RET SW6306_UFCSCurrentSet(SW6306_NOARG);
+static SW6306_RET SW6306_Unlock_Nolock(SW6306_NOARG);
 
 /* PB10A static rational factors: no float calibration state in RAM.
  * ADC step conversion stays at datasheet 4mA/LSB (BUS) and 5mA/LSB
@@ -847,26 +848,45 @@ SW6306_RET SW6306_Unlock(SW6306_NOARG) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
 #ifndef SW6306_USE_PROTOTHREAD
-    if (!sw6306_wake_unlock_locked()) SW6306_Status.initialized = 0U;
+    if(!sw6306_wake_unlock_locked())SW6306_Status.initialized=0u;
 #else
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_LPSET, SW6306_LPSET_EN);
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_WREN, 0x20);
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_WREN, 0x40);
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_WREN, 0x80);
+    SW6306_SPAWN_NOARG(SW6306_Unlock_Nolock);
 #endif
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
 
-SW6306_RET SW6306_Unlock_Nolock(SW6306_NOARG) {
+static SW6306_RET SW6306_Unlock_Nolock(SW6306_NOARG) {
+#ifdef SW6306_USE_PROTOTHREAD
+    static uint8_t rev;
+#endif
     SW6306_FUNC_BEGIN;
 #ifndef SW6306_USE_PROTOTHREAD
-    if (!sw6306_wake_unlock_locked()) SW6306_Status.initialized = 0U;
+    if(!sw6306_wake_unlock_locked())SW6306_Status.initialized=0u;
 #else
+    /* Keep the verified synchronous sequence: LP exit, 2ms settle,
+     * page selection, version check and three write-unlock pulses. */
+    SW6306_Status.unlocked=0u;
     SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_LPSET, SW6306_LPSET_EN);
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_WREN, 0x20);
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_WREN, 0x40);
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_WREN, 0x80);
+    if(s_io_failed) SW6306_FUNC_ABORT;
+    THRD_DELAY(2u);
+    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_REV, &rev);
+    if(s_io_failed) SW6306_FUNC_ABORT;
+    if(rev!=0x01u) {
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_LREGSET, 0u);
+        if(s_io_failed) SW6306_FUNC_ABORT;
+        THRD_DELAY(2u);
+    }
+    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_REV, &rev);
+    if(s_io_failed || !(rev&0x0fu)) {
+        s_io_failed=1u;
+        SW6306_FUNC_ABORT;
+    }
+    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_WREN, 0x20u);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_WREN, 0x40u);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_WREN, 0x80u);
+    if(!s_io_failed) SW6306_Status.unlocked=1u;
+    else SW6306_Status.initialized=0u;
 #endif
     SW6306_FUNC_END;
 }
@@ -904,7 +924,7 @@ SW6306_RET SW6306_PortFastChargeSet(SW6306_ARGS(sw6306_port_t port, sw6306_port_
     case SW6306_PORT_C2: mask = (dir == SW6306_PORT_DIR_IN) ? SW6306_PORTQC_NOC2IN : SW6306_PORTQC_NOC2OUT; break;
     case SW6306_PORT_A1: mask = SW6306_PORTQC_NOA1; break;
     case SW6306_PORT_A2: mask = SW6306_PORTQC_NOA2; break;
-    default: SW6306_FUNC_END; return;
+    default: SW6306_FUNC_ABORT;
     }
 
     SW6306_MUTEX_TAKE;
@@ -932,18 +952,18 @@ SW6306_RET SW6306_ProtocolEnable(SW6306_ARGS(sw6306_proto_t proto, sw6306_proto_
         else { reg = SW6306_CTRG_PD4; mask = SW6306_PD4_NOPDSNK; }
         break;
     case SW6306_PROTO_PPS:
-        if(dir != SW6306_PROTO_DIR_SOURCE) { SW6306_FUNC_END; return; } /* PPS 仅 source */
+        if(dir != SW6306_PROTO_DIR_SOURCE) { SW6306_FUNC_ABORT; } /* PPS 仅 source */
         /* 保持 Init 配置：PPS1/PPS3 使能（4 个 PPS 最多响应 2 个） */
         reg  = SW6306_CTRG_PD1;
         mask = SW6306_PD1_NOPPS1 | SW6306_PD1_NOPPS3;
         break;
     case SW6306_PROTO_QC:
-        if(dir != SW6306_PROTO_DIR_SOURCE) { SW6306_FUNC_END; return; } /* 0x12C 无 QC sink 位 */
+        if(dir != SW6306_PROTO_DIR_SOURCE) { SW6306_FUNC_ABORT; } /* 0x12C 无 QC sink 位 */
         reg = SW6306_CTRG_P_DPDM3;
         mask = SW6306_P_DPDM3_NOQC2 | SW6306_P_DPDM3_NOQC3 | SW6306_P_DPDM3_NOQC3P;
         break;
     case SW6306_PROTO_FCP:
-        if(dir != SW6306_PROTO_DIR_SOURCE) { SW6306_FUNC_END; return; } /* 手册无 FCP sink 位 */
+        if(dir != SW6306_PROTO_DIR_SOURCE) { SW6306_FUNC_ABORT; } /* 手册无 FCP sink 位 */
         reg = SW6306_CTRG_P_DPDM3; mask = SW6306_P_DPDM3_NOFCP;
         break;
     case SW6306_PROTO_AFC:
@@ -951,15 +971,15 @@ SW6306_RET SW6306_ProtocolEnable(SW6306_ARGS(sw6306_proto_t proto, sw6306_proto_
         else { reg = SW6306_CTRG_P_DPDM5; mask = SW6306_P_DPDM5_NOAFC; }
         break;
     case SW6306_PROTO_SCP:
-        if(dir != SW6306_PROTO_DIR_SINK) { SW6306_FUNC_END; return; }
+        if(dir != SW6306_PROTO_DIR_SINK) { SW6306_FUNC_ABORT; }
         reg = SW6306_CTRG_P_DPDM5; mask = SW6306_P_DPDM5_NOSCP;
         break;
     case SW6306_PROTO_PE:
-        if(dir != SW6306_PROTO_DIR_SOURCE) { SW6306_FUNC_END; return; } /* 手册无 PE sink 位 */
+        if(dir != SW6306_PROTO_DIR_SOURCE) { SW6306_FUNC_ABORT; } /* 手册无 PE sink 位 */
         reg = SW6306_CTRG_P_DPDM4; mask = SW6306_P_DPDM4_NOPE;
         break;
     case SW6306_PROTO_SFCP:
-        if(dir != SW6306_PROTO_DIR_SOURCE) { SW6306_FUNC_END; return; } /* 手册无 SFCP sink 位 */
+        if(dir != SW6306_PROTO_DIR_SOURCE) { SW6306_FUNC_ABORT; } /* 手册无 SFCP sink 位 */
         reg = SW6306_CTRG_P_DPDM4; mask = SW6306_P_DPDM4_NOSFCP;
         break;
     case SW6306_PROTO_VOOC:
@@ -969,7 +989,7 @@ SW6306_RET SW6306_ProtocolEnable(SW6306_ARGS(sw6306_proto_t proto, sw6306_proto_
         active_high = 1;
         break;
     case SW6306_PROTO_SVOOC:
-        if(dir != SW6306_PROTO_DIR_SOURCE) { SW6306_FUNC_END; return; } /* 手册无 SVOOC sink 位 */
+        if(dir != SW6306_PROTO_DIR_SOURCE) { SW6306_FUNC_ABORT; } /* 手册无 SVOOC sink 位 */
         reg = SW6306_CTRG_P_DPDM4; mask = SW6306_P_DPDM4_SVOOC;
         active_high = 1;
         break;
@@ -978,7 +998,7 @@ SW6306_RET SW6306_ProtocolEnable(SW6306_ARGS(sw6306_proto_t proto, sw6306_proto_
         else { reg = SW6306_CTRG_P_DPDM5; mask = SW6306_P_DPDM5_NOUFCS; }
         break;
 default:
-        SW6306_FUNC_END; return;
+        SW6306_FUNC_ABORT;
     }
 
     SW6306_MUTEX_TAKE;
@@ -1032,7 +1052,7 @@ SW6306_RET SW6306_PPSEnable(SW6306_ARGS(sw6306_pps_t pps, uint8_t enable)) {
     switch (pps) {
     case SW6306_PPS_1: mask = SW6306_PD1_NOPPS1; break;
     case SW6306_PPS_3: mask = SW6306_PD1_NOPPS3; break;
-    default: SW6306_FUNC_END; return;
+    default: SW6306_FUNC_ABORT;
     }
     SW6306_MUTEX_TAKE;
     SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PD1);
@@ -1429,15 +1449,14 @@ static SW6306_RET SW6306_UFCSSet(SW6306_NOARG) {
 SW6306_RET SW6306_Init(SW6306_NOARG) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
+    SW6306_Status.initialized=0u;
+    s_io_failed=0u;
     //唤醒并解锁寄存器写入；初始化不能模拟短按而在空口开启A1
     SW6306_SPAWN_NOARG(SW6306_Unlock_Nolock);
-#ifndef SW6306_USE_PROTOTHREAD
-    if (!SW6306_Status.unlocked) {
-        SW6306_Status.initialized = 0U;
-        SW6306_MUTEX_GIVE;
-        return;
+    if(!SW6306_Status.unlocked || s_io_failed) {
+        SW6306_Status.initialized=0u;
+        SW6306_FUNC_ABORT;
     }
-#endif
     //使能UVLO、充放电异常与场景变化中断（插拔/唤醒事件可经IRQ脚发脉冲唤醒MCU）
     //注意：硬件KEY引脚未引出，无需使能按键事件中断（SW6306_KEY_INT_EN）
     SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_INT_EN, SW6306_UVLO_INT_EN|SW6306_CHGERR_INT_EN|SW6306_DISCHGERR_INT_EN|SW6306_SCENE_INT_EN);
@@ -1528,8 +1547,9 @@ SW6306_RET SW6306_Init(SW6306_NOARG) {
      * 然后仅对已消费的0x15事件进行W1C确认。 */
     //不在初始化时模拟短按：空A1被开启会让随后插入的C口进入双口5V模式。
     //真正的PWR单击仍通过SW6306_Click()触发。
-    s_i2c_fail_groups = 0U;
-    SW6306_Status.initialized = 1;
+    SW6306_Status.initialized=(uint8_t)(!s_io_failed && SW6306_Status.unlocked);
+    if(SW6306_Status.initialized) s_i2c_fail_groups=0u;
+    else sw6306_i2c_failed();
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
