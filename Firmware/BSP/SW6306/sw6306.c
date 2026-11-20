@@ -500,46 +500,57 @@ const char *SW6306_ReadProtocol(void)//当前协议读取（返回字符串地�
     }
 }
 
-SW6306_RET SW6306_StatusLoad(SW6306_NOARG)//将SW6306的各种状态读取到镜像寄存器(0x12,0x14,0x15,0x18,0x1A,0x2A,0x2B,0x2C)
-{
-    uint8_t t[8];                    /* 读缓冲：失败时镜像保持上一次有效值 */
+SW6306_RET SW6306_StatusLoad(SW6306_NOARG) {
+#ifdef SW6306_USE_PROTOTHREAD
+    static uint8_t t[8];
+#else
+    uint8_t t[8];
+#endif
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
-    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_STRG_MODE);//切换低地址
-    if(SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_MODE, &t[0], 1, (uint8_t*)&SW6306_Status.flag) != I2C_OK
-        || SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_DISPLAY, &t[1], 1, (uint8_t*)&SW6306_Status.flag) != I2C_OK
-        || SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_FAULT0, &t[2], 1, (uint8_t*)&SW6306_Status.flag) != I2C_OK
-        || SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_SYS_STAT, &t[3], 1, (uint8_t*)&SW6306_Status.flag) != I2C_OK
-        || SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_NTC_CURR, &t[4], 1, (uint8_t*)&SW6306_Status.flag) != I2C_OK
-        || SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_FAULT1, &t[5], 1, (uint8_t*)&SW6306_Status.flag) != I2C_OK
-        || SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_FAULT2, &t[6], 1, (uint8_t*)&SW6306_Status.flag) != I2C_OK
-        || SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_FAULT3, &t[7], 1, (uint8_t*)&SW6306_Status.flag) != I2C_OK) {
-        sw6306_i2c_failed();   /* 已重试仍失败，累计整组故障 */
+    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_STRG_MODE);
+#ifdef SW6306_USE_PROTOTHREAD
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_MODE, &t[0]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_DISPLAY, &t[1]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_FAULT0, &t[2]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_SYS_STAT, &t[3]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_NTC_CURR, &t[4]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_FAULT1, &t[5]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_FAULT2, &t[6]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_FAULT3, &t[7]);
+    if(s_io_failed) {
+        sw6306_i2c_failed();
+        SW6306_FUNC_ABORT;
+    }
+#else
+    if(SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_STRG_MODE,&t[0],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
+       SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_STRG_DISPLAY,&t[1],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
+       SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_STRG_FAULT0,&t[2],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
+       SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_STRG_SYS_STAT,&t[3],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
+       SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_STRG_NTC_CURR,&t[4],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
+       SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_STRG_FAULT1,&t[5],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
+       SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_STRG_FAULT2,&t[6],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
+       SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_STRG_FAULT3,&t[7],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK) {
+        sw6306_i2c_failed();
         SW6306_MUTEX_GIVE;
-        SW6306_FUNC_END;
+        return;
     }
+#endif
     sw6306_i2c_succeeded();
-    SW6306_Status.mode      = t[0];//0x12
-    SW6306_Status.display   = t[1];//0x14
-    SW6306_Status.fault0    = t[2];//0x15
-    SW6306_Status.sys_stat  = t[3];//0x18
-    SW6306_Status.intc      = t[4];//0x1A
+    SW6306_Status.mode=t[0];
+    SW6306_Status.display=t[1];
+    SW6306_Status.fault0=t[2];
+    SW6306_Status.sys_stat=t[3];
+    SW6306_Status.intc=t[4];
     switch(SW6306_Status.intc & SW6306_NTC_CURR_MSK) {
-default:
-        break;
-    case SW6306_NTC_CURR_20U:
-        SW6306_Status.intc = 20;
-        break;
-    case SW6306_NTC_CURR_40U:
-        SW6306_Status.intc = 40;
-        break;
-    case SW6306_NTC_CURR_80U:
-        SW6306_Status.intc = 80;
-        break;
+    default: break;
+    case SW6306_NTC_CURR_20U: SW6306_Status.intc=20u; break;
+    case SW6306_NTC_CURR_40U: SW6306_Status.intc=40u; break;
+    case SW6306_NTC_CURR_80U: SW6306_Status.intc=80u; break;
     }
-    SW6306_Status.fault1 = t[5];//0x2A
-    SW6306_Status.fault2 = t[6];//0x2B
-    SW6306_Status.fault3 = t[7];//0x2C
+    SW6306_Status.fault1=t[5];
+    SW6306_Status.fault2=t[6];
+    SW6306_Status.fault3=t[7];
     ++s_status_read_seq;
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
@@ -665,33 +676,43 @@ SW6306_RET SW6306_ClearEvents(SW6306_ARGS(uint8_t events))//写1清除REG0x15已
     SW6306_FUNC_END;
 }
 
-SW6306_RET SW6306_CapacityLoad(SW6306_NOARG)//更新容量与库仑计镜像寄存器(0x86~0x8A,0x99,0xA2)
-{
+SW6306_RET SW6306_CapacityLoad(SW6306_NOARG) {
+#ifdef SW6306_USE_PROTOTHREAD
+    static uint8_t t[7];
+#else
     uint8_t t[7];
-    uint8_t ok = 1U;
+#endif
     SW6306_FUNC_BEGIN;
-    SW6306_Status.capacity_load_ok = 0U;
+    SW6306_Status.capacity_load_ok=0u;
     SW6306_MUTEX_TAKE;
-
     SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_STRG_BATLVL_DISPLAY);
-    if(SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_BATLVL_DISPLAY, &t[0], 1, (uint8_t*)&SW6306_Status.flag) != I2C_OK
-        || SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_LEARN, &t[1], 1, (uint8_t*)&SW6306_Status.flag) != I2C_OK
-        || SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_CTRG_GAUGE_MCAPL, &t[2], 1, (uint8_t*)&SW6306_Status.flag) != I2C_OK
-        || SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_CTRG_GAUGE_MCAPH, &t[3], 1, (uint8_t*)&SW6306_Status.flag) != I2C_OK
-        || SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_CTRG_CURR_CAPL, &t[4], 3, (uint8_t*)&SW6306_Status.flag) != I2C_OK) {
+#ifdef SW6306_USE_PROTOTHREAD
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_BATLVL_DISPLAY, &t[0]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_LEARN, &t[1]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_CTRG_GAUGE_MCAPL, &t[2]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_CTRG_GAUGE_MCAPH, &t[3]);
+    if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_BytesRead, SW6306_CTRG_CURR_CAPL, &t[4], 3u);
+    if(s_io_failed) {
         sw6306_i2c_failed();
-        ok = 0U;
+        SW6306_FUNC_ABORT;
     }
-
-    if (ok != 0U) {
-        sw6306_i2c_succeeded();
-        SW6306_Status.capacity   = t[0];
-        SW6306_Status.learn_stat = t[1];
-        SW6306_Status.maxcap     = (uint16_t)(((uint16_t)(t[3] & 0x0FU) << 8) | t[2]);
-        SW6306_Status.presentcap = (uint32_t)t[4] | ((uint32_t)t[5] << 8) | ((uint32_t)t[6] << 16);
-        SW6306_Status.capacity_load_ok = 1U;
+#else
+    if(SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_STRG_BATLVL_DISPLAY,&t[0],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
+       SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_STRG_LEARN,&t[1],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
+       SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_CTRG_GAUGE_MCAPL,&t[2],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
+       SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_CTRG_GAUGE_MCAPH,&t[3],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
+       SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_CTRG_CURR_CAPL,&t[4],3u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK) {
+        sw6306_i2c_failed();
+        SW6306_MUTEX_GIVE;
+        return;
     }
-
+#endif
+    sw6306_i2c_succeeded();
+    SW6306_Status.capacity=t[0];
+    SW6306_Status.learn_stat=t[1];
+    SW6306_Status.maxcap=(uint16_t)(((uint16_t)(t[3]&0x0Fu)<<8)|t[2]);
+    SW6306_Status.presentcap=(uint32_t)t[4]|((uint32_t)t[5]<<8)|((uint32_t)t[6]<<16);
+    SW6306_Status.capacity_load_ok=1u;
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
