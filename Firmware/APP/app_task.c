@@ -22,6 +22,7 @@ static uint32_t s_last_time_update_ms;
 static coro_scheduler_t s_scheduler;
 static coro_pt_t s_states[6];
 
+/*************************** 协程服务线程 ***************************/
 THRD_DECLARE(OledServiceThread) {
     THRD_BEGIN;
     for(;;) {
@@ -104,6 +105,7 @@ THRD_DECLARE(SW6306ServiceThread) {
     THRD_END;
 }
 
+/*************************** 线程表与入口 ***************************/
 static const coro_thread_fn_t s_threads[] = {
     OledServiceThread, MiaoUiThread, PowerManagerThread,
     SystemServiceThread, PowerADCThread, SW6306ServiceThread

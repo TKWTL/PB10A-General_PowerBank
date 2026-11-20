@@ -39,3 +39,13 @@ APP  ──►  BSP  ──►  Peripheral  ──►  Core / Drivers
 | 现有分组 | `Application/MDK-ARM`、`Application/User/Core`、`Drivers/STM32G0xx_HAL_Driver`、`Drivers/CMSIS`、`::CMSIS` |
 
 已新增 `Application/APP`、`Application/MiaoUI`、`Application/BSP` 和 `ThirdParty/u8g2` 分组，包含 OLED 最小系统所需的源码。`MiaoUI` 保留库原有子目录，作为目录深度约定的例外。未加入不需要的电源管理和外设驱动。
+
+### Code formatting
+
+PB10A-maintained C sources use 4 spaces, same-line opening braces, and
+function/argument declarations without an automatic line-width limit.
+See repository [`.clang-format`](../.clang-format) and
+[`.clang-format-ignore`](../.clang-format-ignore). Do not autoformat
+STM32CubeMX-managed `Core/`, ST HAL `Drivers/`, third-party u8g2,
+or generated fonts and bitmaps. Major logical sections use blank lines
+and SW6306-style starred comment dividers.

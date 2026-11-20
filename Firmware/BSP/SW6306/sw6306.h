@@ -55,7 +55,7 @@ extern "C" {
 #define SW6306_BUS_CURRENT_NUM          2U
 #define SW6306_BUS_CURRENT_DEN          1U
 #if (SW6306_BATT_CURRENT_NUM == 0U) || (SW6306_BATT_CURRENT_DEN == 0U) || \
-(SW6306_BUS_CURRENT_NUM == 0U) || (SW6306_BUS_CURRENT_DEN == 0U)
+    (SW6306_BUS_CURRENT_NUM == 0U) || (SW6306_BUS_CURRENT_DEN == 0U)
 #error "SW6306 current calibration ratios must be nonzero"
 #endif
 

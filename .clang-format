@@ -12,6 +12,7 @@ AllowAllArgumentsOnNextLine: false
 AllowAllParametersOfDeclarationOnNextLine: false
 IndentCaseLabels: false
 IndentPPDirectives: None
+IndentExternBlock: NoIndent
 SortIncludes: Never
 ReflowComments: false
 MaxEmptyLinesToKeep: 2

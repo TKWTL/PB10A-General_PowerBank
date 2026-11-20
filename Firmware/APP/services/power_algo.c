@@ -18,6 +18,7 @@ static power_monitor_t s_monitor;
 static uint8_t s_sw_phase,s_capacity_div,s_idle_verified,s_status_fresh;
 static uint32_t s_retry_at;
 
+/*************************** SW6306 低功耗回调 ***************************/
 static uint8_t s_sw_low_power;
 static pm_hook_result_t sw_prepare(void *ctx) {
     (void)ctx;
@@ -54,6 +55,7 @@ static const pm_device_node_t s_node={
     "sw6306",sw_prepare,sw_suspend,sw_resume,0,90u,0,0
 };
 
+/************************* 附加 A 口与 ADC1 DMA *************************/
 /* Auxiliary A-port PM and ADC1 DMA sampling, merged from power_adc_algo. */
 #define POWER_ADC_TIMEOUT_MS 50u
 
@@ -208,6 +210,7 @@ void PowerAlgo_AddStatisticsItems(ui_page_t *page) {
     }
 }
 
+/************************ SW6306 定期采样与缓存 ************************/
 /* SW6306 read-only monitor policy. One group per 100ms, yielding between
  * groups; avoid dumping every I2C transaction into a single UI frame.
  * Initialization is attempted on the first service tick and then every 5s
@@ -292,6 +295,7 @@ void PowerAlgo_GetMonitor(power_monitor_t *out) {
         out->valid=0u;
 }
 
+/**************************** 服务注册与初始化 ***************************/
 void PowerAlgo_Init(void) {
     power_adc_init(); /* assert PA6 and calibrate ADC1 */
     memset(&s_monitor,0,sizeof(s_monitor));
