@@ -120,7 +120,22 @@ extern "C" {
 /* Retry I2C admission at each scheduler pass; only the calling SW
  * coroutine waits. A failed admission must never be treated as a
  * completed transfer. */
-#define SW6306_EXEC(cond)   THRD_UNTIL((cond) != 0u)
+/* Bound waiting for bus admission as well as HAL transfer completion.
+ * PT_WAIT_UNTIL re-evaluates the submit call until accepted. If another
+ * client holds I2C indefinitely, abort this PT without touching its
+ * buffers; no HAL transaction was accepted. */
+#define SW6306_EXEC(cond) do { \
+    static uint32_t _sw_admission_deadline; \
+    static uint8_t _sw_admitted; \
+    _sw_admitted=0u; \
+    _sw_admission_deadline=Millis()+100u; \
+    THRD_UNTIL(((_sw_admitted=(uint8_t)((cond)!=0u))!=0u) || ((int32_t)(Millis()-_sw_admission_deadline)>=0)); \
+    if(!_sw_admitted) { \
+        s_io_failed=1u; \
+        SW6306_Status.flag=I2C_ASYNC_ERROR; \
+        PT_EXIT(pt); \
+    } \
+} while(0)
 /* HAL completion: 0=pending, 1=success, 2=error. */
 #define SW6306_UNTIL(cond)  THRD_UNTIL((cond) != I2C_ASYNC_PENDING)
 #define SW6306_SPAWN_NOARG(func)\
