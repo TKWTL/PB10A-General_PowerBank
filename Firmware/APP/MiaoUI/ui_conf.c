@@ -12,19 +12,62 @@
 #include "sc7a20_algo.h"
 #include "mmc5603_algo.h"
 #include "bmp180_algo.h"
+#include "pm_api.h"
 static ui_page_t s_home,s_settings,s_stats,s_game,s_tools,s_display;
-static ui_page_t s_sys,s_stat_power,s_stat_battery,s_stat_sensors,s_stat_system;
+static ui_page_t s_sys,s_sleep_wake,s_sleep_options,s_stat_power,s_stat_battery,s_stat_sensors,s_stat_system;
 static ui_item_t s_powerbank,s_radio,s_settings_item,s_stats_item,s_game_item,s_tools_item,s_about;
 static ui_item_t s_settings_back,s_stats_back,s_game_back,s_tools_back;
-static ui_item_t s_display_item,s_system_item,s_display_back,s_system_back;
+static ui_item_t s_display_item,s_sleep_wake_item,s_system_item,s_display_back,s_sleep_wake_back,s_system_back;
 static ui_item_t s_stat_power_item,s_stat_battery_item,s_stat_sensors_item,s_stat_system_item;
 static ui_item_t s_stat_power_back,s_stat_battery_back,s_stat_sensors_back,s_stat_system_back;
 static ui_item_t s_dino,s_scanner,s_tools_info;
+static ui_item_t s_sleep_options_item,s_sleep_options_back,s_sleep_items[9];
+static ui_data_t s_sleep_data[9];
+static ui_element_t s_sleep_elements[9];
+static uint8_t s_sleep_selected[9];
+static const char *const s_sleep_labels[9]={
+    " No Auto Sleep"," 15s"," 30s"," 1min"," 2min",
+    " 5min"," 10min"," 15min"," 30min"
+};
+static const int s_sleep_seconds[9]={0,15,30,60,120,300,600,900,1800};
 static ui_text_t s_about_text,s_dino_text,s_tools_text;
 static ui_element_t s_about_el,s_dino_el,s_tools_el;
 static void add_return(ui_page_t *page,ui_page_t *parent,ui_item_t *item,uint8_t icon) {
     (void)icon;
     AddItem("[Back]",UI_ITEM_RETURN,page->type==UI_PAGE_ICON?img_home:0,item,page,parent,0);
+}
+
+/* IH01A radio-style Sleep Options: RAM-only and default 1 min. */
+static void sleep_option_changed(ui_t *ui) {
+    uint8_t i;
+    (void)ui;
+    for(i=0u;i<9u;i++)
+        if(s_sleep_selected[i]) {
+            pm_api_set_sleep_timeout(s_sleep_seconds[i]);
+            return;
+        }
+}
+static void add_sleep_options(ui_page_t *parent) {
+    uint8_t i;
+    s_sleep_selected[3]=1u; /* 1 min: current PM default */
+    AddItem(" Sleep Options",UI_ITEM_PARENTS,0,&s_sleep_options_item,
+        parent,&s_sleep_options,0);
+    AddPage("[Sleep Options]",&s_sleep_options,UI_PAGE_TEXT,parent);
+    add_return(&s_sleep_options,parent,&s_sleep_options_back,0);
+    for(i=0u;i<9u;i++) {
+        s_sleep_data[i].name=s_sleep_labels[i];
+        s_sleep_data[i].ptr=&s_sleep_selected[i];
+        s_sleep_data[i].function=sleep_option_changed;
+        s_sleep_data[i].functionType=UI_DATA_FUNCTION_STEP_EXECUTE;
+        s_sleep_data[i].dataType=UI_DATA_SWITCH;
+        s_sleep_data[i].actionType=UI_DATA_ACTION_RW;
+        s_sleep_data[i].min=1;
+        s_sleep_data[i].max=1; /* MiaoUI exclusive switch group */
+        s_sleep_elements[i].data=&s_sleep_data[i];
+        Create_element(&s_sleep_items[i],&s_sleep_elements[i]);
+        AddItem(s_sleep_labels[i],UI_ITEM_DATA,0,
+            &s_sleep_items[i],&s_sleep_options,0,0);
+    }
 }
 
 void Create_Parameter(ui_t *ui) {
@@ -62,12 +105,17 @@ void Create_MenuTree(ui_t *ui) {
     AddPage("[Settings]",&s_settings,UI_PAGE_TEXT,&s_home);
     add_return(&s_settings,&s_home,&s_settings_back,0);
     AddItem(" Display",UI_ITEM_PARENTS,0,&s_display_item,&s_settings,&s_display,0);
+    AddItem(" Sleep&Wake",UI_ITEM_PARENTS,0,&s_sleep_wake_item,&s_settings,&s_sleep_wake,0);
     Add_TimeSet_Items(&s_settings); /* Time submenu and its editor from service */
     AddItem(" System",UI_ITEM_PARENTS,0,&s_system_item,&s_settings,&s_sys,0);
 
     AddPage("[Display]",&s_display,UI_PAGE_TEXT,&s_settings);
     add_return(&s_display,&s_settings,&s_display_back,0);
     Add_Disp_Items(&s_display);
+    AddPage("[Sleep&Wake]",&s_sleep_wake,UI_PAGE_TEXT,&s_settings);
+    add_return(&s_sleep_wake,&s_settings,&s_sleep_wake_back,0);
+    add_sleep_options(&s_sleep_wake);
+    SC7A20Algo_AddWakeSettingsItems(&s_sleep_wake);
     AddPage("[System]",&s_sys,UI_PAGE_TEXT,&s_settings);
     add_return(&s_sys,&s_settings,&s_system_back,0);
     System_AddSettingsItems(&s_sys);

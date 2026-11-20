@@ -5,6 +5,7 @@
 #include "spi.h"
 #include "millis.h"
 #include "main.h"
+#include "sc7a20_algo.h"
 #define OLED_PM_TIMEOUT_MS 500u
 void SystemClock_Config(void);
 static uint32_t adc_internal,oled_started;
@@ -44,7 +45,10 @@ static void stm32_restore(void) {
 
 static void stm32_deepsleep(void *ctx) {
     (void)ctx;
-    HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON,PWR_STOPENTRY_WFI);
+    /* PB5 is level-low when the sensor has already signalled a wake.
+     * A cleared edge pending bit must not strand STOP1 on a held-low pin. */
+    if(!SC7A20Algo_WakeIRQ() || LL_GPIO_IsInputPinSet(INT_GPIO_Port,INT_Pin))
+        HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON,PWR_STOPENTRY_WFI);
     SystemClock_Config();
     if(suspended)stm32_restore();
 }

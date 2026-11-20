@@ -295,3 +295,32 @@ The SSD1306 display BSP initializes u8g2 with `U8G2_R0`.
 In Display > Screen Flip, setting 0 retains that native orientation;
 setting 1 selects `U8G2_R2` (180°). The generic R0/R1/R2/R3
 rotation-mode API is unchanged.
+
+### SC7A20 gravity rotation and STOP1 wake (2026-11-20)
+
+- Display > Screen Flip is an **auto-rotate permission**, default OFF. OFF
+  always uses the SSD1306 native `U8G2_R0`; ON uses the SC7A20's
+  confirmed orientation (`U8G2_R0` or `U8G2_R2`) in the MiaoUI thread
+  only when the framebuffer is not owned by SPI DMA.
+- The board's flat, screen-upright attitude is **Z≈-1000 mg**; inverting
+  the box gives **Z≈+1000 mg**. Screen face down is **Y≈+1000 mg**,
+  right edge down **X≈+1000 mg**. The 5 Hz estimator uses ±650 mg
+  thresholds with about 2 s confirmation. Sideways attitudes do not
+  update the orientation.
+- Settings > Sleep&Wake contains Back, Sleep Options, Flip Wake, Motion
+  Wake. Sleep Options reproduces IH01A's mutually exclusive choices:
+  No Auto Sleep, 15s, 30s, 1min, 2min, 5min, 10min, 15min, 30min.
+  The default is 1min, matching PM's 60000ms default.
+- Both wake switches default OFF. When either is enabled, SC7A20 runs
+  25 Hz low power during STOP1. Flip Wake monitors ±Z 6D orientation
+  events via AOI2, while Motion Wake monitors high-pass XYZ movement via
+  AOI1 (48 LSB / 2 ticks). Both route to the active-low SC7A20 INT1
+  wired to PB5/EXTI5. The PB5 ISR only reports a wake event; foreground
+  PM hooks read/clear sources and restore 12-bit RUN sampling.
+- All SC7A20 sleep register writes/reads are IRQ-driven I2C and PM
+  returns PENDING while transactions or HPF settling remain.
+  The active-low INT input is checked before WFI to avoid a held-low
+  line leaving STOP1 asleep after a falling edge was already cleared.
+  Registers and current thresholds follow the PB02B LIS2DH-compatible
+  implementation and require validation on the PB10A hardware; no
+  hardware wake test has been performed.

@@ -361,7 +361,7 @@ typedef struct ui_t {
     ui_item_pt oldItem;         // 上一个选中的item
     ui_item_pt lastJumpItem;
     uint8_t bgColor;            // 菜单的背景颜色
-    uint8_t rotation;           // 屏幕显示方向
+    uint8_t rotation;           // Screen Flip: 1=允许SC7A20自动旋转，0=固定R0
     int textSpace;              // 文本间距
     int imageSpace;             // 图片间距
     int headX;

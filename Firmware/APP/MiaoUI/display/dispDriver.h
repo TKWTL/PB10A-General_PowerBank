@@ -46,8 +46,8 @@ void Disp_SetBufferCurrTileRow(uint8_t row);
 uint16_t Disp_DrawUTF8(uint16_t x, uint16_t y, const char *str);
 uint16_t Disp_GetUTF8Width(const char *str);
 
-/* PB10A: Screen Flip=0 matches SSD1306 initialization (U8G2_R0);
- * Screen Flip=1 selects U8G2_R2. R0..R3 remain available for testing. */
+/* Screen Flip is an auto-rotation permission: OFF=U8G2_R0 (native),
+ * ON=SC7A20 Z-axis 180-degree orientation. Low-level R0..R3 still exposed. */
 void Disp_SetRotation(uint8_t rotation);
 void Disp_SetRotationMode(uint8_t rotation_mode);
 void Disp_ResumeRotation(ui_t *ui);

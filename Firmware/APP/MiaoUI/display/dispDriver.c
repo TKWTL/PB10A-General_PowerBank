@@ -5,6 +5,7 @@
 #include "display/dispDriver.h"
 #include "core/ui.h"
 #include "ssd1306_display.h"
+#include "sc7a20_algo.h"
 
 u8g2_t u8g2;
 /* SSD1306 contrast levels are mapped to 0..255. */
@@ -22,6 +23,7 @@ static uint8_t disp_contrast_raw(int level) {
 static ui_item_t s_contrast_item;
 static ui_item_t s_background_item;
 static ui_item_t s_rotation_item;
+static uint8_t s_applied_rotation;
 static ui_item_t s_burnin_item;
 
 /* Adapted from DPC27A service_pages.c: a pass-based MiaoUI WORD page.
@@ -73,6 +75,7 @@ void Create_Disp_Parameters(ui_t *ui) {
     background_element.data = &background_data;
     Create_element(&s_background_item, &background_element);
 
+    /* Screen Flip now enables gravity rotation, not a manual 180-degree toggle. */
     rotation_data.name = "Screen Flip";
     rotation_data.ptr = &ui->rotation;
     rotation_data.function = Disp_ResumeRotation;
@@ -91,6 +94,7 @@ void Add_Disp_Items(ui_page_t *parent_page) {
 
 uint8_t diapInit(void) {
     if(!SSD1306_Display_Begin(&u8g2))return 0u;
+    s_applied_rotation=0u;
     u8g2_SetFont(&u8g2, UI_FONT);
     SSD1306_Display_RequestContrast(disp_contrast_raw(Contrast));
     u8g2_ClearBuffer(&u8g2);
@@ -157,18 +161,30 @@ uint16_t Disp_DrawUTF8(uint16_t x, uint16_t y, const char *str) { return u8g2_Dr
 uint16_t Disp_GetUTF8Width(const char *str) { return u8g2_GetUTF8Width(&u8g2, str); }
 
 void Disp_SetRotation(uint8_t rotation) {
+    uint8_t flipped=rotation?1u:0u;
+    if(flipped==s_applied_rotation)return;
     /* Match SSD1306_Display_Begin(): flip 0 is the native U8G2_R0. */
-    u8g2_SetDisplayRotation(&u8g2, rotation ? U8G2_R2 : U8G2_R0);
+    u8g2_SetDisplayRotation(&u8g2, flipped ? U8G2_R2 : U8G2_R0);
+    s_applied_rotation=flipped;
 }
 
 void Disp_SetRotationMode(uint8_t rotation_mode) {
     static const u8g2_cb_t *const rotations[4] = {U8G2_R0, U8G2_R1, U8G2_R2, U8G2_R3};
     u8g2_SetDisplayRotation(&u8g2, rotations[rotation_mode & 3U]);
+    s_applied_rotation=(rotation_mode & 3u)==2u?1u:
+        ((rotation_mode & 3u)==0u?0u:2u);
 }
 
 void Disp_ResumeRotation(ui_t *ui) {
-    if(ui != 0)
-        Disp_SetRotation(ui->rotation);
+    uint8_t flipped;
+    if(ui == 0)return;
+    if(!ui->rotation) {
+        Disp_SetRotation(0u);
+        return;
+    }
+    /* Unknown/intermediate attitude keeps the last confirmed direction. */
+    if(SC7A20Algo_GetRotation(&flipped))
+        Disp_SetRotation(flipped);
 }
 
 void Disp_UpdateRotation(ui_t *ui, uint8_t rotation_state) {

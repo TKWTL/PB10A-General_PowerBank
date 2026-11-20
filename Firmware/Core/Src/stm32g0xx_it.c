@@ -26,6 +26,7 @@
 #include "spi.h"
 #include "millis.h"
 #include "fault_record.h"
+#include "sc7a20_algo.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -184,7 +185,8 @@ void EXTI4_15_IRQHandler(void)
   {
     LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_5);
     /* USER CODE BEGIN LL_EXTI_LINE_5_FALLING */
-
+    /* PB5 is SC7A20 INT1 (active low) during STOP1 wake monitoring. */
+    if(SC7A20Algo_WakeIRQ())pm_api_on_key_irq();
     /* USER CODE END LL_EXTI_LINE_5_FALLING */
   }
   if (LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_6) != RESET)
