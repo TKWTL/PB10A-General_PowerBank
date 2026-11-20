@@ -307,16 +307,17 @@ rotation-mode API is unchanged.
   right edge down **X≈+1000 mg**. The 5 Hz estimator uses ±650 mg
   thresholds with about 2 s confirmation. Sideways attitudes do not
   update the orientation.
-- Settings > Sleep&Wake contains Back, Sleep Options, Flip Wake, Motion
-  Wake. Sleep Options reproduces IH01A's mutually exclusive choices:
+- Settings > Sleep&Wake contains Back, Sleep Options, Pickup Wake,
+  Motion Wake. Sleep Options reproduces IH01A's mutually exclusive choices:
   No Auto Sleep, 15s, 30s, 1min, 2min, 5min, 10min, 15min, 30min.
   The default is 1min, matching PM's 60000ms default.
 - Both wake switches default OFF. When either is enabled, SC7A20 runs
-  25 Hz low power during STOP1. Flip Wake monitors ±Z 6D orientation
-  events via AOI2, while Motion Wake monitors high-pass XYZ movement via
-  AOI1 (48 LSB / 2 ticks). Both route to the active-low SC7A20 INT1
-  wired to PB5/EXTI5. The PB5 ISR only reports a wake event; foreground
-  PM hooks read/clear sources and restore 12-bit RUN sampling.
+  25 Hz low power during STOP1. **Pickup Wake** uses PB02B's six-direction
+  (all ±XYZ) 6D movement detection via AOI2, threshold 32 and duration 1;
+  this is not restricted to ±Z. **Motion Wake** monitors high-pass XYZ
+  movement via AOI1 (48 LSB / 2 ticks). Both route to the active-low
+  SC7A20 INT1 wired to PB5/EXTI5. The EXTI ISR only latches a source
+  flag; foreground PM hooks read/clear sources and restore 12-bit RUN.
 - All SC7A20 sleep register writes/reads are IRQ-driven I2C and PM
   returns PENDING while transactions or HPF settling remain.
   The active-low INT input is checked before WFI to avoid a held-low
@@ -324,3 +325,34 @@ rotation-mode API is unchanged.
   Registers and current thresholds follow the PB02B LIS2DH-compatible
   implementation and require validation on the PB10A hardware; no
   hardware wake test has been performed.
+
+### EXTI wake event ownership (PB10A)
+
+The CubeMX GPIO configuration enables **falling-edge** EXTI inputs for:
+- Five navigation keys: PC6, PA9, PA10, PA12, PA15, grouped as
+  `PM_WAKE_KEY` (single source bit). Normal 10 ms button debouncing and
+  action queuing remain in `indevService_10ms()`.
+- SC7A20 INT1: PB5/EXTI5, `PM_WAKE_SC7A20`. The PM thread accepts
+  sensor wake only when its sleep monitor is armed (Pickup/Motion enabled).
+- `MIC_INDET`: PB0/EXTI0, `PM_WAKE_MIC_INDET`.
+- `SUB_INDET`: PA7/EXTI7, `PM_WAKE_SUB_INDET`. Aux-A insertion
+  state and voltage/current are still polled by `ADC_RTC_AuxAThread`
+  at 500 ms, not sampled by the ISR.
+
+The two insertion inputs have GPIO pull-ups and falling-edge interrupts,
+so a high-to-low transition requests wake. They do **not** presently
+handle unplug/rising edges or run connector-specific application logic.
+
+All EXTI handlers set only bits in the same volatile `s_irq_events`
+bitmask through `pm_api_on_exti_event()`. CubeMX-generated LL handlers
+also clear the corresponding EXTI pending flags. `pm_api_poll()` atomically takes and
+clears that bitmask every 50 ms, filters unarmed SC7A20 events, and
+notifies the PM controller. Valid events cancel a forced sleep request,
+refresh the idle timeout and start the post-wake key guard when the
+UI was blocked. Importantly, EXTI itself wakes the MCU out of WFI;
+the foreground PM polling step decides what happens to UI and services
+**after** the core resumes.
+
+The PM transition and SC7A20 sleep hooks do not perform I2C access
+inside interrupt handlers. Button contact bounce and sensor wake
+thresholds must still be verified on real hardware.

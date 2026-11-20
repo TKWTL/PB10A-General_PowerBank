@@ -26,7 +26,6 @@
 #include "spi.h"
 #include "millis.h"
 #include "fault_record.h"
-#include "sc7a20_algo.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -159,7 +158,7 @@ void EXTI0_1_IRQHandler(void)
   {
     LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_0);
     /* USER CODE BEGIN LL_EXTI_LINE_0_FALLING */
-
+    pm_api_on_exti_event(PM_WAKE_MIC_INDET); /* PB0: MIC insertion */
     /* USER CODE END LL_EXTI_LINE_0_FALLING */
   }
   /* USER CODE BEGIN EXTI0_1_IRQn 1 */
@@ -179,14 +178,13 @@ void EXTI4_15_IRQHandler(void)
      LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_10) ||
      LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_12) ||
      LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_15))
-      pm_api_on_key_irq();
+      pm_api_on_exti_event(PM_WAKE_KEY);
   /* USER CODE END EXTI4_15_IRQn 0 */
   if (LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_5) != RESET)
   {
     LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_5);
     /* USER CODE BEGIN LL_EXTI_LINE_5_FALLING */
-    /* PB5 is SC7A20 INT1 (active low) during STOP1 wake monitoring. */
-    if(SC7A20Algo_WakeIRQ())pm_api_on_key_irq();
+    pm_api_on_exti_event(PM_WAKE_SC7A20); /* PB5: SC7A20 INT1 */
     /* USER CODE END LL_EXTI_LINE_5_FALLING */
   }
   if (LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_6) != RESET)
@@ -200,7 +198,7 @@ void EXTI4_15_IRQHandler(void)
   {
     LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_7);
     /* USER CODE BEGIN LL_EXTI_LINE_7_FALLING */
-
+    pm_api_on_exti_event(PM_WAKE_SUB_INDET); /* PA7: Aux-A insertion */
     /* USER CODE END LL_EXTI_LINE_7_FALLING */
   }
   if (LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_9) != RESET)

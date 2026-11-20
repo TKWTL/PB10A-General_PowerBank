@@ -14,11 +14,12 @@
 #define SC_ORIENT_CONFIRM 10u /* 10 stable updates at 5 Hz ~2 seconds */
 #define SC_MOTION_THS_REG 48u /* 768 mg at +/-2g, from PB02B */
 #define SC_MOTION_DUR_REG 2u  /* 80 ms at 25 Hz */
-#define SC_FLIP_THS_REG 32u   /* 6D, 512 mg at +/-2g */
-#define SC_FLIP_DUR_REG 1u
-/* PB10A Flip Wake watches +/-Z, unlike PB02B all-axis pickup. */
-#define SC_6D_Z (SC7A20_INTMODE_6D_MOTION | SC7A20_INT_CFG_ZHIE | \
-    SC7A20_INT_CFG_ZLIE)
+#define SC_PICKUP_THS_REG 32u /* PB02B 6D threshold, 512 mg at +/-2g */
+#define SC_PICKUP_DUR_REG 1u
+/* PB02B Pickup Wake: all six +/-XYZ 6D orientation events, no HPF. */
+#define SC_6D_ALL (SC7A20_INTMODE_6D_MOTION | SC7A20_INT_CFG_XHIE | \
+    SC7A20_INT_CFG_XLIE | SC7A20_INT_CFG_YHIE | SC7A20_INT_CFG_YLIE | \
+    SC7A20_INT_CFG_ZHIE | SC7A20_INT_CFG_ZLIE)
 #define SC_MOTION_XYZ (SC7A20_INTMODE_OR | SC7A20_INT_CFG_XHIE | \
     SC7A20_INT_CFG_YHIE | SC7A20_INT_CFG_ZHIE)
 enum {SC_PM_IDLE=0u,SC_PM_SUSPEND,SC_PM_RESUME};
@@ -28,7 +29,7 @@ enum {SC_PM_IDLE=0u,SC_PM_SUSPEND,SC_PM_RESUME};
 
 static uint8_t s_stage,s_waiting,s_paused,s_suspended,s_pm_waiting,s_pm_mode,s_pm_step,s_pm_routes;
 static volatile uint8_t s_wake_armed;
-static uint8_t s_flip_wake,s_motion_wake;
+static uint8_t s_pickup_wake,s_motion_wake;
 static uint8_t s_orientation,s_candidate,s_confirm;
 static uint32_t s_pm_deadline;
 static uint8_t s_buffer[6];
@@ -176,7 +177,7 @@ static pm_hook_result_t sc_suspend(void *ctx) {
     if(s_pm_mode!=SC_PM_SUSPEND) {
         s_pm_mode=SC_PM_SUSPEND;s_pm_step=0u;
         s_pm_routes=(uint8_t)((s_motion_wake?SC7A20_CTRL3_I1_AOI1:0u) |
-            (s_flip_wake?SC7A20_CTRL3_I1_AOI2:0u));
+            (s_pickup_wake?SC7A20_CTRL3_I1_AOI2:0u));
         s_wake_armed=0u;
     }
     for(;;) {
@@ -186,7 +187,7 @@ static pm_hook_result_t sc_suspend(void *ctx) {
             s_wake_armed=(uint8_t)(s_pm_routes!=0u);
             /* An event already asserted before arming must not be lost. */
             if(s_wake_armed && !LL_GPIO_IsInputPinSet(INT_GPIO_Port,INT_Pin)) {
-                pm_api_on_key_irq();
+                pm_api_on_exti_event(PM_WAKE_SC7A20);
                 return PM_HOOK_PENDING; /* abort entry instead of losing a low level */
             }
             return PM_HOOK_DONE;
@@ -207,9 +208,9 @@ static pm_hook_result_t sc_suspend(void *ctx) {
         case 6u:reg=SC7A20_CTRG_CTRL6;value=SC7A20_CTRL6_H_LACTIVE;break;
         case 7u:reg=SC7A20_CTRG_INT1_THS;value=SC_MOTION_THS_REG;break;
         case 8u:reg=SC7A20_CTRG_INT1_DURATION;value=SC_MOTION_DUR_REG;break;
-        case 9u:reg=SC7A20_CTRG_INT2_THS;value=SC_FLIP_THS_REG;break;
-        case 10u:reg=SC7A20_CTRG_INT2_DURATION;value=SC_FLIP_DUR_REG;break;
-        case 11u:reg=SC7A20_CTRG_INT2_CFG;value=s_flip_wake?SC_6D_Z:0u;break;
+        case 9u:reg=SC7A20_CTRG_INT2_THS;value=SC_PICKUP_THS_REG;break;
+        case 10u:reg=SC7A20_CTRG_INT2_DURATION;value=SC_PICKUP_DUR_REG;break;
+        case 11u:reg=SC7A20_CTRG_INT2_CFG;value=s_pickup_wake?SC_6D_ALL:0u;break;
         case 12u:reg=SC7A20_CTRG_CTRL1;
             value=s_pm_routes?(SC_CTRL1_RUN | SC7A20_CTRL1_LPEN):
                 (uint8_t)(SC_CTRL1_RUN & ~SC7A20_CTRL1_ODR_MSK);
@@ -294,15 +295,15 @@ void SC7A20Algo_Init(void) {
     s_pm_step=0u;s_wake_armed=0u;s_pm_routes=0u;
     s_orientation=SC7A20_ORIENT_UNKNOWN;
     s_candidate=SC7A20_ORIENT_UNKNOWN;s_confirm=0u;
-    s_flip_wake=0u;s_motion_wake=0u;
+    s_pickup_wake=0u;s_motion_wake=0u;
     s_retry_at=Millis();
     SC7A20_AsyncSetReady(0u);
     (void)pm_device_register(&s_node);
 }
 
 void SC7A20Algo_AddWakeSettingsItems(ui_page_t *page) {
-    static const char *const names[2]={" Flip Wake"," Motion Wake"};
-    uint8_t *state[2]={&s_flip_wake,&s_motion_wake};
+    static const char *const names[2]={" Pickup Wake"," Motion Wake"};
+    uint8_t *state[2]={&s_pickup_wake,&s_motion_wake};
     uint8_t i;
     if(!page)return;
     for(i=0u;i<2u;i++) {

@@ -6,10 +6,12 @@
 #include "pm_device.h"
 #include "pm_sleep_timer.h"
 #include "millis.h"
+#include "main.h"
+#include "sc7a20_algo.h"
 #define PM_DEFAULT_TIMEOUT_MS 60000u
 static pm_controller_t s_ctrl;
 static uint8_t s_ready,s_block_mask,s_paused,s_forced;
-static volatile uint8_t s_key_irq;
+static volatile uint8_t s_irq_events;
 static uint8_t s_refresh_request,s_wake_guard;
 static uint32_t s_wake_at;
 void pm_api_init(void) {
@@ -24,8 +26,15 @@ void pm_api_refresh_idle(void) {
     if(!pm_sleep_timer_is_forced())s_refresh_request=1u;
 }
 
-void pm_api_wake_from_key(void){s_key_irq=1u;}
-void pm_api_on_key_irq(void){s_key_irq=1u;}
+void pm_api_on_exti_event(uint8_t source) {
+    uint32_t primask=__get_PRIMASK();
+    /* The same flag can also be set by foreground pre-STOP level checks. */
+    __disable_irq();
+    s_irq_events|=source;
+    __set_PRIMASK(primask);
+}
+void pm_api_wake_from_key(void){pm_api_on_exti_event(PM_WAKE_KEY);}
+void pm_api_on_key_irq(void){pm_api_on_exti_event(PM_WAKE_KEY);}
 void pm_api_force_sleep(void) {
     pm_api_init();
     s_refresh_request=0u;s_forced=1u;
@@ -53,14 +62,25 @@ uint8_t pm_api_is_unstable_wake(void)
 {return s_wake_guard && (uint32_t)(Millis()-s_wake_at)<200u;}
 void pm_api_poll(void) {
     pm_power_state_t previous,next;
+    uint8_t events;
+    uint32_t primask;
     pm_api_init();
-    if(s_key_irq) {
-        /* A normal RUN key must not activate the post-STOP input guard.
-         * Otherwise every navigation key is swallowed for 200 ms. */
+    /* Consume once per PM poll without racing an EXTI that writes the flag. */
+    primask=__get_PRIMASK();
+    __disable_irq();
+    events=s_irq_events;
+    s_irq_events=0u;
+    __set_PRIMASK(primask);
+    /* Sensor edges have wake semantics only while its STOP1 monitor is armed.
+     * MIC and SUB insertion edges, like keys, are unconditional wake inputs. */
+    if((events&PM_WAKE_SC7A20) && !SC7A20Algo_WakeIRQ())
+        events&=(uint8_t)~PM_WAKE_SC7A20;
+    if(events) {
+        /* Do not suppress a RUN key or plug-in as post-STOP input. */
         uint8_t waking=pm_controller_is_ui_blocked(&s_ctrl)?1u:0u;
-        s_key_irq=0u;
         pm_sleep_timer_clear_force();
         s_forced=0u;
+        s_refresh_request=0u;
         pm_controller_refresh_idle(&s_ctrl);
         if(waking){s_wake_guard=1u;s_wake_at=Millis();}
     }
