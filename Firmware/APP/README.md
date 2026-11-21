@@ -695,5 +695,13 @@ axis map untouched. The two XOR zenith discs remain exactly **36px**
 in diameter with no stationary reference ring, and screen-face-up
 zenith retains a **white** background. The bottom-right default-font
 angle and degree mark now use `U8G2` draw color 2 (**XOR**) directly
-over the scene, **without an opaque backdrop**.
+over the scene, **without an opaque backdrop**. The default u8g2
+font mode is SOLID and would still write a black glyph-bounding box;
+`level_angle_footer()` now switches to TRANSPARENT font mode only
+while drawing the digits and restores the previous mode afterward.
+The 4x4 degree ring is an eight-pixel, unique-coordinate outline:
+`u8g2_DrawCircle(radius=2)` re-visits symmetric positions, so the
+old XOR-drawn ring cancelled itself and disappeared. The caller's
+previous drawing color is also restored. Black/white horizon and
+zenith visual behavior are unchanged.
 When the two zenith XOR discs precisely overlap they cancel, by design.

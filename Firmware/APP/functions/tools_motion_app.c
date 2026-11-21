@@ -171,9 +171,24 @@ static void level_draw_zenith(float x,float y,float z,float angle) {
     level_xor_disc(x1,y1,LEVEL_RADIUS);
     level_xor_disc(x2,y2,LEVEL_RADIUS);
 }
+/* 4x4 outline for the degree mark, each pixel drawn exactly once.
+ * u8g2_DrawCircle(r=2) visits overlapping octant pixels repeatedly;
+ * in XOR mode the duplicate visits CANCEL the entire small circle. */
+static void level_xor_degree_mark(void) {
+    Disp_DrawPixel(123u,51u);
+    Disp_DrawPixel(124u,51u);
+    Disp_DrawPixel(122u,52u);
+    Disp_DrawPixel(125u,52u);
+    Disp_DrawPixel(122u,53u);
+    Disp_DrawPixel(125u,53u);
+    Disp_DrawPixel(123u,54u);
+    Disp_DrawPixel(124u,54u);
+}
 static void level_angle_footer(float angle) {
     char text[16];
     uint8_t xor_color=2u;
+    uint8_t previous_font_mode=u8g2.font_decode.is_transparent;
+    uint8_t previous_color=u8g2_GetDrawColor(&u8g2);
     uint16_t value,x,w;
     if(angle<0.0f)angle=-angle;
     if(angle>99.99f)angle=99.99f;
@@ -183,12 +198,18 @@ static void level_angle_footer(float angle) {
     Disp_SetFont(UI_FONT); /* preserve PB10A default font */
     w=Disp_GetUTF8Width(text);
     x=(uint16_t)(120u-(w>45u?45u:w));
-    /* Draw digits and degree mark directly with XOR: bright against
-     * black, dark against white, and inverted over the moving horizon.
-     * Never erase or paint an opaque rectangle behind the angle. */
+    /* u8g2 defaults to SOLID text: background runs use color 0,
+     * which erases a black rectangle even when foreground is XOR(2).
+     * TRANSPARENT mode skips background runs and XORs glyph pixels
+     * only, regardless of the underlying white/black horizon. */
+    u8g2_SetFontMode(&u8g2,1u);
     Disp_SetDrawColor(&xor_color);
     Disp_DrawStr(x,62u,text);
-    Disp_DrawCircle(124u,53u,2u,U8G2_DRAW_ALL);
+    level_xor_degree_mark();
+    /* Do not leak font transparency or XOR color into subsequent
+     * MiaoUI screens; the following frame starts from its own state. */
+    u8g2_SetFontMode(&u8g2,previous_font_mode);
+    Disp_SetDrawColor(&previous_color);
 }
 void Motion_LevelerRun(ui_t *ui) {
     sc7a20_sample_t sample;
