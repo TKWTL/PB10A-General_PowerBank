@@ -107,6 +107,21 @@ void MX_RTC_Init(void)
   {
     Error_Handler();
   }
+
+  /** Enable the Alarm B
+  */
+  sAlarm.Alarm = RTC_ALARM_B;
+  if (HAL_RTC_SetAlarm_IT(&hrtc, &sAlarm, RTC_FORMAT_BIN) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Enable the WakeUp
+  */
+  if (HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, 0, RTC_WAKEUPCLOCK_RTCCLK_DIV16) != HAL_OK)
+  {
+    Error_Handler();
+  }
   /* USER CODE BEGIN RTC_Init 2 */
   HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR0, 0xB10Au);
   /* USER CODE END RTC_Init 2 */
