@@ -469,6 +469,10 @@ SC7A20_RET SC7A20_RegisterDump(SC7A20_NOARG);   //读取并通过USART_Printf打
 
 
 /* Cached conversion result for the asynchronous APP service. */
+/* IRQ-driven I2C register operations for the cooperative service actor.
+ * No blocking waits inside the SC7A20 algorithm or PM callbacks. */
+uint8_t SC7A20_AsyncRead(uint8_t reg,uint8_t *buffer,uint16_t count,uint8_t *flag);
+uint8_t SC7A20_AsyncWrite(uint8_t reg,uint8_t *buffer,uint16_t count,uint8_t *flag);
 void SC7A20_AsyncSetReady(uint8_t ready);
 void SC7A20_AsyncSetAxes(const uint8_t *data);
 

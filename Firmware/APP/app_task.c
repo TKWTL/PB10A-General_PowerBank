@@ -21,7 +21,7 @@
 
 static ui_t s_ui;
 static coro_scheduler_t s_scheduler;
-static coro_pt_t s_states[7];
+static coro_pt_t s_states[10];
 
 /*************************** 协程服务线程 ***************************/
 THRD_DECLARE(OledServiceThread) {
@@ -52,7 +52,7 @@ THRD_DECLARE(PowerManagerThread) {
     THRD_END;
 }
 
-static uint32_t s_last_key_tick,s_last_radio_poll;
+static uint32_t s_last_key_tick;
 THRD_DECLARE(SystemServiceThread) {
     THRD_BEGIN;
     for(;;) {
@@ -60,15 +60,6 @@ THRD_DECLARE(SystemServiceThread) {
         if((uint32_t)(now-s_last_key_tick)>=10u) {
             s_last_key_tick=now;
             indevService_10ms();
-        }
-        /* Keep Radio Power Mode=ON playing and polling after leaving its
-         * WORD page, without a blocking radio task. */
-        RadioAlgo_Service();
-        if((uint32_t)(now-s_last_radio_poll)>=100u) {
-            s_last_radio_poll=now;
-            if(Radio_AppStopPending() ||
-                (Radio_AppIsActive() && !pm_api_ui_should_block()))
-                Radio_AppPoll();
         }
         MiaoUi_ExternalEventService();
         beep_poll(now);
@@ -94,23 +85,64 @@ THRD_DECLARE(ADC_RTC_AuxAThread) {
     }
     THRD_END;
 }
-/* The three sensor actors share a lightweight polling thread; each actor
- * owns a persistent I2C buffer, IRQ completion flag and its own timing. */
-THRD_DECLARE(SensorServiceThread) {
+/* FM owns the hardware command state machine and IRQ-backed BSP. */
+THRD_DECLARE(RadioServiceThread) {
+    THRD_BEGIN;
+    for(;;) {
+        RadioAlgo_Poll();
+        THRD_DELAY(5u);
+    }
+    THRD_END;
+}
+
+/* Each I2C sensor has an independent cooperative actor. Its poll never
+ * blocks the scheduler while a HAL IRQ transaction or conversion settles. */
+THRD_DECLARE(SC7A20Thread) {
     THRD_BEGIN;
     for(;;) {
         SC7A20Algo_Poll();
+        THRD_DELAY(5u);
+    }
+    THRD_END;
+}
+THRD_DECLARE(MMC5603Thread) {
+    THRD_BEGIN;
+    for(;;) {
         MMC5603Algo_Poll();
+        THRD_DELAY(5u);
+    }
+    THRD_END;
+}
+THRD_DECLARE(BMP180Thread) {
+    THRD_BEGIN;
+    for(;;) {
         BMP180Algo_Poll();
         THRD_DELAY(5u);
     }
     THRD_END;
 }
-/*************************** 线程表与入口 ***************************/
+
+/********************** coroOS thread registration **********************
+ * Layout groups event/UI, power, radio and independent sensor services.
+ * Keep the s_states count in sync with this fixed thread list. */
 static const coro_thread_fn_t s_threads[] = {
-    OledServiceThread, MiaoUiThread, PowerManagerThread,
-    SystemServiceThread, ADC_RTC_AuxAThread, PowerAlgo_SW6306Thread,
-    SensorServiceThread
+    /* Display and user interaction */
+    OledServiceThread,
+    MiaoUiThread,
+    SystemServiceThread,
+
+    /* Power management and charge/ADC */
+    PowerManagerThread,
+    ADC_RTC_AuxAThread,
+    PowerAlgo_SW6306Thread,
+
+    /* Dedicated asynchronous FM service */
+    RadioServiceThread,
+
+    /* Independent IRQ-backed I2C sensors */
+    SC7A20Thread,
+    MMC5603Thread,
+    BMP180Thread,
 };
 
 void APP_TaskInit(void) {
@@ -118,14 +150,13 @@ void APP_TaskInit(void) {
     beep_init(); /* one-shot hardware/queue init */
     indevInit();
     s_last_key_tick=Millis();
-    s_last_radio_poll=Millis();
     Time_Init(); /* keep the underlying RTC uptime API, without a UI item */
     /* Sensors initialize through their own nonblocking service actors. */
     PowerAlgo_Init();  /* SW6306 monitor, sleep gating, auxiliary A ADC. */
     SC7A20Algo_Init();
     MMC5603Algo_Init();
     BMP180Algo_Init();
-    RadioAlgo_Init();  /* RDA5807 powers down before UI_OFF. */
+    RadioAlgo_Init(); /* BSP async boot sleep; own RadioServiceThread */
     MiaoUi_Setup(&s_ui);
     pm_api_init();
     CoroOS_Init(&s_scheduler, s_threads, s_states,

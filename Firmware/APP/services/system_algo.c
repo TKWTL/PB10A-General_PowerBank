@@ -7,16 +7,16 @@
 #include "main.h"
 #include "core/ui.h"
 static ui_item_t s_click_item,s_mute_item,s_reset_item;
-static ui_item_t s_radio_auto_item,s_power_auto_item;
+static ui_item_t s_radio_auto_item,s_power_auto_item,s_aux_auto_item;
 static ui_item_t s_vdda_item,s_temp_item;
 static ui_data_t s_vdda_data,s_temp_data;
 static ui_element_t s_vdda_element,s_temp_element;
 static int s_vdda_mv,s_die_temp_c10;
 static ui_data_t s_click_data,s_mute_data;
-static ui_data_t s_radio_auto_data,s_power_auto_data;
+static ui_data_t s_radio_auto_data,s_power_auto_data,s_aux_auto_data;
 static ui_element_t s_click_element,s_mute_element;
-static ui_element_t s_radio_auto_element,s_power_auto_element;
-static uint8_t s_click_on,s_muted,s_radio_auto,s_power_auto;
+static ui_element_t s_radio_auto_element,s_power_auto_element,s_aux_auto_element;
+static uint8_t s_click_on,s_muted,s_radio_auto,s_power_auto,s_aux_auto;
 static void system_click_changed(ui_t *ui)
 { (void)ui;beep_set_key_enabled(s_click_on); }
 static void system_mute_changed(ui_t *ui)
@@ -66,6 +66,14 @@ void System_AddSettingsItems(ui_page_t *page) {
     Create_element(&s_power_auto_item,&s_power_auto_element);
     AddItem(" Port Auto UI",UI_ITEM_DATA,0,&s_power_auto_item,page,0,0);
 
+    s_aux_auto_data.name=" Aux-A Auto UI";
+    s_aux_auto_data.ptr=&s_aux_auto;
+    s_aux_auto_data.dataType=UI_DATA_SWITCH;
+    s_aux_auto_data.actionType=UI_DATA_ACTION_RW;
+    s_aux_auto_element.data=&s_aux_auto_data;
+    Create_element(&s_aux_auto_item,&s_aux_auto_element);
+    AddItem(" Aux-A Auto UI",UI_ITEM_DATA,0,&s_aux_auto_item,page,0,0);
+
     AddItem(" System Reset",UI_ITEM_ONCE_FUNCTION,0,&s_reset_item,page,0,system_reset_selected);
 }
 
@@ -90,3 +98,5 @@ void System_Poll(void) {
 
 uint8_t System_AutoRadioNavigationEnabled(void){return s_radio_auto;}
 uint8_t System_AutoPowerbankNavigationEnabled(void){return s_power_auto;}
+
+uint8_t System_AutoAuxANavigationEnabled(void){return s_aux_auto;}

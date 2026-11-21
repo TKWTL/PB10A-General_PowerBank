@@ -9,7 +9,7 @@
 /* Handheld-Fan-style coroOS wrapper over Adam Dunkels' Protothreads 1.4.
  * Stackless coroutines do not retain automatic locals through a yield.
  * The single sub-PT per coroutine is used sequentially, never in parallel.
- * All THRD_DELAY/THRD_SPAWN waits yield to the other six coroOS tasks.
+ * All THRD_DELAY/THRD_SPAWN waits yield to other registered coroOS tasks.
  */
 #ifdef __cplusplus
 extern "C" {

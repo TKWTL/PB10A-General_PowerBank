@@ -42,8 +42,8 @@ static ui_element_t s_elements[3],s_wake_elements[2];
 
 static uint8_t sc_transfer(uint8_t read,uint8_t reg,uint8_t count) {
     if(!s_waiting) {
-        if(!(read?ASYNC_I2C_Receive(SC7A20_I2C_ADDR,reg,s_buffer,count,0u,(uint8_t *)&s_flag):
-            ASYNC_I2C_Transmit(SC7A20_I2C_ADDR,reg,s_buffer,count,0u,(uint8_t *)&s_flag)))return 0u;
+        if(!(read?SC7A20_AsyncRead(reg,s_buffer,count,(uint8_t *)&s_flag):
+            SC7A20_AsyncWrite(reg,s_buffer,count,(uint8_t *)&s_flag)))return 0u;
         s_waiting=1u;
         return 0u;
     }
@@ -151,10 +151,9 @@ void SC7A20Algo_Poll(void) {
 static pm_hook_result_t sc_pm_xfer(uint8_t read,uint8_t reg,uint8_t value) {
     if(!s_pm_waiting) {
         if(!read)s_buffer[0]=value;
-        if(!(read?ASYNC_I2C_Receive(SC7A20_I2C_ADDR,reg,s_buffer,1u,0u,
-                (uint8_t *)&s_pm_flag):
-            ASYNC_I2C_Transmit(SC7A20_I2C_ADDR,reg,s_buffer,1u,0u,
-                (uint8_t *)&s_pm_flag)))return PM_HOOK_PENDING;
+        if(!(read?SC7A20_AsyncRead(reg,s_buffer,1u,(uint8_t *)&s_pm_flag):
+            SC7A20_AsyncWrite(reg,s_buffer,1u,(uint8_t *)&s_pm_flag)))
+            return PM_HOOK_PENDING;
         s_pm_waiting=1u;
         return PM_HOOK_PENDING;
     }

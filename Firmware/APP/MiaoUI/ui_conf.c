@@ -1,4 +1,9 @@
-/* PB10A top-level navigation. Seven icon items; submenus by function. */
+/* PB10A top-level navigation. TEXT item labels:
+ *   [Back]    Return entries use square brackets; 'B' at x=one glyph.
+ *    Option   Non-submenu items start with one blank to align with 'B'.
+ *   -Submenu  Parent entries start with '-' instead of the blank.
+ * ICON page labels keep their native conventions.
+ */
 #include "ui_conf.h"
 #include "core/ui.h"
 #include "display/dispDriver.h"
@@ -38,6 +43,8 @@ static ui_element_t s_about_el,s_dino_el,s_tools_el;
 static uint8_t s_nav_pending,s_nav_active;
 static uint32_t s_power_nav_requested_at;
 static uint8_t s_mic_candidate,s_mic_latched;
+static uint8_t s_sub_candidate,s_sub_latched;
+static uint32_t s_sub_edge_at;
 static uint32_t s_mic_edge_at;
 
 static void add_return(ui_page_t *page,ui_page_t *parent,ui_item_t *item,uint8_t icon) {
@@ -58,7 +65,7 @@ static void sleep_option_changed(ui_t *ui) {
 static void add_sleep_options(ui_page_t *parent) {
     uint8_t i;
     s_sleep_selected[3]=1u; /* 1 min: current PM default */
-    AddItem(" Sleep Options",UI_ITEM_PARENTS,0,&s_sleep_options_item,
+    AddItem("-Sleep Options",UI_ITEM_PARENTS,0,&s_sleep_options_item,
         parent,&s_sleep_options,0);
     AddPage("[Sleep Options]",&s_sleep_options,UI_PAGE_TEXT,parent);
     add_return(&s_sleep_options,parent,&s_sleep_options_back,0);
@@ -115,10 +122,10 @@ void Create_MenuTree(ui_t *ui) {
 
     AddPage("[Settings]",&s_settings,UI_PAGE_TEXT,&s_home);
         add_return(&s_settings,&s_home,&s_settings_back,0);
-        AddItem(" Display",UI_ITEM_PARENTS,0,&s_display_item,&s_settings,&s_display,0);
-        AddItem(" Sleep&Wake",UI_ITEM_PARENTS,0,&s_sleep_wake_item,&s_settings,&s_sleep_wake,0);
+        AddItem("-Display",UI_ITEM_PARENTS,0,&s_display_item,&s_settings,&s_display,0);
+        AddItem("-Sleep&Wake",UI_ITEM_PARENTS,0,&s_sleep_wake_item,&s_settings,&s_sleep_wake,0);
         Add_TimeSet_Items(&s_settings);
-        AddItem(" System",UI_ITEM_PARENTS,0,&s_system_item,&s_settings,&s_sys,0);
+        AddItem("-System",UI_ITEM_PARENTS,0,&s_system_item,&s_settings,&s_sys,0);
 
         AddPage("[Display]",&s_display,UI_PAGE_TEXT,&s_settings);
             add_return(&s_display,&s_settings,&s_display_back,0);
@@ -135,10 +142,10 @@ void Create_MenuTree(ui_t *ui) {
 
     AddPage("[Statistics]",&s_stats,UI_PAGE_TEXT,&s_home);
         add_return(&s_stats,&s_home,&s_stats_back,0);
-        AddItem(" Power",UI_ITEM_PARENTS,0,&s_stat_power_item,&s_stats,&s_stat_power,0);
-        AddItem(" Battery",UI_ITEM_PARENTS,0,&s_stat_battery_item,&s_stats,&s_stat_battery,0);
-        AddItem(" Sensors",UI_ITEM_PARENTS,0,&s_stat_sensors_item,&s_stats,&s_stat_sensors,0);
-        AddItem(" System",UI_ITEM_PARENTS,0,&s_stat_system_item,&s_stats,&s_stat_system,0);
+        AddItem("-Power",UI_ITEM_PARENTS,0,&s_stat_power_item,&s_stats,&s_stat_power,0);
+        AddItem("-Battery",UI_ITEM_PARENTS,0,&s_stat_battery_item,&s_stats,&s_stat_battery,0);
+        AddItem("-Sensors",UI_ITEM_PARENTS,0,&s_stat_sensors_item,&s_stats,&s_stat_sensors,0);
+        AddItem("-System",UI_ITEM_PARENTS,0,&s_stat_system_item,&s_stats,&s_stat_system,0);
 
         AddPage("[Power]",&s_stat_power,UI_PAGE_TEXT,&s_stats);
             add_return(&s_stat_power,&s_stats,&s_stat_power_back,0);
@@ -198,6 +205,8 @@ void MiaoUi_ProcessNavigate(ui_t *ui) {
 
 /* Only a confirmed new PB0 falling edge opens Radio, once per insertion.
  * PM first forwards EXTI sources; the foreground service waits 40 ms. */
+/* Debounce the physical insert level after an EXTI falling edge.
+ * Removal (high) re-arms each source without triggering navigation. */
 void MiaoUi_ExternalEventService(void) {
     uint8_t events=pm_api_take_events();
     uint32_t now=Millis();
@@ -217,10 +226,28 @@ void MiaoUi_ExternalEventService(void) {
                 MiaoUi_RequestNavigate(UI_TARGET_RADIO);
         }
     }
+
+    if(LL_GPIO_IsInputPinSet(SUB_INDET_GPIO_Port,SUB_INDET_Pin)) {
+        s_sub_candidate=0u;
+        s_sub_latched=0u;
+    }
+    else if((events&PM_WAKE_SUB_INDET) && !s_sub_latched) {
+        s_sub_candidate=1u;
+        s_sub_edge_at=now;
+    }
+    if(s_sub_candidate && (uint32_t)(now-s_sub_edge_at)>=40u) {
+        s_sub_candidate=0u;
+        if(!LL_GPIO_IsInputPinSet(SUB_INDET_GPIO_Port,SUB_INDET_Pin)) {
+            s_sub_latched=1u;
+            if(System_AutoAuxANavigationEnabled())
+                MiaoUi_RequestNavigate(UI_TARGET_POWERBANK);
+        }
+    }
 }
 
 void MiaoUi_Setup(ui_t *ui) {
     s_nav_pending=0u;s_nav_active=0u;
     s_mic_candidate=0u;s_mic_latched=0u;
+    s_sub_candidate=0u;s_sub_latched=0u;
     Create_UI(ui,&s_powerbank);
 }

@@ -121,6 +121,24 @@ struct RDA5807_t{
 };//RDA5807参数句柄，需要定时更新或上传
 
 /* 声明给外部使用的变量 */
+/* Nonblocking RDA5807 register/operation interface for coroOS.
+ * Enqueue only; RDA5807_AsyncPoll() runs in the dedicated Radio thread.
+ * All I2C transfers complete via HAL IRQ and caller-owned persistent state.
+ * Legacy synchronous entry points below are retained for compatibility only. */
+#define RDA5807_ASYNC_PENDING 2u
+uint8_t RDA5807_AsyncBootSleep(void);
+uint8_t RDA5807_AsyncReset(void);
+uint8_t RDA5807_AsyncPowerUp(uint8_t volume);
+uint8_t RDA5807_AsyncSleep(void);
+uint8_t RDA5807_AsyncTune(uint16_t freq_25khz);
+uint8_t RDA5807_AsyncSeek(uint8_t upward);
+uint8_t RDA5807_AsyncSetVolume(uint8_t volume);
+uint8_t RDA5807_AsyncTakeStatus(uint16_t *status,uint16_t *signal);
+void RDA5807_AsyncResetStatus(void);
+uint8_t RDA5807_AsyncTakeError(void);
+uint8_t RDA5807_AsyncBusy(void);
+void RDA5807_AsyncPoll(void);
+
 extern uint16_t Register[6];
 
 /* 声明给外部使用的函数 */

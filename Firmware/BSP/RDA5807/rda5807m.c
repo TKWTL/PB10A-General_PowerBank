@@ -502,3 +502,164 @@ uint16_t RDA5807_SeekChannel(void){
     I2C_TransactionEnd();
     return result;
 }
+
+/************************ Asynchronous IRQ-driven transport ******************
+ * The synchronous legacy helpers above are not used by the PB10A application.
+ * Transaction state and buffers live here, not in UI or algorithm code.
+ * No I2C operation blocks a coroOS thread; Busy simply yields and retries.
+ */
+#define RDA_ASYNC_QUEUE_SIZE 12u
+typedef struct {uint8_t reg;uint16_t value;} rda_async_write_t;
+static rda_async_write_t s_async_queue[RDA_ASYNC_QUEUE_SIZE];
+static uint8_t s_async_head,s_async_count,s_async_active,s_async_kind;
+static uint8_t s_async_query_stage,s_async_status_ready,s_async_discard;
+static uint8_t s_async_error,s_async_status_error,s_async_data[2];
+static uint16_t s_async_status,s_async_signal;
+static volatile uint8_t s_async_flag;
+
+static uint8_t rda_async_free(uint8_t needed) {
+    return (uint8_t)(s_async_count+needed<=RDA_ASYNC_QUEUE_SIZE);
+}
+static void rda_async_append(uint8_t reg,uint16_t value) {
+    uint8_t tail=(uint8_t)((s_async_head+s_async_count)%RDA_ASYNC_QUEUE_SIZE);
+    s_async_queue[tail].reg=reg;
+    s_async_queue[tail].value=value;
+    ++s_async_count;
+    s_async_status_ready=0u;
+    if(s_async_query_stage)s_async_discard=1u;
+}
+uint8_t RDA5807_AsyncBootSleep(void) {
+    if(!rda_async_free(1u))return I2C_ERROR;
+    rda_async_append(RDA5807_REG02,0u);
+    return I2C_OK;
+}
+uint8_t RDA5807_AsyncReset(void) {
+    if(!rda_async_free(1u))return I2C_ERROR;
+    rda_async_append(RDA5807_REG02,RDA5807_REG02_SRST);
+    return I2C_OK;
+}
+uint8_t RDA5807_AsyncPowerUp(uint8_t volume) {
+    uint16_t r02=(uint16_t)((Register[0] |
+        RDA5807_REG02_ENABLE|RDA5807_REG02_DMUTE|
+        RDA5807_REG02_DHIZ|RDA5807_REG02_SEEKUP) &
+        ~RDA5807_REG02_SEEK);
+    uint16_t r03=RDA5807_FreqToReg(87u*40u,TUNE);
+    uint16_t r05=(uint16_t)((Register[3]&~RDA5807_REG05_VOL_MSK) |
+        (volume&15u));
+    if(!rda_async_free(4u))return I2C_ERROR;
+    rda_async_append(RDA5807_REG02,r02);
+    rda_async_append(RDA5807_REG03,r03);
+    rda_async_append(RDA5807_REG04,Register[2]);
+    rda_async_append(RDA5807_REG05,r05);
+    Register[0]=r02;Register[1]=r03;Register[3]=r05;
+    return I2C_OK;
+}
+uint8_t RDA5807_AsyncSleep(void) {
+    uint16_t r02=(uint16_t)(Register[0] &
+        ~(RDA5807_REG02_ENABLE|RDA5807_REG02_DMUTE|RDA5807_REG02_SEEK));
+    if(!rda_async_free(1u))return I2C_ERROR;
+    rda_async_append(RDA5807_REG02,r02);
+    Register[0]=r02;
+    return I2C_OK;
+}
+uint8_t RDA5807_AsyncTune(uint16_t freq_25khz) {
+    uint16_t r02,r03;
+    if(freq_25khz<3480u||freq_25khz>4320u)return I2C_ERROR;
+    r02=(uint16_t)(Register[0]&~RDA5807_REG02_SEEK);
+    r03=RDA5807_FreqToReg(freq_25khz,TUNE);
+    if(!rda_async_free(2u))return I2C_ERROR;
+    rda_async_append(RDA5807_REG02,r02);
+    rda_async_append(RDA5807_REG03,r03);
+    Register[0]=r02;Register[1]=r03;
+    return I2C_OK;
+}
+uint8_t RDA5807_AsyncSeek(uint8_t upward) {
+    uint16_t r02=(uint16_t)(Register[0]|RDA5807_REG02_SEEK);
+    uint16_t r03=(uint16_t)(Register[1]&~RDA5807_REG03_TUNE);
+    if(upward)r02|=RDA5807_REG02_SEEKUP;
+    else r02&=(uint16_t)~RDA5807_REG02_SEEKUP;
+    if(!rda_async_free(2u))return I2C_ERROR;
+    rda_async_append(RDA5807_REG02,r02);
+    rda_async_append(RDA5807_REG03,r03);
+    Register[0]=r02;Register[1]=r03;
+    return I2C_OK;
+}
+uint8_t RDA5807_AsyncSetVolume(uint8_t volume) {
+    uint16_t r05=(uint16_t)((Register[3]&~RDA5807_REG05_VOL_MSK) |
+        (volume&15u));
+    if(!rda_async_free(1u))return I2C_ERROR;
+    rda_async_append(RDA5807_REG05,r05);
+    Register[3]=r05;
+    return I2C_OK;
+}
+uint8_t RDA5807_AsyncTakeStatus(uint16_t *status,uint16_t *signal) {
+    if(s_async_status_error) {
+        s_async_status_error=0u;
+        return I2C_ERROR;
+    }
+    if(s_async_status_ready) {
+        if(status)*status=s_async_status;
+        if(signal)*signal=s_async_signal;
+        s_async_status_ready=0u;
+        return I2C_OK;
+    }
+    if(!s_async_query_stage)s_async_query_stage=1u;
+    return RDA5807_ASYNC_PENDING;
+}
+void RDA5807_AsyncResetStatus(void) {
+    s_async_error=0u;s_async_status_error=0u;
+    s_async_status_ready=0u;s_async_discard=0u;
+}
+uint8_t RDA5807_AsyncTakeError(void) {
+    uint8_t error=s_async_error;
+    s_async_error=0u;
+    return error;
+}
+uint8_t RDA5807_AsyncBusy(void) {
+    return (uint8_t)(s_async_active||s_async_count||s_async_query_stage);
+}
+void RDA5807_AsyncPoll(void) {
+    uint8_t reg;
+    if(s_async_active) {
+        if(s_async_flag==I2C_ASYNC_PENDING)return;
+        s_async_active=0u;
+        if(s_async_flag!=I2C_ASYNC_DONE) {
+            s_async_error=1u;s_async_status_error=1u;
+            s_async_count=0u;s_async_query_stage=0u;
+            return;
+        }
+        if(s_async_kind==0u) {
+            s_async_head=(uint8_t)((s_async_head+1u)%RDA_ASYNC_QUEUE_SIZE);
+            --s_async_count;
+        }
+        else if(s_async_kind==1u) {
+            s_async_status=(uint16_t)(((uint16_t)s_async_data[0]<<8)|
+                s_async_data[1]);
+            s_async_query_stage=2u;
+        }
+        else {
+            s_async_signal=(uint16_t)(((uint16_t)s_async_data[0]<<8)|
+                s_async_data[1]);
+            s_async_query_stage=0u;
+            s_async_status_ready=(uint8_t)!s_async_discard;
+            s_async_discard=0u;
+        }
+    }
+    if(s_async_count) {
+        s_async_data[0]=(uint8_t)(s_async_queue[s_async_head].value>>8);
+        s_async_data[1]=(uint8_t)s_async_queue[s_async_head].value;
+        if(ASYNC_I2C_Transmit(RDA5807_Wr_REG_Addr,
+            s_async_queue[s_async_head].reg,s_async_data,2u,0u,
+            (uint8_t *)&s_async_flag)) {
+            s_async_kind=0u;s_async_active=1u;
+        }
+        return;
+    }
+    if(!s_async_query_stage)return;
+    reg=(s_async_query_stage==1u)?RDA5807_REG0A:RDA5807_REG0B;
+    if(ASYNC_I2C_Receive(RDA5807_Wr_REG_Addr,reg,s_async_data,2u,0u,
+        (uint8_t *)&s_async_flag)) {
+        s_async_kind=s_async_query_stage;
+        s_async_active=1u;
+    }
+}

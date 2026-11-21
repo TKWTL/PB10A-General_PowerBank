@@ -1,4 +1,5 @@
 #include "sc7a20.h"
+#include "i2c.h"
 #include <math.h>
 
 /* 寄存器Dump打印依赖工程日志接口（仅SC7A20_RegisterDump使用） */
@@ -953,6 +954,15 @@ SC7A20_RET SC7A20_RegisterDump(SC7A20_NOARG) {
             reg_name[i], dump[i]);
     }
     SC7A20_FUNC_END;
+}
+
+/* Algorithm/PM actor owns the I2C completion flag and data buffer;
+ * BSP only starts an IRQ transaction. Both return 0 if bus busy. */
+uint8_t SC7A20_AsyncRead(uint8_t reg,uint8_t *buffer,uint16_t count,uint8_t *flag) {
+    return ASYNC_I2C_Receive(SC7A20_I2C_ADDR,reg,buffer,count,0u,flag);
+}
+uint8_t SC7A20_AsyncWrite(uint8_t reg,uint8_t *buffer,uint16_t count,uint8_t *flag) {
+    return ASYNC_I2C_Transmit(SC7A20_I2C_ADDR,reg,buffer,count,0u,flag);
 }
 
 /* The service owns I2C completion; the BSP owns the sensor data layout. */

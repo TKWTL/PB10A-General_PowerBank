@@ -41,7 +41,7 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 ## Architecture (2026-11)
 
 - `APP/app_task.c` registers coroOS tasks and polls shared services
-- `Scheduler/coroOS.*` now wraps the actual Protothreads 1.4 (`Scheduler/pt1.4/pt.h`, `pt-sem.h`, `lc-switch.h`), as in Handheld-Fan; seven tasks are retained (not FreeRTOS, no priorities)
+- `Scheduler/coroOS.*` now wraps the actual Protothreads 1.4 (`Scheduler/pt1.4/pt.h`, `pt-sem.h`, `lc-switch.h`), as in Handheld-Fan; ten separate cooperative tasks are registered (not FreeRTOS, no priorities)
 - `APP/services/*_algo.c` holds reusable beep, RTC and system algorithms; `time_service.c` retains the MiaoUI calendar editor
 - `APP/functions/` hosts independent user-facing MiaoUI applications. Powerbank displays cached SW6306 voltage, current, percentage and protocol; Radio is forced low-power at boot and starts only when its WORD page is entered (or kept running in explicit background ON mode)
 - `APP/i18n.c/h` defines a shared localization interface and placeholder English-only catalog
@@ -165,7 +165,7 @@ the Radio page restores the original Collar-Radio 12px/24px fonts,
 status XBM icons, FM dial, discovered-station markers and RTC footer.
 The original shared 12px fusion-pixel menu font remains in place.
 
-`SC7A20_Init()` runs once in `APP_TaskInit()`; its PB02B 25 Hz, ±2 g,
+`SC7A20Algo_Init()` registers the independent async service; its PB02B 25 Hz, ±2 g,
 high-resolution BDU setup is unchanged. The PB10A sensor interrupt is PB5,
 not PB02B's PB8 shared interrupt. The experimental temperature-ADC
 compatibility register is not yet board-verified.
@@ -190,21 +190,20 @@ graphics with a static approximation.
   existing MiaoUI `UI_Animation()` PID using the same tuned coefficients,
   stored in the firmware's Q10 fixed-point format. MiaoUI nominally
   polls at 20ms but OLED DMA can limit actual display frame cadence.
-  The original Collar-Radio animated battery *fill* depends on battery
-  telemetry not yet connected to this page; only its outline is drawn.
+  The original Collar-Radio animated battery *fill* is driven by the
+  cached SW6306 capacity when available; otherwise only its outline is drawn.
 
-RDA5807 power policy: `RadioAlgo_Init()` runs after I2C1 initialization
-and calls `Radio_AppInitLowPower()`, briefly providing the LSE-derived
-32.768kHz MCO clock to write RDA5807 register 0x02 with ENABLE=0;
-MCO is immediately turned off. Use
-`RadioAlgo_BootSleepAcknowledged()` to inspect whether the I2C
-power-down command succeeded (failure means the chip state is not
-confirmed). `Radio_AppStart()` enables MCO before waking/resetting the
-chip; the UI_OFF/STOP1 callback always calls `Radio_AppStop()`, even
-after an error, and the STOP1 wake callback leaves MCO off until
-Radio is explicitly restarted. I2C radio errors also stop MCO and
-release the sleep block. Background Radio Power Mode=ON retains MCO
-until it is explicitly stopped or the user requests root-menu sleep.
+RDA5807 power policy: `RadioAlgo_Init()` queues the IRQ-driven
+`RDA5807_AsyncBootSleep()` write with ENABLE=0. MCO is kept active
+until the asynchronous queue drains and its power-down transaction
+finishes. `RadioAlgo_BootSleepAcknowledged()` reports a successful
+boot power-down transaction, not merely enqueue acceptance.
+The dedicated RadioServiceThread (5 ms) owns FM startup, tune/seek,
+status polling, presets, power policy and I2C completion. Before
+STOP1 the Radio PM hook asynchronously requests shutdown; MCO is
+restored to the stopped state once the queued transaction completes.
+Power Mode ON retains the radio after leaving its WORD page. Errors
+turn off MCO and release the FM sleep block.
 
 ### I2C scanner restoration (Collar-Radio visual compatibility)
 
@@ -230,12 +229,13 @@ Return, Power Mode (AUTO / ON / OFF), Radio Mode
 Save/Remove station (other modes), Exit Radio Page.
 
 Power Mode AUTO stops the radio when leaving its page; ON keeps audio
-and the MCO running in background (thus keeps the PM sleep-block
-until an explicit root BACK or another stop); OFF powers down the
-receiver but leaves the menu reachable. CONF long BACK leaves the Radio
-WORD page, even from its settings menu. The entire app is cooperative:
-the 100ms system service periodically polls active radio state,
-including while the Radio page is not visible.
+and MCO running in background (PM block until an explicit stop);
+OFF powers down the receiver but leaves the page reachable.
+CONF long BACK leaves the Radio WORD page, even from its settings menu.
+UI sends commands through `RadioAlgo_Request()` and reads
+`RadioAlgo_GetSnapshot()`; the dedicated 5 ms radio coroutine
+polls the FSM and asynchronous RDA5807 I2C, including when the
+Radio page is not visible.
 
 ### Fatal exception snapshot and reset
 
@@ -379,8 +379,9 @@ thresholds must still be verified on real hardware.
   waits 100 ms to allow a concurrent debounced headphone event to win.
   A higher-priority target can replace a temporary lower-priority
   application without losing the original bookmark. No nested stack.
-- `Settings > System`: `Headphone Auto UI` and `Port Auto UI` are
-  independent, default-OFF, RAM-only switches. They control page changes,
+- `Settings > System`: `Headphone Auto UI`, `Port Auto UI` and
+  `Aux-A Auto UI` are three independent, default-OFF, RAM-only
+  switches. They control page changes,
   not the Radio power policy or SW6306 output mode. Radio's MiaoUI leave
   hook resets its view state; `ON` keeps running in the background,
   while `OFF` remains off when merely opening the page.
@@ -405,3 +406,54 @@ thresholds must still be verified on real hardware.
 
 Keil compile and physical insertion, simultaneous-event, UI animation
 and STOP1 integration testing were not performed.
+
+### MENU, Aux-A event and I2C-thread ownership (2026-11-21)
+
+TEXT menu naming convention in `Create_MenuTree()` and item helpers:
+`[Back]` for RETURN; ` Label` (one leading ASCII space) for a regular
+entry, so it aligns with the 'B' immediately following '['; `-Submenu`
+for a PARENTS entry, with '-' replacing that space. This also applies
+to Time and Sleep Options. The source hierarchy is indented to mirror
+the visible menu tree; ICON page label formatting is independent.
+
+PA7 / SUB_INDET falling-edge wake events also receive a dedicated
+40 ms low-level confirmation, one-shot insertion latch and high-level
+re-arm. When the independent `Aux-A Auto UI` switch is enabled, a
+confirmed new insertion requests `UI_TARGET_POWERBANK`. Both the
+separately configured SW6306 Port Auto UI and Aux-A Auto UI switch
+can navigate to the same Powerbank WORD page. Radio still has higher
+priority over Powerbank. No ISR performs navigation or I2C.
+
+The coroOS table has 10 deliberately grouped entries: OledServiceThread,
+MiaoUiThread, SystemServiceThread; PowerManagerThread,
+ADC_RTC_AuxAThread, PowerAlgo_SW6306Thread; RadioServiceThread;
+SC7A20Thread, MMC5603Thread and BMP180Thread. Each sensor actor owns
+its persistent buffer, completion flag, polling cadence and PM hooks.
+The shared I2C controller runs IRQ-completed transfers, not blocking
+calls inside cooperative tasks.
+
+The Radio implementation follows Collar-Radio's `Application/Applications/radio.c`
+in placement and key actions: top 7x9/6x9 status icons, 24-pixel
+frequency value with a variable-width MHz placement, 43/45/47-pixel
+station ruler, saved-station cursor, RTC footer, and animated XOR
+selection in the five-row settings menu. Where SW6306 capacity is
+known, its cached value fills the battery icon; the unknown case
+shows the outline alone. The original FreeRTOS `while(1)` draw loop
+is intentionally not copied.
+
+The active FM call path is now:
+- `BSP/RDA5807/rda5807m.c`: `RDA5807_Async*` operation-specific
+  register commands, fixed-size serialized write queue, IRQ-backed
+  I2C status reads, completion and mirror register maintenance.
+- `APP/services/radio_algo.c`: 5 ms coroOS state machine, startup,
+  stop, FM seek/tune, sorted presets, mode/power policy, PM hook,
+  RAM-only `radio_snapshot_t` and app command queue.
+- `APP/functions/radio_app.c`: only drawing, UI animation, user
+  input-to-command mapping and a non-hardware leave callback.
+
+The other active sensor paths also use asynchronous BSP entry points:
+SC7A20_AsyncRead/Write(), MMC5603_AsyncRead/Write(), and
+BMP180_AsyncRead/Write(); SW6306 uses its existing protothread BSP
+implementation. Legacy synchronous BSP helpers are retained as
+compatibility APIs but are not called by these active coroutines.
+No actual Keil build or on-device Radio validation has been done.
