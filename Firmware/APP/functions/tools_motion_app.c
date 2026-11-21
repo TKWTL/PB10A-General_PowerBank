@@ -20,7 +20,7 @@
 #define LEVEL_PLUMB_ENTER   43.0f
 #define LEVEL_PLUMB_EXIT    47.0f
 #define RAD_TO_DEG          57.2957795f
-#define LEVEL_RADIUS        12
+#define LEVEL_RADIUS        18 /* 36px diameter, center at half pixels */
 #define CAL_VIEW_MS         200u
 #define CAL_HOLD_INTERVALS  10u
 #define CAL_AXIS_MIN_ABS    700
@@ -79,12 +79,16 @@ static void level_draw_horizon(float x,float y,float z) {
     float h=sqrtf(x*x+y*y);
     uint8_t white=1u,xor_color=2u;
     if(h<0.0001f)return;
-    /* Original plane: f=(-Y/h)(x-cx)+(X/h)(y-cy)+z*offset.
-     * Use Q10 coefficients and scanline spans: 64 lines, no 8 KB canvas
-     * and no per-pixel floating-point loop on the Cortex-M0+. */
-    nx=(int32_t)((-y/h)*1024.0f);
-    ny=(int32_t)(( x/h)*1024.0f);
-    offset=(int32_t)(z*50.0f*1024.0f);
+    /* PB10A on-device observation: the HORIZON black/white direction
+     * was reversed after the PB02B mounting-axis conversion. Negate
+     * the entire original implicit plane, including Z displacement:
+     * original f=(-Y/h)(px-cx)+(X/h)(py-cy)+50*Z;
+     * PB10A   f=-original_f. The zero contour (tilt and position)
+     * is unchanged, but the visible/hidden halves are exchanged.
+     * Crucially, the zenith/plumb drawing path is NOT changed. */
+    nx=(int32_t)(( y/h)*1024.0f);
+    ny=(int32_t)((-x/h)*1024.0f);
+    offset=(int32_t)(-z*50.0f*1024.0f);
     Disp_SetDrawColor(&white);
     for(row=0;row<64;row++) {
         int32_t v0=nx*(-63)+ny*(row-31)+offset;
@@ -116,16 +120,20 @@ static void level_draw_horizon(float x,float y,float z) {
     Disp_DrawLine(4u,32u,13u,32u);
     Disp_DrawLine(114u,32u,123u,32u);
 }
-/* Draw a clipped XOR disc even when its center is off-screen.
- * In PB02B the circles can move into the screen from outside. */
-static void level_xor_disc(int16_t cx,int16_t cy,int16_t radius) {
-    int16_t x,y,x0=(int16_t)(cx-radius),x1=(int16_t)(cx+radius);
-    int16_t y0=(int16_t)(cy-radius),y1=(int16_t)(cy+radius);
-    const int32_t r2=(int32_t)radius*radius;
+/* A 36px diameter XOR circle must use a half-pixel center:
+ * an integer center and x*x+y*y<18*18 would render only 35
+ * pixels across. As in PB02B, store twice the circle center and
+ * test squared distances in doubled-pixel coordinates. Offscreen
+ * arcs remain clipped rather than disappearing abruptly. */
+static void level_xor_disc(int16_t cx2,int16_t cy2,int16_t radius) {
+    int16_t x,y,cx=(int16_t)(cx2/2),cy=(int16_t)(cy2/2);
+    int16_t x0=(int16_t)(cx-radius-1),x1=(int16_t)(cx+radius+1);
+    int16_t y0=(int16_t)(cy-radius-1),y1=(int16_t)(cy+radius+1);
+    int32_t r2=(int32_t)(2*radius)*(2*radius);
     if(x0<0)x0=0;if(y0<0)y0=0;
     if(x1>127)x1=127;if(y1>63)y1=63;
     for(y=y0;y<=y1;y++)for(x=x0;x<=x1;x++) {
-        int32_t dx=x-cx,dy=y-cy;
+        int32_t dx=(int32_t)2*x-cx2,dy=(int32_t)2*y-cy2;
         if(dx*dx+dy*dy<r2)
             Disp_DrawPixel((uint16_t)x,(uint16_t)y);
     }
@@ -147,15 +155,16 @@ static void level_draw_zenith(float x,float y,float z,float angle) {
         dx=-y*gap/h*0.5f;
         dy= x*gap/h*0.5f;
     }
-    x1=(int16_t)(63.5f-dx);
-    y1=(int16_t)(31.5f-dy);
-    x2=(int16_t)(63.5f+dx);
-    y2=(int16_t)(31.5f+dy);
+    /* Doubled coordinates: (127,63) = (63.5,31.5) pixels.
+     * The original two moving discs are the ONLY zenith graphics:
+     * deliberately omit the fixed center reference ring. */
+    x1=(int16_t)roundf(127.0f-2.0f*dx);
+    y1=(int16_t)roundf(63.0f-2.0f*dy);
+    x2=(int16_t)roundf(127.0f+2.0f*dx);
+    y2=(int16_t)roundf(63.0f+2.0f*dy);
     Disp_SetDrawColor(&xor_color);
     level_xor_disc(x1,y1,LEVEL_RADIUS);
     level_xor_disc(x2,y2,LEVEL_RADIUS);
-    /* Keep the zenith reference visible when the XOR discs overlap. */
-    Disp_DrawCircle(63u,31u,LEVEL_RADIUS,U8G2_DRAW_ALL);
 }
 static void level_angle_footer(float angle) {
     char text[16];

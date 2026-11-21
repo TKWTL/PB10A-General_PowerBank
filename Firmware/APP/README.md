@@ -592,7 +592,9 @@ The **Tools** icon page now offers two WORD-page apps:
   translation retain the original gravity-normal plane, plus
   XOR tick marks. The 43-degree entry/47-degree exit hysteresis,
   orientation-dependent white/black zenith view and dual XOR circles
-  are retained; a fixed ring makes the zenith visible when aligned.
+  are retained. Each moving circle now has a 36px diameter, using
+  half-pixel centers for exact raster width; the additional stationary
+  zenith reference ring is removed.
   Current tilt is overlaid in the **bottom-right** using the
   project's default `UI_FONT` with a small degree-ring mark.
 - `-Accel Calibration` using Collar-Radio's
@@ -670,8 +672,19 @@ screen face down, **Y=+1g**; with the right edge down, **X=+1g**.
 `SC7A20Algo` now publishes a separate, calibrated leveler-space
 vector `level_mg={native_Z,-native_X,native_Y}`, preserving
 native `raw[]` and `mg[]` for SC7A20 rotation, statistics and
-six-face calibration. This restores the source horizon/zenith color
-conventions without swapping physical axes in BSP code.
+six-face calibration. The horizon's black/white polarity was then
+reversed independently in `level_draw_horizon()` following hardware
+observation: the complete implicit plane is negated, exchanging its
+filled half while keeping its zero contour (tilt and offset) fixed.
+The plumb/zenith mapping and the six-face sensor axes are unchanged.
 The six-face app's physical placement labels follow PB10A:
 UP=Z-, DOWN=Z+, LEFT=X+, RIGHT=X-, face-up=Y-, face-down=Y+.
 
+
+**Leveler display correction:** PB10A horizontal-mode screen polarity
+is now the inverse of the PB02B-derived raster. A negative level-X
+(normal flat PB10A) draws black above and white below, while
+the plumb mode retains its previously confirmed sensor orientation.
+The two XOR zenith discs have a **36px actual diameter** and no
+stationary third ring. When the two XOR discs precisely overlap they
+cancel, by design; there is no artificial circle at zero separation.
