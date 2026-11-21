@@ -166,13 +166,17 @@ void PowerAlgo_BackgroundAbort(void) {
 
 /************************* 附加 A 口与 ADC1 DMA *************************/
 /* ADC rank order: PA0 current, PA5 divided voltage, die temperature,
- * VREFINT. DMA completion only signals the cooperative owner thread. */
+ * VREFINT. Collar-Radio-style averaging: four spaced IRQ-backed DMA
+ * scans per 500 ms, mean raw values before conversions to physical
+ * units; a partial or failed cycle must not publish any output. */
 #define POWER_ADC_TIMEOUT_MS 50u
 #define AUX_A_VDIV_HIGH 680u
 #define AUX_A_VDIV_LOW  220u
 #define AUX_A_CURRENT_MV_PER_A 500u
 
 static uint16_t s_dma[4] __attribute__((aligned(4)));
+static uint32_t s_adc_accumulator[4]; /* four 12-bit ADC values per rank */
+static uint8_t s_adc_sample_count;
 static volatile uint8_t s_transfer_result; /* 0 pending, 1 done, 2 error */
 static uint8_t s_active,s_suspended,s_adc_initialized;
 static uint8_t s_aux_inserted,s_aux_enabled,s_system_adc_valid;
@@ -198,6 +202,8 @@ static pm_hook_result_t power_adc_suspend(void *ctx) {
     LL_GPIO_ResetOutputPin(SUB_EN_GPIO_Port,SUB_EN_Pin);
     s_aux_enabled=0u;
     s_system_adc_valid=0u;
+    s_adc_sample_count=0u; /* discard any interrupted pre-STOP1 burst */
+    memset(s_adc_accumulator,0,sizeof(s_adc_accumulator));
     return PM_HOOK_DONE;
 }
 
@@ -220,18 +226,30 @@ void PowerAlgo_AdcInit(void) {
     s_aux_enabled=1u;s_aux_inserted=0u;
     s_aux_voltage_mv=0;s_aux_current_ma=0;
     s_vdda_mv=0;s_die_temp_c10=0;s_system_adc_valid=0u;
+    s_adc_sample_count=0u;
+    memset(s_adc_accumulator,0,sizeof(s_adc_accumulator));
     s_adc_initialized=(uint8_t)(HAL_ADCEx_Calibration_Start(&hadc1)==HAL_OK);
 }
 
 uint8_t PowerAlgo_AdcIsSuspended(void){return s_suspended;}
 
+/* Reset accumulation for each 500 ms acquisition period so an aborted
+ * burst cannot be mixed into the next period. Retain published data
+ * until a fully successful replacement average is available. */
+void PowerAlgo_AdcBatchBegin(void) {
+    s_adc_sample_count=0u;
+    memset(s_adc_accumulator,0,sizeof(s_adc_accumulator));
+}
+
 uint8_t PowerAlgo_AdcBeginScan(void) {
-    if(s_suspended || !s_adc_initialized)return 0u;
+    if(s_suspended || !s_adc_initialized || s_active)return 0u;
     s_transfer_result=0u;
     s_active=1u; /* Set before HAL start: IRQ completion can be immediate. */
     s_started_at=Millis();
     if(HAL_ADC_Start_DMA(&hadc1,(uint32_t *)(void *)s_dma,4u)!=HAL_OK) {
         s_active=0u;
+        s_adc_sample_count=0u;
+        memset(s_adc_accumulator,0,sizeof(s_adc_accumulator));
         s_system_adc_valid=0u;
         (void)HAL_ADC_Stop_DMA(&hadc1);
         return 0u;
@@ -239,39 +257,53 @@ uint8_t PowerAlgo_AdcBeginScan(void) {
     return 1u;
 }
 
-/* The cooperative owner waits for IRQ completion and calculates all values.
- * No fixed 3300 mV assumption: rank 4 VREFINT determines measured VDDA. */
+/* Each IRQ-backed DMA scan contributes four raw channels. Publish
+ * calibrated results ONLY when all four spaced scans have succeeded.
+ * A missing ADC completion, VREFINT zero or timeout discards the batch. */
 uint8_t PowerAlgo_AdcScanSettled(void) {
     uint32_t pin_voltage_mv,pin_current_mv;
+    uint16_t avg[4];
     int32_t cal_span,scaled_temp10;
-    uint8_t result;
+    uint8_t i,result;
     if(s_suspended || !s_active)return 1u;
     result=s_transfer_result;
     if(result==0u && (uint32_t)(Millis()-s_started_at)<POWER_ADC_TIMEOUT_MS)
         return 0u;
     s_active=0u;
-    if(result!=1u) {
+    if(result!=1u || s_dma[3]==0u) {
         (void)HAL_ADC_Stop_DMA(&hadc1);
+        s_adc_sample_count=0u;
+        memset(s_adc_accumulator,0,sizeof(s_adc_accumulator));
         s_system_adc_valid=0u;
         return 1u;
     }
-    if(s_dma[3]==0u) {
+    for(i=0u;i<4u;i++)s_adc_accumulator[i]+=(uint32_t)s_dma[i];
+    if(++s_adc_sample_count<POWER_ADC_AVERAGE_SAMPLES)
+        return 1u;
+    for(i=0u;i<4u;i++)
+        avg[i]=(uint16_t)((s_adc_accumulator[i]+
+            POWER_ADC_AVERAGE_SAMPLES/2u)/POWER_ADC_AVERAGE_SAMPLES);
+    s_adc_sample_count=0u;
+    memset(s_adc_accumulator,0,sizeof(s_adc_accumulator));
+    /* VREFINT rank uses the raw average; every derived channel shares
+     * the same measured VDDA instead of assuming a fixed 3300 mV. */
+    if(avg[3]==0u) {
         s_system_adc_valid=0u;
         return 1u;
     }
-    s_vdda_mv=(int)__HAL_ADC_CALC_VREFANALOG_VOLTAGE(s_dma[3],ADC_RESOLUTION_12B);
-    pin_current_mv=((uint32_t)s_dma[0]*(uint32_t)s_vdda_mv+2047u)/4095u;
-    pin_voltage_mv=((uint32_t)s_dma[1]*(uint32_t)s_vdda_mv+2047u)/4095u;
+    s_vdda_mv=(int)__HAL_ADC_CALC_VREFANALOG_VOLTAGE(avg[3],ADC_RESOLUTION_12B);
+    pin_current_mv=((uint32_t)avg[0]*(uint32_t)s_vdda_mv+2047u)/4095u;
+    pin_voltage_mv=((uint32_t)avg[1]*(uint32_t)s_vdda_mv+2047u)/4095u;
     /* PA0: 0.5 V/A (500 mV/A). PA5: 680 k / 220 k divider. */
     s_aux_current_ma=(int)(pin_current_mv*1000u/AUX_A_CURRENT_MV_PER_A);
     s_aux_voltage_mv=(int)((pin_voltage_mv*
         (AUX_A_VDIV_HIGH+AUX_A_VDIV_LOW)+AUX_A_VDIV_LOW/2u)/AUX_A_VDIV_LOW);
 
-    /* The HAL integer helper truncates to whole degrees. Use the same
-     * factory TS_CAL1/TS_CAL2 values but retain a tenth-degree digit. */
+    /* Retain tenths of a degree using the factory TS_CAL1/TS_CAL2
+     * values rather than the HAL's integer-degrees-only helper. */
     cal_span=(int32_t)*TEMPSENSOR_CAL2_ADDR-(int32_t)*TEMPSENSOR_CAL1_ADDR;
     if(cal_span!=0) {
-        scaled_temp10=(int32_t)(((uint32_t)s_dma[2]*(uint32_t)s_vdda_mv*10u+
+        scaled_temp10=(int32_t)(((uint32_t)avg[2]*(uint32_t)s_vdda_mv*10u+
             TEMPSENSOR_CAL_VREFANALOG/2u)/TEMPSENSOR_CAL_VREFANALOG);
         s_die_temp_c10=(int)(TEMPSENSOR_CAL1_TEMP*10+
             (scaled_temp10-(int32_t)*TEMPSENSOR_CAL1_ADDR*10)*

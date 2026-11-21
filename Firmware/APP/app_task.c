@@ -71,21 +71,36 @@ THRD_DECLARE(SystemServiceThread) {
     }
     THRD_END;
 }
-/* ADC/DMA, RTC and auxiliary USB-A share a 500 ms service cadence.
- * The ADC settles by IRQ while the other coroOS threads continue running.
- * Refresh RTC each cycle; the Time editor keeps its own write API. */
+/* Collar-Radio-style ADC averaging without blocking the scheduler:
+ * four independent four-rank DMA scans, 80 ms apart, in each 500 ms
+ * cycle. The ADC IRQ only signals completion; PowerAlgo publishes the
+ * raw-channel averages after all four scans succeed. RTC/Aux-A remain
+ * serviced once per cycle. No CubeMX change or DMA reconfiguration. */
+#define ADC_SCAN_GAP_MS 80u
+static uint8_t s_adc_scan_index; /* persistent: protothreads are stackless */
+static uint32_t s_adc_cycle_at;
 THRD_DECLARE(ADC_RTC_AuxAThread) {
     THRD_BEGIN;
     PowerAlgo_AdcInit();
     RTC_UpdateTime();
     for(;;) {
-        if(!PowerAlgo_AdcIsSuspended() && PowerAlgo_AdcBeginScan()) {
+        s_adc_cycle_at=Millis();
+        PowerAlgo_AdcBatchBegin();
+        for(s_adc_scan_index=0u;
+            s_adc_scan_index<POWER_ADC_AVERAGE_SAMPLES;
+            ++s_adc_scan_index) {
+            if(PowerAlgo_AdcIsSuspended() || !PowerAlgo_AdcBeginScan())
+                break;
             THRD_UNTIL(PowerAlgo_AdcScanSettled());
+            if(s_adc_scan_index+1u<POWER_ADC_AVERAGE_SAMPLES)
+                THRD_DELAY(ADC_SCAN_GAP_MS);
         }
         if(!RTC_IsEditing(&s_ui))RTC_UpdateTime();
         PowerAlgo_AuxA_Service();
         System_Poll();
-        THRD_DELAY(500u);
+        /* Preserve the original 500 ms period from burst START,
+         * rather than adding 500 ms after the four spaced scans. */
+        THRD_UNTIL((uint32_t)(Millis()-s_adc_cycle_at)>=500u);
     }
     THRD_END;
 }
@@ -99,8 +114,11 @@ THRD_DECLARE(RadioServiceThread) {
     THRD_END;
 }
 
-/* Each I2C sensor has an independent cooperative actor. Its poll never
- * blocks the scheduler while a HAL IRQ transaction or conversion settles. */
+/* Each I2C sensor has a cooperative nonblocking service actor.
+ * SC7A20 has a sensor data-ready interrupt capability; MMC5603 and
+ * BMP180 are sampled by periodic software polling. These sensor-side
+ * capabilities are separate from HAL's interrupt-driven I2C transport,
+ * which is shared by all three actors. */
 THRD_DECLARE(SC7A20Thread) {
     THRD_BEGIN;
     for(;;) {
@@ -143,7 +161,8 @@ static const coro_thread_fn_t s_threads[] = {
     /* Dedicated asynchronous FM service */
     RadioServiceThread,
 
-    /* Independent IRQ-backed I2C sensors */
+    /* Independent sensor poll actors: SC7A20 IRQ-capable;
+     * MMC5603/BMP180 polling-only (I2C transfers themselves use IRQ). */
     SC7A20Thread,
     MMC5603Thread,
     BMP180Thread,

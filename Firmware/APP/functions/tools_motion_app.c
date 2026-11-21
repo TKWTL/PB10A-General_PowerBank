@@ -171,17 +171,13 @@ static void level_draw_zenith(float x,float y,float z,float angle) {
     level_xor_disc(x1,y1,LEVEL_RADIUS);
     level_xor_disc(x2,y2,LEVEL_RADIUS);
 }
-/* 4x4 outline for the degree mark, each pixel drawn exactly once.
- * u8g2_DrawCircle(r=2) visits overlapping octant pixels repeatedly;
- * in XOR mode the duplicate visits CANCEL the entire small circle. */
+/* Compact 3x3 hollow cross: top/left/right/bottom, center empty.
+ * XOR each of the four distinct pixels once to avoid self-cancellation
+ * (u8g2_DrawCircle(r=2) re-visits symmetric pixels). */
 static void level_xor_degree_mark(void) {
-    Disp_DrawPixel(123u,51u);
-    Disp_DrawPixel(124u,51u);
-    Disp_DrawPixel(122u,52u);
-    Disp_DrawPixel(125u,52u);
-    Disp_DrawPixel(122u,53u);
+    Disp_DrawPixel(124u,52u);
+    Disp_DrawPixel(123u,53u);
     Disp_DrawPixel(125u,53u);
-    Disp_DrawPixel(123u,54u);
     Disp_DrawPixel(124u,54u);
 }
 static void level_angle_footer(float angle) {

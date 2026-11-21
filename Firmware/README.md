@@ -49,3 +49,7 @@ See repository [`.clang-format`](../.clang-format) and
 STM32CubeMX-managed `Core/`, ST HAL `Drivers/`, third-party u8g2,
 or generated fonts and bitmaps. Major logical sections use blank lines
 and SW6306-style starred comment dividers.
+
+## 第三方组件与 AI 辅助声明
+
+第三方库、字体的原作者、仓库内许可证位置，以及 AI 辅助开发/调试/文档说明统一见 **[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)**。其中包括 MiaoUI、u8g2、Fusion Pixel Font / Ark Pixel Font、Protothreads 1.4、STM32Cube HAL/LL 和 CMSIS；AI 辅助包括 OpenAI ChatGPT 与 DeepSeek v4.1f。各上游作品仍保留原许可证与版权声明。

@@ -61,9 +61,15 @@ been removed. Startup now always runs the standard MiaoUI/coroOS
 scheduler; Radio starts only when its menu application is entered.
 
 The fifth coroOS task, `ADC_RTC_AuxAThread` in `APP/app_task.c`,
-owns ADC calibration before its `for(;;)`, a four-rank DMA scan,
-HAL IRQ completion waiting, Aux-A status/enable management and RTC
-refresh. The base delay is 500 ms; RTC reads occur every cycle (500 ms).
+owns ADC calibration before its `for(;;)`, **four** sequential
+four-rank DMA scans separated by **80 ms**, HAL IRQ completion waiting,
+Aux-A status/enable management and RTC refresh. A batch starts every
+**500 ms** (start-to-start), with the RTC read once per batch.
+`PowerAlgo_AdcBatchBegin()` clears the four-channel raw accumulators;
+each successful DMA scan contributes to the batch, and only a complete
+four-scan mean is converted to mV/mA/VDDA/die temperature. Incomplete
+or failed batches invalidate telemetry; the next batch starts clean.
+The STM32CubeMX ADC/DMA setup is unchanged.
 `RTC_IsEditing()` prevents the time editor's pending changes from being
 overwritten; the RTC setter remains a normal service function.
 
@@ -293,7 +299,8 @@ parity bits. No option bytes have been changed by this commit.
   no I2C request or sensor conversion runs in a drawing callback.
 - Statistics/System displays ADC rank 4 VREFINT-derived VDDA (mV)
   and rank 3 internal die temperature (degrees Celsius) through the
-  factory-calibrated HAL conversion helpers, using the existing 500ms DMA scan.
+  factory-calibrated HAL conversion helpers, using a four-scan
+  raw-channel average updated at the existing 500 ms cadence.
 - Conversion timing, sensor scaling, STOP1 transitions and UI fields still
   require hardware verification; this edit has not been board-tested.
 
@@ -699,9 +706,30 @@ over the scene, **without an opaque backdrop**. The default u8g2
 font mode is SOLID and would still write a black glyph-bounding box;
 `level_angle_footer()` now switches to TRANSPARENT font mode only
 while drawing the digits and restores the previous mode afterward.
-The 4x4 degree ring is an eight-pixel, unique-coordinate outline:
-`u8g2_DrawCircle(radius=2)` re-visits symmetric positions, so the
-old XOR-drawn ring cancelled itself and disappeared. The caller's
+The degree marker is a **3x3 hollow four-point cross**
+(top/left/right/bottom, center clear); each pixel is drawn exactly
+once, avoiding XOR cancellation in `u8g2_DrawCircle(radius=2)`. The caller's
 previous drawing color is also restored. Black/white horizon and
 zenith visual behavior are unchanged.
 When the two zenith XOR discs precisely overlap they cancel, by design.
+
+### ADC four-scan averaging (2026-11-21)
+
+Modeled on Collar-Radio's `Application/Algorithms/system_statistic.c`
+(`OVERSAMPLE_RATE=4`), PB10A now runs four ADC1 DMA scans per 500 ms
+measurement cycle with 80 ms between scan starts (plus short asynchronous
+conversion completion latency). Each scan reads PA0 current, PA5
+voltage, die temperature and VREFINT in the original rank order.
+The four raw codes for each rank are accumulated as `uint32_t`;
+the nearest-integer mean is taken **before** the VREFINT calibration
+and the voltage/current/temperature conversions, so all derived values
+use a single averaged VDDA. A batch is published only when four
+complete scans succeed; DMA error, timeout, missing VREFINT or PM
+suspend invalidate a partial batch. All scan waits yield via
+Protothreads to the remaining coroOS tasks. Sampling is software
+triggered as before, with no CubeMX initialization changes.
+
+This is software mean filtering rather than MCU ADC hardware
+oversampling. It improves rejection of uncorrelated sample noise but
+does not correct calibration, source impedance, persistent interference
+or aliasing. Real-device validation is still required.

@@ -31,8 +31,12 @@ uint8_t PowerAlgo_TakeRadioBatteryCheck(uint16_t *vbat_mv,uint8_t *capacity_pct)
 pm_hook_result_t PowerAlgo_BackgroundResume(void);
 pm_hook_result_t PowerAlgo_BackgroundSuspend(void);
 void PowerAlgo_BackgroundAbort(void);
-/* ADC_RTC_AuxAThread owns ADC calibration, DMA sampling and Aux-A updates. */
+/* ADC_RTC_AuxAThread alone owns ADC calibration and DMA sampling.
+ * Four four-channel conversions, separated by 80 ms per 500 ms burst,
+ * are averaged as raw ADC codes before voltage/temperature scaling. */
+#define POWER_ADC_AVERAGE_SAMPLES 4u
 void PowerAlgo_AdcInit(void);
+void PowerAlgo_AdcBatchBegin(void);
 uint8_t PowerAlgo_AdcIsSuspended(void);
 uint8_t PowerAlgo_AdcBeginScan(void);
 uint8_t PowerAlgo_AdcScanSettled(void);
