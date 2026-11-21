@@ -618,19 +618,24 @@ temporarily enforce native R0 display orientation; their MiaoUI
 onLeave hooks always restore normal sampling, PM policy and
 auto-rotation eligibility.
 
-**Calibration persistence:** PB10A does not currently have
-PB02B's NVM worker. STM32G070 has **five RTC backup data registers**.
-DR0 is reserved for the calendar 0xB10A marker; DR1 through DR3
-store three signed 16-bit raw zeros and three unsigned 16-bit Q14
-slopes; DR4 stores a 16-bit version/magic and CRC16-CCITT of
-the packed values. The valid marker is written last, so an
-interrupted update cannot silently load a partial record.
-`SC7A20Algo_Init()` restores the record if it is well-formed.
-It survives software reset and power interruptions **only while
-the RTC backup domain remains supplied**; it is erased with the
-backup domain. There is no Flash erase/write or additional I2C
-owner. Future functions must not allocate DR1..DR4 without
-first migrating this calibration layout.
+**Calibration retention (corrected for PB10A power hardware):**
+PB10A has no independent backup-domain supply. Calibration therefore
+does **not** use RTC DR1..DR4, whose contents would be lost on a full
+VDD power-down just like ordinary SRAM. Instead, a 16-byte
+`s_calibration_noinit` record shares the Keil linker scatter file's
+reserved `RW_NOINIT` section with `g_fault_record` (32 bytes).
+The scatter currently reserves the **last 256 bytes of 36 KiB SRAM**
+for this area. The calibration consists of three signed 16-bit zero
+codes and three unsigned 16-bit Q14 slopes, plus a 16-bit magic/version
+and CRC16-CCITT. The marker is written last to reject interrupted
+updates, and every boot checks the marker, CRC and plausible slopes.
+`SC7A20Algo_Init()` recovers it after reset without asking the RTC.
+It is retained only if SRAM stayed powered (e.g. software reset,
+NRST, and some watchdog resets). **A full power cycle or a debugger
+that clears RAM discards the record**; this is not nonvolatile storage.
+DR0 remains the existing RTC calendar marker, but DR1..DR4 are now
+unused by the SC7A20 app. There is no Flash erase/write or extra I2C
+owner.
 
 Both MiaoUI items, their source icons, the new
 `APP/functions/tools_motion_app.c/.h`, `sc7a20_algo.c/.h`

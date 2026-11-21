@@ -22,7 +22,8 @@ them.
   plumb double-circle view and a default-font tilt angle at bottom right;
   its icons are the Collar-Radio Gradienter and Calibration 30x30 XBM.
   Calibration uses six stable ±axis placements, then records zero/slope
-  with CRC into RTC backup DR1–DR4 (DR0 remains the calendar marker).
+  with CRC into the Keil `.noinit` SRAM area; this retains calibration
+  across MCU reset while SRAM has power, **not** across total power loss.
   Both applications release their distinct PM/rotation lock on leave.
 
 Shared/system services such as RTC calendar editing remain in `APP/services/`.

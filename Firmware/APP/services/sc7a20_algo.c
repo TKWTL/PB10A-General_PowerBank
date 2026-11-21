@@ -7,7 +7,6 @@
 #include "core/ui.h"
 #include "main.h"
 #include "pm_api.h"
-#include "rtc.h"
 #include <string.h>
 
 #define SC_SAMPLE_MS 200u
@@ -44,6 +43,20 @@ static int s_axes[3];
 static uint8_t s_tool_mode,s_orient_div;
 static uint32_t s_sample_at;
 static sc7a20_sample_t s_sample;
+
+/* Preserve calibration across software / NRST / watchdog resets while SRAM
+ * remains powered. Linked into RW_NOINIT (the last 256 bytes of 36KB SRAM)
+ * alongside g_fault_record, but never initialized by the C startup.
+ * NO VBAT: neither RAM nor RTC backup survives full loss of VDD.
+ * No initializer: magic + CRC + range guards decide whether RAM is usable. */
+typedef struct {
+    uint32_t a;   /* Yzero:Xzero */
+    uint32_t b;   /* XscaleQ14:Zzero */
+    uint32_t c;   /* ZscaleQ14:YscaleQ14 */
+    uint32_t tag; /* Version/magic:CRC16; commit LAST */
+} sc_cal_noinit_t;
+static volatile sc_cal_noinit_t s_calibration_noinit
+    __attribute__((section(".noinit"), used, aligned(4)));
 static ui_item_t s_items[3],s_wake_items[2];
 static ui_data_t s_data[3],s_wake_data[2];
 static ui_element_t s_elements[3],s_wake_elements[2];
@@ -93,8 +106,8 @@ uint8_t SC7A20Algo_GetRotation(uint8_t *flipped) {
     return 1u;
 }
 
-/* RTC backup DR0 belongs to the calendar; DR1..4 belong exclusively
- * to SC7A20 calibration. Q14 slopes retain 0.000061 mg/LSB resolution. */
+/* CRC16-CCITT protects the uninitialized SRAM record across a warm reset.
+ * Q14 slopes retain roughly 0.000061 mg/LSB resolution. */
 static uint16_t sc_record_crc(uint32_t a,uint32_t b,uint32_t c) {
     uint16_t crc=0xFFFFu;
     uint32_t words[3];
@@ -110,10 +123,10 @@ static uint16_t sc_record_crc(uint32_t a,uint32_t b,uint32_t c) {
 static void sc_calibration_load(void) {
     uint32_t a,b,c,tag;
     uint16_t xq,yq,zq;
-    a=HAL_RTCEx_BKUPRead(&hrtc,RTC_BKP_DR1);
-    b=HAL_RTCEx_BKUPRead(&hrtc,RTC_BKP_DR2);
-    c=HAL_RTCEx_BKUPRead(&hrtc,RTC_BKP_DR3);
-    tag=HAL_RTCEx_BKUPRead(&hrtc,RTC_BKP_DR4);
+    a=s_calibration_noinit.a;
+    b=s_calibration_noinit.b;
+    c=s_calibration_noinit.c;
+    tag=s_calibration_noinit.tag;
     if((tag>>16)!=SC_CAL_RECORD_TAG ||
        (uint16_t)tag!=sc_record_crc(a,b,c))return;
     xq=(uint16_t)(b>>16);yq=(uint16_t)c;zq=(uint16_t)(c>>16);
@@ -140,17 +153,20 @@ uint8_t SC7A20Algo_ApplySixFace(const int16_t face_raw[6][3]) {
         q[i]=(uint16_t)(slope[i]*SC_CAL_Q14+0.5f);
         if(q[i]<4096u||q[i]>49152u)return 0u;
     }
-    /* DR1=Yzero:Xzero, DR2=XscaleQ14:Zzero, DR3=Zscale:Yscale,
-     * DR4=magic:CRC16. Invalidate DR4 first, write valid tag last. */
+    /* Invalidate the old record before replacing any field; the tag is
+     * written LAST so a mid-reset partial update cannot pass validation. */
     a=((uint32_t)(uint16_t)zero[1]<<16)|(uint16_t)zero[0];
     b=((uint32_t)q[0]<<16)|(uint16_t)zero[2];
     c=((uint32_t)q[2]<<16)|q[1];
-    HAL_RTCEx_BKUPWrite(&hrtc,RTC_BKP_DR4,0u);
-    HAL_RTCEx_BKUPWrite(&hrtc,RTC_BKP_DR1,a);
-    HAL_RTCEx_BKUPWrite(&hrtc,RTC_BKP_DR2,b);
-    HAL_RTCEx_BKUPWrite(&hrtc,RTC_BKP_DR3,c);
-    HAL_RTCEx_BKUPWrite(&hrtc,RTC_BKP_DR4,
-        ((uint32_t)SC_CAL_RECORD_TAG<<16)|sc_record_crc(a,b,c));
+    s_calibration_noinit.tag=0u;
+    __DMB();
+    s_calibration_noinit.a=a;
+    s_calibration_noinit.b=b;
+    s_calibration_noinit.c=c;
+    __DMB();
+    s_calibration_noinit.tag=
+        ((uint32_t)SC_CAL_RECORD_TAG<<16)|sc_record_crc(a,b,c);
+    __DSB();
     SC7A20_SetXCalibration((int16_t)zero[0],(float)q[0]/SC_CAL_Q14);
     SC7A20_SetYCalibration((int16_t)zero[1],(float)q[1]/SC_CAL_Q14);
     SC7A20_SetZCalibration((int16_t)zero[2],(float)q[2]/SC_CAL_Q14);

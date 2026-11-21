@@ -21,7 +21,8 @@ void SC7A20Algo_SetToolMode(uint8_t mode);
 uint8_t SC7A20Algo_ToolMode(void);
 uint8_t SC7A20Algo_GetSample(sc7a20_sample_t *out);
 /* Face order X-,X+,Y-,Y+,Z-,Z+. Validated/calibrated atomically.
- * Compact calibration saved with CRC to RTC backup DR1..DR4. */
+ * CRC-protected calibration retained in Keil RW_NOINIT SRAM across warm
+ * MCU reset only. Lost when VDD/SRAM power is removed; not Flash/NVM. */
 uint8_t SC7A20Algo_ApplySixFace(const int16_t face_raw[6][3]);
 
 #endif
