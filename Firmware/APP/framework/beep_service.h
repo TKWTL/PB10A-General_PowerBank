@@ -1,5 +1,5 @@
-#ifndef PB10A_BEEP_ALGO_H
-#define PB10A_BEEP_ALGO_H
+#ifndef PB10A_BEEP_SERVICE_H
+#define PB10A_BEEP_SERVICE_H
 #include <stdint.h>
 
 /* TIM3 input clock = 64 MHz, prescaler = 63 -> timer tick = 1 MHz.
@@ -44,7 +44,7 @@
 #define BEEP_C6  BEEP_ARR_HZ(1047u)
 
 typedef struct {
-    uint16_t arr;          /* TIM14 ARR register value, 0 = rest */
+    uint16_t arr;          /* TIM3 ARR register value, 0 = rest */
     uint16_t duration_ms;  /* 0 = end of sequence, no playback */
 } beep_note_t;
 

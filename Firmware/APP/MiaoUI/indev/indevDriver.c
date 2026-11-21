@@ -5,7 +5,7 @@
 #include "indev/indevDriver.h"
 #include "buttons.h"
 #include "pm_api.h"
-#include "beep_algo.h"
+#include "beep_service.h"
 #define KEY_QUEUE_SIZE 16u
 #define KEY_EVENT_ENTER ((uint8_t)KeyIndex_Max)
 #define KEY_EVENT_BACK ((uint8_t)(KeyIndex_Max+1u))

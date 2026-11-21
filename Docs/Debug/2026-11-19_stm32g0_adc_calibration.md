@@ -1,7 +1,7 @@
 # STM32G070 ADC 校准后禁用超时（PB10A）
 
 - **日期**：2026-11-19
-- **位置**：`Firmware/APP/services/power_algo.c` 调用的
+- **位置**：`Firmware/APP/algorithm/power_algo.c` 调用的
   `HAL_ADCEx_Calibration_Start(&hadc1)`
 - **芯片**：STM32G070KBTx，ADC1，软件触发四通道、DMA Normal
 - **状态**：板级 ADC 采样已经恢复；本案例记录 Keil 调试过程与

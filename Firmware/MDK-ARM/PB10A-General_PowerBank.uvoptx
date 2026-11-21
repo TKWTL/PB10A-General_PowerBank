@@ -858,7 +858,7 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>../APP/services/time_service.c</PathWithFileName>
+      <PathWithFileName>../APP/framework/time_service.c</PathWithFileName>
       <FilenameWithoutPath>time_service.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
@@ -894,20 +894,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>../APP/services/beep_algo.c</PathWithFileName>
-      <FilenameWithoutPath>beep_algo.c</FilenameWithoutPath>
-      <RteFlg>0</RteFlg>
-      <bShared>0</bShared>
-    </File>
-    <File>
-      <GroupNumber>5</GroupNumber>
-      <FileNumber>55</FileNumber>
-      <FileType>1</FileType>
-      <tvExp>0</tvExp>
-      <tvExpOptDlg>0</tvExpOptDlg>
-      <bDave2>0</bDave2>
-      <PathWithFileName>../APP/services/beep_hw.c</PathWithFileName>
-      <FilenameWithoutPath>beep_hw.c</FilenameWithoutPath>
+      <PathWithFileName>../APP/framework/beep_service.c</PathWithFileName>
+      <FilenameWithoutPath>beep_service.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -918,20 +906,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>../APP/services/system_algo.c</PathWithFileName>
+      <PathWithFileName>../APP/algorithm/system_algo.c</PathWithFileName>
       <FilenameWithoutPath>system_algo.c</FilenameWithoutPath>
-      <RteFlg>0</RteFlg>
-      <bShared>0</bShared>
-    </File>
-    <File>
-      <GroupNumber>5</GroupNumber>
-      <FileNumber>57</FileNumber>
-      <FileType>1</FileType>
-      <tvExp>0</tvExp>
-      <tvExpOptDlg>0</tvExpOptDlg>
-      <bDave2>0</bDave2>
-      <PathWithFileName>../APP/services/time_algo.c</PathWithFileName>
-      <FilenameWithoutPath>time_algo.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -966,7 +942,7 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>../APP/services/power_algo.c</PathWithFileName>
+      <PathWithFileName>../APP/algorithm/power_algo.c</PathWithFileName>
       <FilenameWithoutPath>power_algo.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
@@ -978,7 +954,7 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>../APP/services/sc7a20_algo.c</PathWithFileName>
+      <PathWithFileName>../APP/algorithm/sc7a20_algo.c</PathWithFileName>
       <FilenameWithoutPath>sc7a20_algo.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
@@ -990,7 +966,7 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>../APP/services/mmc5603_algo.c</PathWithFileName>
+      <PathWithFileName>../APP/algorithm/mmc5603_algo.c</PathWithFileName>
       <FilenameWithoutPath>mmc5603_algo.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
@@ -1002,7 +978,7 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>../APP/services/bmp180_algo.c</PathWithFileName>
+      <PathWithFileName>../APP/algorithm/bmp180_algo.c</PathWithFileName>
       <FilenameWithoutPath>bmp180_algo.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
@@ -1014,7 +990,7 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>../APP/services/radio_algo.c</PathWithFileName>
+      <PathWithFileName>../APP/algorithm/radio_algo.c</PathWithFileName>
       <FilenameWithoutPath>radio_algo.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
@@ -1026,8 +1002,20 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>../APP/services/fault_record.c</PathWithFileName>
+      <PathWithFileName>../APP/algorithm/fault_record.c</PathWithFileName>
       <FilenameWithoutPath>fault_record.c</FilenameWithoutPath>
+      <RteFlg>0</RteFlg>
+      <bShared>0</bShared>
+    </File>
+    <File>
+      <GroupNumber>5</GroupNumber>
+      <FileNumber>106</FileNumber>
+      <FileType>1</FileType>
+      <tvExp>0</tvExp>
+      <tvExpOptDlg>0</tvExpOptDlg>
+      <bDave2>0</bDave2>
+      <PathWithFileName>../APP/functions/tools_motion_app.c</PathWithFileName>
+      <FilenameWithoutPath>tools_motion_app.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>

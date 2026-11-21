@@ -1,9 +1,43 @@
-/* Low-overhead sequencer: notes store hardware ARR values (not Hz).
- * Only one note transition per coroutine pass; TIM3 CH4 generates PWM in hardware.
- * Delays are timestamp comparisons, never HAL_Delay or busy waiting.
+/* PB10A base beep service: local TIM3_CH4/PB1 PWM implementation
+ * followed by a nonblocking melody queue and tone sequencer.
+ * Notes contain ARR values, not Hz; no software waveform or busy wait.
  */
-#include "beep_algo.h"
-#include "beep_hw.h"
+#include "beep_service.h"
+
+/********************** Hardware PWM backend ***********************/
+/* The dedicated beep_hw module has been merged here. Only this
+ * service owns the TIM3 PWM channel; all hardware helpers are private.
+ * TIM3=64 MHz, PSC=63 => 1 MHz time base. */
+#include "tim.h"
+static uint8_t s_beep_pwm_running;
+static void beep_hw_init(void) {
+    s_beep_pwm_running=0u;
+    __HAL_TIM_SET_PRESCALER(&htim3,63u);
+    __HAL_TIM_SET_AUTORELOAD(&htim3,999u);
+    __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_4,0u);
+    __HAL_TIM_SET_COUNTER(&htim3,0u);
+    htim3.Instance->EGR=TIM_EGR_UG;
+}
+
+static void beep_hw_stop(void) {
+    __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_4,0u);
+    if(s_beep_pwm_running){(void)HAL_TIM_PWM_Stop(&htim3,TIM_CHANNEL_4);s_beep_pwm_running=0u;}
+}
+
+static void beep_hw_set_arr(uint16_t arr) {
+    if(arr==0u){beep_hw_stop();return;}
+    __HAL_TIM_SET_AUTORELOAD(&htim3,arr);
+    __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_4,((uint32_t)arr+1u)/2u);
+    __HAL_TIM_SET_COUNTER(&htim3,0u);
+    htim3.Instance->EGR=TIM_EGR_UG;
+    if(!s_beep_pwm_running) {
+        if(HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_4)==HAL_OK)s_beep_pwm_running=1u;
+        else beep_hw_stop();
+    }
+}
+
+
+/********************** Cooperative sound queue ********************/
 
 static const beep_note_t s_key_sound[] = {
     {BEEP_ARR_HZ(2700u),100u}, BEEP_END

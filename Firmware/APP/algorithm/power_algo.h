@@ -32,9 +32,9 @@ pm_hook_result_t PowerAlgo_BackgroundResume(void);
 pm_hook_result_t PowerAlgo_BackgroundSuspend(void);
 void PowerAlgo_BackgroundAbort(void);
 /* ADC_RTC_AuxAThread alone owns ADC calibration and DMA sampling.
- * Four four-channel conversions, separated by 80 ms per 500 ms burst,
- * are averaged as raw ADC codes before voltage/temperature scaling. */
-#define POWER_ADC_AVERAGE_SAMPLES 4u
+ * Sixteen four-channel conversions, separated by 25 ms per 500 ms
+ * burst, are averaged as raw ADC codes before voltage/temperature scaling. */
+#define POWER_ADC_AVERAGE_SAMPLES 16u
 void PowerAlgo_AdcInit(void);
 void PowerAlgo_AdcBatchBegin(void);
 uint8_t PowerAlgo_AdcIsSuspended(void);

@@ -26,7 +26,8 @@ them.
   across MCU reset while SRAM has power, **not** across total power loss.
   Both applications release their distinct PM/rotation lock on leave.
 
-Shared/system services such as RTC calendar editing remain in `APP/services/`.
+Shared foundation services such as RTC calendar editing and the buzzer
+are provided by `APP/framework/`; device logic resides in `APP/algorithm/`.
 For new MiaoUI applications, register their callbacks/pages in `ui_conf.c`
 and their sources in the Keil project. Do not put them in CubeMX-managed
 folders.

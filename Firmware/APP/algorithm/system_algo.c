@@ -2,7 +2,7 @@
  * Hardware: TIM3_CH4/PB1 buzzer; Cortex-M0+ NVIC reset, no heater hook.
  */
 #include "system_algo.h"
-#include "beep_algo.h"
+#include "beep_service.h"
 #include "power_algo.h"
 #include "main.h"
 #include "core/ui.h"

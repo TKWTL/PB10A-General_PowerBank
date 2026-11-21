@@ -9,8 +9,7 @@
 #include "millis.h"
 #include "i2c.h"
 #include "time_service.h"
-#include "time_algo.h"
-#include "beep_algo.h"
+#include "beep_service.h"
 #include "system_algo.h"
 #include "sc7a20_algo.h"
 #include "mmc5603_algo.h"
@@ -71,12 +70,13 @@ THRD_DECLARE(SystemServiceThread) {
     }
     THRD_END;
 }
-/* Collar-Radio-style ADC averaging without blocking the scheduler:
- * four independent four-rank DMA scans, 80 ms apart, in each 500 ms
- * cycle. The ADC IRQ only signals completion; PowerAlgo publishes the
- * raw-channel averages after all four scans succeed. RTC/Aux-A remain
- * serviced once per cycle. No CubeMX change or DMA reconfiguration. */
-#define ADC_SCAN_GAP_MS 80u
+/* Collar-Radio-style software mean: 16 independent four-rank ADC DMA
+ * scans per 500 ms period, with 25 ms cooperative delays between
+ * completed scans (15 gaps = 375 ms nominal, leaving margin before
+ * the next 500 ms deadline). No new DMA timeout/retry machinery.
+ * The ADC IRQ signals completion; the 16 means are published as one
+ * snapshot while RTC/Aux-A retain their existing 500 ms cadence. */
+#define ADC_SCAN_GAP_MS 25u
 static uint8_t s_adc_scan_index; /* persistent: protothreads are stackless */
 static uint32_t s_adc_cycle_at;
 THRD_DECLARE(ADC_RTC_AuxAThread) {
@@ -99,7 +99,7 @@ THRD_DECLARE(ADC_RTC_AuxAThread) {
         PowerAlgo_AuxA_Service();
         System_Poll();
         /* Preserve the original 500 ms period from burst START,
-         * rather than adding 500 ms after the four spaced scans. */
+         * rather than adding 500 ms after the 16 spaced scans. */
         THRD_UNTIL((uint32_t)(Millis()-s_adc_cycle_at)>=500u);
     }
     THRD_END;

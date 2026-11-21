@@ -166,21 +166,19 @@ void PowerAlgo_BackgroundAbort(void) {
 
 /************************* 附加 A 口与 ADC1 DMA *************************/
 /* ADC rank order: PA0 current, PA5 divided voltage, die temperature,
- * VREFINT. Collar-Radio-style averaging: four spaced IRQ-backed DMA
+ * VREFINT. Collar-Radio-style averaging: sixteen spaced IRQ-backed DMA
  * scans per 500 ms, mean raw values before conversions to physical
- * units; a partial or failed cycle must not publish any output. */
-#define POWER_ADC_TIMEOUT_MS 50u
+ * units; no extra DMA timeout/retry layer is introduced. */
 #define AUX_A_VDIV_HIGH 680u
 #define AUX_A_VDIV_LOW  220u
 #define AUX_A_CURRENT_MV_PER_A 500u
 
 static uint16_t s_dma[4] __attribute__((aligned(4)));
-static uint32_t s_adc_accumulator[4]; /* four 12-bit ADC values per rank */
+static uint32_t s_adc_accumulator[4]; /* 16 * 4095 per rank fits uint32_t */
 static uint8_t s_adc_sample_count;
 static volatile uint8_t s_transfer_result; /* 0 pending, 1 done, 2 error */
 static uint8_t s_active,s_suspended,s_adc_initialized;
 static uint8_t s_aux_inserted,s_aux_enabled,s_system_adc_valid;
-static uint32_t s_started_at;
 static int s_aux_voltage_mv,s_aux_current_ma;
 static int s_vdda_mv,s_die_temp_c10;
 static ui_item_t s_aux_voltage_item,s_aux_current_item;
@@ -245,7 +243,6 @@ uint8_t PowerAlgo_AdcBeginScan(void) {
     if(s_suspended || !s_adc_initialized || s_active)return 0u;
     s_transfer_result=0u;
     s_active=1u; /* Set before HAL start: IRQ completion can be immediate. */
-    s_started_at=Millis();
     if(HAL_ADC_Start_DMA(&hadc1,(uint32_t *)(void *)s_dma,4u)!=HAL_OK) {
         s_active=0u;
         s_adc_sample_count=0u;
@@ -258,8 +255,8 @@ uint8_t PowerAlgo_AdcBeginScan(void) {
 }
 
 /* Each IRQ-backed DMA scan contributes four raw channels. Publish
- * calibrated results ONLY when all four spaced scans have succeeded.
- * A missing ADC completion, VREFINT zero or timeout discards the batch. */
+ * calibrated results ONLY after all 16 scans have completed.
+ * No timeout or retry is needed for this on-chip ADC DMA path. */
 uint8_t PowerAlgo_AdcScanSettled(void) {
     uint32_t pin_voltage_mv,pin_current_mv;
     uint16_t avg[4];
@@ -267,8 +264,7 @@ uint8_t PowerAlgo_AdcScanSettled(void) {
     uint8_t i,result;
     if(s_suspended || !s_active)return 1u;
     result=s_transfer_result;
-    if(result==0u && (uint32_t)(Millis()-s_started_at)<POWER_ADC_TIMEOUT_MS)
-        return 0u;
+    if(result==0u)return 0u;
     s_active=0u;
     if(result!=1u || s_dma[3]==0u) {
         (void)HAL_ADC_Stop_DMA(&hadc1);

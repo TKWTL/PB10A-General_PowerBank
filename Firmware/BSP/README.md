@@ -4,14 +4,14 @@
 
 典型模块：
 
-- `oled.c/.h`：显示屏驱动与几何绘制（具体控制器时序可下沉到 `Peripheral/`）
+- `oled.c/.h`：显示屏驱动与几何绘制（具体控制器时序由本层驱动封装）
 - `key.c/.h`：按键扫描、消抖、长按/组合键事件
-- `buzzer.c/.h`：蜂鸣器与提示音
+- `APP/framework/beep_service.c/.h`：TIM3 PWM 蜂鸣器与提示音队列（不再保留独立 `beep_hw` 文件）
 - `console.c/.h`：调试串口、命令解析（CLI）
 
 规则：
 
-- 只依赖 `Peripheral/` 与 `Core/`；不写业务策略，不直接决定设备状态机。
+- 通过 `Core/` HAL/LL 实现寄存器级操作，并向上提供设备驱动 API；不直接决定应用业务策略。
 - 引脚号、有效电平、上拉方式等板级差异必须集中在本层，不散落到 `APP/`。
 - 新增模块后必须在 Keil 工程里加入 `Application/BSP` 分组，并把本目录加入 `IncludePath`。
 

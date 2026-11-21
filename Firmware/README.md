@@ -5,18 +5,18 @@
 ## 分层与依赖
 
 ```
-APP  ──►  BSP  ──►  Peripheral  ──►  Core / Drivers
-应用逻辑   板级器件   外接芯片驱动     CubeMX 生成层 + ST 库
+APP (framework / algorithm / functions)
+       └──► BSP  ──► Core / Drivers
+            设备驱动   CubeMX 生成层 + ST 库
 ```
 
 | 目录 | 放什么 | 不放什么 |
 |---|---|---|
 | `Core/` | CubeMX 生成的外设初始化、中断向量和时钟；I²C HAL 适配 API 与回调在对应 `USER CODE BEGIN/END` 区 | 应用业务策略；修改 CubeMX 管理的初始化段 |
 | `Drivers/` | STM32G0xx HAL/LL 与 CMSIS 头文件 | 任何手写代码 |
-| `APP/framework/` | 系统启动流程、时钟/时间基准、事件/任务调度、低功耗状态机、看门狗 | 具体外设寄存器操作 |
-| `APP/algorithm/` | 协议解析、滤波与标定、状态估计、参数换算等纯计算模块（尽量不依赖 HAL） | 直接读写 GPIO |
+| `APP/framework/` | 基础系统服务：RTC 时间/日历编辑、蜂鸣器 PWM/提示音队列、低功耗与调度框架 | 页面级功能逻辑 |
+| `APP/algorithm/` | 设备状态机、ADC/功率/FM/传感器算法、配置与故障记录；纯计算部分尽量独立于 HAL | 与页面直接耦合的 UI 绘图 |
 | `BSP/` | 板载人机与调试接口的板级封装：OLED、按键、蜂鸣器、调试串口/CLI | 外接功能芯片协议 |
-| `Peripheral/` | 外接功能芯片的寄存器级驱动：SW6306V、BM3451、INA199 等，只依赖 HAL | 业务策略、UI |
 | `MDK-ARM/` | Keil 工程、启动文件、RTE、调试器配置 | 源码 |
 
 ## 约定
@@ -53,3 +53,9 @@ and SW6306-style starred comment dividers.
 ## 第三方组件与 AI 辅助声明
 
 第三方库、字体的原作者、仓库内许可证位置，以及 AI 辅助开发/调试/文档说明统一见 **[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)**。其中包括 MiaoUI、u8g2、Fusion Pixel Font / Ark Pixel Font、Protothreads 1.4、STM32Cube HAL/LL 和 CMSIS；AI 辅助包括 OpenAI ChatGPT 与 DeepSeek v4.1f。各上游作品仍保留原许可证与版权声明。
+
+### 2026-11 目录整理与 ADC 时序
+
+`APP/services/` 已撤销：`beep_hw` 与 `beep_algo` 合入 `APP/framework/beep_service.c/.h`；`time_algo` 与 `time_service` 合入 `APP/framework/time_service.c/.h`，对外 `Time_*`、`RTC_*`、`beep_*` 接口保持不变。其余设备/故障/系统逻辑移至 `APP/algorithm/`，`Peripheral/` 的旧占位 README 也已移除。Keil 的 `.uvprojx` 与 `.uvoptx` 源文件路径和 IncludePath 已同步。
+
+ADC 保持每 **500 ms** 发布一组数据，但组内由原来的 4 次扩展至 **16 次**四通道 DMA 扫描，扫描间隔 **25 ms**（15 次共 375 ms），最后计算 16 次原始值均值；不加入新的 DMA 超时或失败恢复流程。外设配置由现有 CubeMX 工程保持。

@@ -337,7 +337,7 @@
               <MiscControls />
               <Define>USE_FULL_LL_DRIVER,USE_HAL_DRIVER,STM32G070xx</Define>
               <Undefine />
-              <IncludePath>../Core/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G0xx/Include;../Drivers/CMSIS/Include;../APP;../Scheduler;../Scheduler/pt1.4;../APP/framework;../APP/services;../APP/functions;../APP/MiaoUI;../BSP/Display;../BSP/Time;../BSP/u8g2;../BSP/SW6306;../BSP/SC7A20;../BSP/RDA5807;../BSP/BMP180;../BSP/MMC5603;../BSP/Buttons</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G0xx/Include;../Drivers/CMSIS/Include;../APP;../Scheduler;../Scheduler/pt1.4;../APP/framework;../APP/algorithm;../APP/functions;../APP/MiaoUI;../BSP/Display;../BSP/Time;../BSP/u8g2;../BSP/SW6306;../BSP/SC7A20;../BSP/RDA5807;../BSP/BMP180;../BSP/MMC5603;../BSP/Buttons</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -783,7 +783,7 @@
             <File>
               <FileName>time_service.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../APP/services/time_service.c</FilePath>
+              <FilePath>../APP/framework/time_service.c</FilePath>
             </File>
             <File>
               <FileName>i2c_scanner.c</FileName>
@@ -796,24 +796,14 @@
               <FilePath>../APP/i18n.c</FilePath>
             </File>
             <File>
-              <FileName>beep_algo.c</FileName>
+              <FileName>beep_service.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../APP/services/beep_algo.c</FilePath>
-            </File>
-            <File>
-              <FileName>beep_hw.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../APP/services/beep_hw.c</FilePath>
+              <FilePath>../APP/framework/beep_service.c</FilePath>
             </File>
             <File>
               <FileName>system_algo.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../APP/services/system_algo.c</FilePath>
-            </File>
-            <File>
-              <FileName>time_algo.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../APP/services/time_algo.c</FilePath>
+              <FilePath>../APP/algorithm/system_algo.c</FilePath>
             </File>
             <File>
               <FileName>powerbank_app.c</FileName>
@@ -833,32 +823,32 @@
             <File>
               <FileName>power_algo.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../APP/services/power_algo.c</FilePath>
+              <FilePath>../APP/algorithm/power_algo.c</FilePath>
             </File>
             <File>
               <FileName>sc7a20_algo.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../APP/services/sc7a20_algo.c</FilePath>
+              <FilePath>../APP/algorithm/sc7a20_algo.c</FilePath>
             </File>
             <File>
               <FileName>mmc5603_algo.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../APP/services/mmc5603_algo.c</FilePath>
+              <FilePath>../APP/algorithm/mmc5603_algo.c</FilePath>
             </File>
             <File>
               <FileName>bmp180_algo.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../APP/services/bmp180_algo.c</FilePath>
+              <FilePath>../APP/algorithm/bmp180_algo.c</FilePath>
             </File>
             <File>
               <FileName>radio_algo.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../APP/services/radio_algo.c</FilePath>
+              <FilePath>../APP/algorithm/radio_algo.c</FilePath>
             </File>
             <File>
               <FileName>fault_record.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../APP/services/fault_record.c</FilePath>
+              <FilePath>../APP/algorithm/fault_record.c</FilePath>
             </File>
           </Files>
         </Group>

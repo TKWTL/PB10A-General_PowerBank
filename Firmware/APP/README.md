@@ -4,14 +4,14 @@
 
 | 目录 | 放什么 |
 |---|---|
-| `framework/` | 系统启动流程、时间基准/Uptime、事件或任务调度、低功耗状态机、看门狗、日志 |
-| `algorithm/` | 协议解析、滤波与标定、状态估计、参数换算等纯计算模块 |
+| `framework/` | 系统级基础服务：`beep_service`（TIM3 PWM + 队列）、`time_service`（RTC 时间与日历编辑）、低功耗框架 |
+| `algorithm/` | 设备服务与算法：ADC/功率、FM、传感器、系统配置、故障记录以及标定与滤波 |
 
 规则：
 
-- 只调用 `BSP/`、`Peripheral/` 暴露的接口，不包含 HAL 头文件之外的外设细节；**`algorithm/` 尽量不依赖 HAL，保证可主机侧单测**。
+- 通过 `BSP/` 设备驱动与 `Core/` HAL 适配访问硬件；`algorithm/` 允许在设备服务边界调用驱动和 HAL，但应把可以独立测试的计算尽量与硬件交互隔离。
 - 新增模块 `xxx.c/.h` 后必须在 Keil 工程里加入 `Application/APP` 分组。
-- 业务状态机与硬件时序分开：时序在 `Peripheral/`，策略在 `APP/`。
+- 基础系统服务集中在 `framework/`，可复用的设备算法与状态机集中在 `algorithm/`；不再使用空的 `Peripheral/` 和 `APP/services/` 目录。
 
 
 ### PB10A low-power framework
@@ -21,7 +21,7 @@ The PB02B/IH01A PM controller supports cooperative device callbacks:
 only after every suspend operation finishes; errors cancel sleep and resume
 devices. Default idle timeout is 60 s, `pm_api_set_sleep_timeout(0)`
 disables it, and keypad EXTI can wake STOP1. External nodes reside in
-`APP/services/power_algo.c`, `sc7a20_algo.c`, `mmc5603_algo.c`, `bmp180_algo.c`, `radio_algo.c`;
+`APP/algorithm/power_algo.c`, `sc7a20_algo.c`, `mmc5603_algo.c`, `bmp180_algo.c`, `radio_algo.c`;
 OLED and STM32 platform nodes reside in `pm_device_builtin.c`.
 Power sequencing, callback order and hardware caveats are recorded in
 [`Docs/Debug/2026-11-19_pm_callbacks.md`](../../Docs/Debug/2026-11-19_pm_callbacks.md).
@@ -35,14 +35,14 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 
 ### Application versus service separation
 
-`APP/functions/` contains installable-style user applications such as the I2C scanner, while `APP/services/` contains shared system services such as the RTC time editor. The application-layer 1 ms clock now uses the independent `BSP/Time/millis.c` counter, incremented from the SysTick IRQ user region. coroOS, PM, UI keys, OLED timeout, scanning and BSP device-driver delays read this clock, independently of HAL's `uwTick`. `Millis_Delay()` requires enabled SysTick interrupts and must not execute during STOP1.
+`APP/functions/` contains user-facing MiaoUI apps such as the I2C scanner. `APP/framework/time_service.c` owns RTC timekeeping and calendar editing; `APP/framework/beep_service.c` owns the PWM buzzer backend and asynchronous tone queue. Device algorithms, PM hooks and fault logging reside in `APP/algorithm/`. The application-layer 1 ms clock now uses the independent `BSP/Time/millis.c` counter, incremented from the SysTick IRQ user region. coroOS, PM, UI keys, OLED timeout, scanning and BSP device-driver delays read this clock, independently of HAL's `uwTick`. `Millis_Delay()` requires enabled SysTick interrupts and must not execute during STOP1.
 
 
 ## Architecture (2026-11)
 
 - `APP/app_task.c` registers coroOS tasks and polls shared services
 - `Scheduler/coroOS.*` now wraps the actual Protothreads 1.4 (`Scheduler/pt1.4/pt.h`, `pt-sem.h`, `lc-switch.h`), as in Handheld-Fan; ten separate cooperative tasks are registered (not FreeRTOS, no priorities)
-- `APP/services/*_algo.c` holds reusable beep, RTC and system algorithms; `time_service.c` retains the MiaoUI calendar editor
+- `APP/framework/beep_service.c` consolidates the former beep hardware PWM and nonblocking melody sequencer; `APP/framework/time_service.c` consolidates RTC calendar/uptime calculations with the MiaoUI time editor. Remaining device logic, fault recorder and system algorithms reside in `APP/algorithm/`
 - `APP/functions/` hosts independent user-facing MiaoUI applications. Powerbank displays cached SW6306 voltage, current, percentage and protocol; Radio is forced low-power at boot and starts only when its WORD page is entered (or kept running in explicit background ON mode)
 - `APP/i18n.c/h` defines a shared localization interface and placeholder English-only catalog
 - `BSP/BMP180` ports Collar-Radio compensation code with Cortex-M0+ safe endian calibration; `BSP/MMC5603` supports register I/O, product ID and low-power configuration
@@ -61,14 +61,15 @@ been removed. Startup now always runs the standard MiaoUI/coroOS
 scheduler; Radio starts only when its menu application is entered.
 
 The fifth coroOS task, `ADC_RTC_AuxAThread` in `APP/app_task.c`,
-owns ADC calibration before its `for(;;)`, **four** sequential
-four-rank DMA scans separated by **80 ms**, HAL IRQ completion waiting,
+owns ADC calibration before its `for(;;)`, **16** sequential
+four-rank DMA scans separated by **25 ms**, HAL IRQ completion waiting,
 Aux-A status/enable management and RTC refresh. A batch starts every
 **500 ms** (start-to-start), with the RTC read once per batch.
 `PowerAlgo_AdcBatchBegin()` clears the four-channel raw accumulators;
 each successful DMA scan contributes to the batch, and only a complete
-four-scan mean is converted to mV/mA/VDDA/die temperature. Incomplete
-or failed batches invalidate telemetry; the next batch starts clean.
+16-scan mean is converted to mV/mA/VDDA/die temperature. The existing
+PM suspend and HAL error paths are retained; the scan does not use a
+new software DMA timeout/retry layer.
 The STM32CubeMX ADC/DMA setup is unchanged.
 `RTC_IsEditing()` prevents the time editor's pending changes from being
 overwritten; the RTC setter remains a normal service function.
@@ -253,7 +254,7 @@ Radio page is not visible.
 
 ### Fatal exception snapshot and reset
 
-`APP/services/fault_record.c` defines `g_fault_record` in the 256-byte
+`APP/algorithm/fault_record.c` defines `g_fault_record` in the 256-byte
 `.noinit` SRAM region reserved by
 `MDK-ARM/Ld/PB10A-General_PowerBank.sct`. This also gives the previously
 empty `RW_NOINIT` region an actual input section.
@@ -292,7 +293,7 @@ parity bits. No option bytes have been changed by this commit.
 
 - BSP/SC7A20, BSP/MMC5603 and BSP/BMP180 own register definitions,
   byte decoding and compensation; Core/I2C retains HAL IRQ transfers.
-- APP/services/sc7a20_algo, mmc5603_algo and bmp180_algo own asynchronous
+- APP/algorithm/sc7a20_algo, mmc5603_algo and bmp180_algo own asynchronous
   initialization, sampling cadence, cached results and PM preparation.
   Their I2C buffers and completion flags persist across scheduler calls.
 - APP/MiaoUI/ui_conf.c only binds cached telemetry to Statistics/Sensors;
@@ -460,7 +461,7 @@ The active FM call path is now:
 - `BSP/RDA5807/rda5807m.c`: `RDA5807_Async*` operation-specific
   register commands, fixed-size serialized write queue, IRQ-backed
   I2C status reads, completion and mirror register maintenance.
-- `APP/services/radio_algo.c`: 5 ms coroOS state machine, startup,
+- `APP/algorithm/radio_algo.c`: 5 ms coroOS state machine, startup,
   stop, FM seek/tune, sorted presets, mode/power policy, PM hook,
   RAM-only `radio_snapshot_t` and app command queue.
 - `APP/functions/radio_app.c`: only drawing, UI animation, user
@@ -713,20 +714,23 @@ previous drawing color is also restored. Black/white horizon and
 zenith visual behavior are unchanged.
 When the two zenith XOR discs precisely overlap they cancel, by design.
 
-### ADC four-scan averaging (2026-11-21)
+### ADC 16-scan averaging (2026-11-21)
 
 Modeled on Collar-Radio's `Application/Algorithms/system_statistic.c`
-(`OVERSAMPLE_RATE=4`), PB10A now runs four ADC1 DMA scans per 500 ms
-measurement cycle with 80 ms between scan starts (plus short asynchronous
-conversion completion latency). Each scan reads PA0 current, PA5
-voltage, die temperature and VREFINT in the original rank order.
-The four raw codes for each rank are accumulated as `uint32_t`;
+(`OVERSAMPLE_RATE=4` in the Collar-Radio source), PB10A now runs
+**16** ADC1 DMA scans per 500 ms measurement cycle, separated by
+25 ms of cooperative delay after the previous scan completes.
+The 15 inter-scan delays consume about 375 ms, leaving processing
+margin before the next 500 ms start. Each scan reads PA0 current,
+PA5 voltage, die temperature and VREFINT in the original rank order.
+The 16 raw codes for each rank are accumulated as `uint32_t`;
 the nearest-integer mean is taken **before** the VREFINT calibration
 and the voltage/current/temperature conversions, so all derived values
-use a single averaged VDDA. A batch is published only when four
-complete scans succeed; DMA error, timeout, missing VREFINT or PM
-suspend invalidate a partial batch. All scan waits yield via
-Protothreads to the remaining coroOS tasks. Sampling is software
+use a single averaged VDDA. A batch is published only after 16
+complete scans. The former 50 ms software DMA timeout has been
+removed per project policy; existing HAL error and PM suspend paths
+are retained, with no additional DMA failure/retry machinery.
+All scan waits yield via Protothreads to other coroOS tasks. Sampling is software
 triggered as before, with no CubeMX initialization changes.
 
 This is software mean filtering rather than MCU ADC hardware

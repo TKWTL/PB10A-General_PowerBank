@@ -20,16 +20,15 @@
 | `Firmware/PB10A-General_PowerBank.ioc` | CubeMX 工程定义，**外设/引脚配置的唯一真源** |
 | `Firmware/Core/Inc`、`Core/Src` | CubeMX 生成层；只允许改 `USER CODE BEGIN/END` 段内的代码 |
 | `Firmware/Drivers/` | ST HAL/LL + CMSIS，第三方代码，不手改 |
-| `Firmware/APP/` | 应用层：`framework/`（系统、时间、事件、低功耗）、`algorithm/`（协议、滤波、参数换算） |
+| `Firmware/APP/` | 应用层：`framework/`（基础时间、蜂鸣器与低功耗服务）、`algorithm/`（设备状态机/传感器/功率算法）、`functions/`（应用页面） |
 | `Firmware/BSP/` | 板级支持：OLED、按键、蜂鸣器、调试串口等板载人机与调试接口 |
-| `Firmware/Peripheral/` | 外接功能芯片的寄存器级驱动（SW6306V、BM3451、INA199 等），不含业务逻辑 |
 | `Firmware/MDK-ARM/` | Keil 工程、启动文件、RTE、调试器配置；产物输出到 `Objects/`、`Listings/` |
 | `Docs/` | 实验报告、协议与接口说明、测量原始数据 |
 | `Hardware/` | 原理图、PCB、BOM、结构件 |
 | `Images/` | `Assembly/` 装配、`Product/` 成品、`Testing/` 测试波形与截图 |
 | `相关数据手册/` | 关键器件数据手册，按器件类别分目录；已入库供远程 agent 查阅，版权属原厂，发布前须从历史移除（见 `Docs/RELEASE.md`） |
 
-分层依赖方向固定为 `APP → BSP → Peripheral → Core/Drivers`，即下层不得反向引用上层，`Core`、`Drivers` 不得包含任何业务头文件。
+分层以 `APP → BSP → Core/Drivers` 为主要方向；外接设备寄存器驱动位于 `BSP/`，系统基础服务位于 `APP/framework/`，设备算法位于 `APP/algorithm/`。`Core` 与 `Drivers` 保留生成代码和厂商库，避免引入应用业务依赖。
 
 ## 快速开始
 
