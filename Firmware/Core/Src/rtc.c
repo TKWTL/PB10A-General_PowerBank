@@ -122,7 +122,7 @@ void MX_RTC_Init(void)
 
   /** Enable the WakeUp
   */
-  if (HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, 59, RTC_WAKEUPCLOCK_CK_SPRE_16BITS) != HAL_OK)
+  if (HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, 1799, RTC_WAKEUPCLOCK_CK_SPRE_16BITS) != HAL_OK)
   {
     Error_Handler();
   }
@@ -134,7 +134,7 @@ void MX_RTC_Init(void)
    * Actual alarm scheduling will re-arm them through HAL_RTC_SetAlarm_IT. */
   (void)HAL_RTC_DeactivateAlarm(&hrtc, RTC_ALARM_A);
   (void)HAL_RTC_DeactivateAlarm(&hrtc, RTC_ALARM_B);
-  /* The 60 s WUT is armed by the PM only when background FM is active.
+  /* The 30-minute WUT is armed by PM only for inserted-headset FM.
    * Never leave CubeMX's startup WUT enabled while the UI is in RUN. */
   (void)HAL_RTCEx_DeactivateWakeUpTimer(&hrtc);
   /* USER CODE END RTC_Init 2 */

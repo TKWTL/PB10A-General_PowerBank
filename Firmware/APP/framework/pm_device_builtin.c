@@ -10,9 +10,8 @@
 #include "pm_api.h"
 #include "rtc.h"
 #define OLED_PM_TIMEOUT_MS 500u
-/* TEMPORARY debug period: 60 s; release target is 30 min = 1800 s.
- * RTC ck_spre is 1 Hz (LSE 32768 / (128 * 256)). */
-#define RADIO_WUT_SECONDS 60u
+/* Production Radio battery inspection period: 30 minutes from 1Hz ck_spre. */
+#define RADIO_WUT_SECONDS 1800u
 void SystemClock_Config(void);
 static uint32_t adc_internal,oled_started;
 static uint8_t suspended,oled_target,oled_valid,s_radio_wut_armed;
@@ -75,8 +74,8 @@ static void stm32_deepsleep(void *ctx) {
         HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON,PWR_STOPENTRY_WFI);
     SystemClock_Config();
     if(suspended)stm32_restore();
-    /* Both a user wake and a 60-second WUT wake return to RUN in this
-     * bring-up version. Deactivate WUT before the next sleep sequence. */
+    /* Stop the one-shot WUT after any STOP1 exit. PM decides whether the
+     * wake goes to RUN or to a selective UI_OFF background inspection. */
     radio_wut_disarm();
 }
 

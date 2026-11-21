@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include "ui_conf.h"
 #include "coroOS.h"
+#include "pm_device.h"
 /* SW6306 plus auxiliary A-port PA6 and ADC1 DMA telemetry. */
 /* Task-facing SW6306 monitor, based on PB02B 100ms staggered LOAD.
  * The displayed BUS voltage/current is the shared SW6306 BUS ADC, not
@@ -25,6 +26,11 @@ void PowerAlgo_GetMonitor(power_monitor_t *out);
  * A result is consumed once; voltage is millivolts of the 5S pack. */
 void PowerAlgo_RequestRadioBatteryCheck(void);
 uint8_t PowerAlgo_TakeRadioBatteryCheck(uint16_t *vbat_mv,uint8_t *capacity_pct);
+/* Background WUT path: wake SW6306 only, never OLED or other nodes.
+ * Reuses the SW6306 PM hooks and the existing single SW6306 coroOS actor. */
+pm_hook_result_t PowerAlgo_BackgroundResume(void);
+pm_hook_result_t PowerAlgo_BackgroundSuspend(void);
+void PowerAlgo_BackgroundAbort(void);
 /* ADC_RTC_AuxAThread owns ADC calibration, DMA sampling and Aux-A updates. */
 void PowerAlgo_AdcInit(void);
 uint8_t PowerAlgo_AdcIsSuspended(void);

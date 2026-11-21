@@ -120,6 +120,18 @@ void pm_controller_notify_wake(pm_controller_t *ctx) {
     ctx->wake_latched = 1;
 }
 
+void pm_controller_enter_background_check(pm_controller_t *ctx) {
+    if(!ctx)return;
+    /* STOP1 has physically returned; resume_all() was deliberately
+     * bypassed. Complete only selective background device work. */
+    ctx->state=PM_STATE_UI_OFF;
+    ctx->ui_active=0u;
+    ctx->wake_latched=0u;
+    ctx->post_hold_ticks=0u;
+    ctx->transition_pending=0u;
+    ctx->resuming=0u;
+}
+
 uint8_t pm_controller_is_ui_blocked(pm_controller_t *ctx) {
     if (ctx == 0) {
         return 0;

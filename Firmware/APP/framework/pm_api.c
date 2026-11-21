@@ -17,6 +17,15 @@ static volatile uint8_t s_rtc_wakeup_event;
 static uint8_t s_app_events; /* PM-dispatched sources for foreground services */
 static uint8_t s_refresh_request,s_wake_guard;
 static uint32_t s_wake_at;
+/* RTC-only background wake: CPU/clock/tick active, but MiaoUI and OLED
+ * remain in UI_OFF. Only SW6306 and RDA5807 are resumed selectively. */
+typedef enum {
+    PM_BG_NONE=0,PM_BG_START,PM_BG_SW_RESUME,PM_BG_RADIO,
+    PM_BG_SW_SUSPEND
+} pm_bg_stage_t;
+static pm_bg_stage_t s_bg_stage;
+static uint32_t s_bg_started_at;
+#define PM_BG_MAX_MS 20000u
 void pm_api_init(void) {
     if(s_ready)return;
     pm_controller_init(&s_ctrl,PM_DEFAULT_TIMEOUT_MS);
@@ -29,8 +38,8 @@ void pm_api_refresh_idle(void) {
     if(!pm_sleep_timer_is_forced())s_refresh_request=1u;
 }
 
-/* The callback runs in RTC_TAMP_IRQn; it must not call the PM FSM or I2C.
- * In this 60-second debug build a WUT wake intentionally returns to RUN. */
+/* RTC_TAMP interrupt callback: latch WUT only. The 30-minute
+ * background check is dispatched in the PM thread, without OLED power-up. */
 void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *rtc) {
     if(rtc && rtc->Instance==RTC)s_rtc_wakeup_event=1u;
 }
@@ -81,6 +90,59 @@ uint8_t pm_api_is_sleeping(void)
 {return s_ready && s_ctrl.state!=PM_STATE_RUN;}
 uint8_t pm_api_is_unstable_wake(void)
 {return s_wake_guard && (uint32_t)(Millis()-s_wake_at)<200u;}
+static void pm_background_abort_to_run(void) {
+    /* User activity or inspection failure: normal reverse-order PM
+     * resume handles all devices. A running SW child finishes before
+     * its device's resume hook can claim the shared I2C bus. */
+    PowerAlgo_BackgroundAbort();
+    RadioAlgo_AbortBackgroundInspection();
+    s_bg_stage=PM_BG_NONE;
+    pm_controller_notify_wake(&s_ctrl);
+    pm_controller_mark_ui_active(&s_ctrl,1u);
+}
+static void pm_background_poll(void) {
+    pm_hook_result_t result;
+    if((uint32_t)(Millis()-s_bg_started_at)>PM_BG_MAX_MS) {
+        RadioAlgo_RequestFailSafeOff();
+        pm_background_abort_to_run();
+        /* Resume the full UI instead of silently sleeping without a
+         * successfully completed low-battery inspection. */
+        return;
+    }
+    switch(s_bg_stage) {
+    case PM_BG_START:
+        if(RadioAlgo_BackgroundInspectionNeedsBattery())
+            s_bg_stage=PM_BG_SW_RESUME;
+        else s_bg_stage=PM_BG_RADIO;
+        break;
+    case PM_BG_SW_RESUME:
+        result=PowerAlgo_BackgroundResume();
+        if(result==PM_HOOK_ERROR) {
+            RadioAlgo_RequestFailSafeOff();
+            pm_background_abort_to_run();
+        }
+        else if(result==PM_HOOK_DONE) {
+            RadioAlgo_RequestBatteryInspection();
+            s_bg_stage=PM_BG_RADIO;
+        }
+        break;
+    case PM_BG_RADIO:
+        if(RadioAlgo_BackgroundInspectionComplete())
+            s_bg_stage=PM_BG_SW_SUSPEND;
+        break;
+    case PM_BG_SW_SUSPEND:
+        result=PowerAlgo_BackgroundSuspend();
+        if(result==PM_HOOK_ERROR)pm_background_abort_to_run();
+        else if(result==PM_HOOK_DONE) {
+            RadioAlgo_EndBackgroundInspection();
+            s_bg_stage=PM_BG_NONE;
+            /* Resume the existing UI_OFF -> SLEEP_PREPARE -> STOP1
+             * policy on the next 50ms PM tick. No OLED resume occurred. */
+        }
+        break;
+    default:break;
+    }
+}
 void pm_api_poll(void) {
     pm_power_state_t previous,next;
     uint8_t events,rtc_wakeup;
@@ -95,6 +157,16 @@ void pm_api_poll(void) {
      * edge. Services receive the same sources after PM consumes them. */
     s_app_events|=events;
     __set_PRIMASK(primask);
+    if(s_bg_stage!=PM_BG_NONE) {
+        if(events)pm_background_abort_to_run();
+        else {
+            pm_background_poll();
+            if(s_bg_stage!=PM_BG_NONE)return;
+            /* If background work completed this tick, proceed through
+             * ordinary PM policy next tick to avoid a mixed transition. */
+            return;
+        }
+    }
     if(events) {
         /* Do not suppress a RUN key or plug-in as post-STOP input. */
         uint8_t waking=pm_controller_is_ui_blocked(&s_ctrl)?1u:0u;
@@ -127,11 +199,8 @@ void pm_api_poll(void) {
     if(previous!=PM_STATE_DEEPSLEEP && next==PM_STATE_DEEPSLEEP) {
         /* Registered STM32G070 node: STOP1 then restore clocks/tick/ADC. */
         pm_device_enter_deepsleep();
-        pm_controller_notify_wake(&s_ctrl);
-        pm_controller_mark_ui_active(&s_ctrl,1u);
-        pm_sleep_timer_clear_force();
-        s_forced=0u;
-        s_wake_guard=1u;s_wake_at=Millis();
+        /* STOP1 has ended physically, but the RTC-only path must not
+         * activate OLED or force the software state to RUN. */
         /* The platform has restored clocks and HAL Tick. Record the RTC
          * event separately from external activity so it does not imitate
          * a button press or post a UI navigation event. */
@@ -140,7 +209,20 @@ void pm_api_poll(void) {
         rtc_wakeup=s_rtc_wakeup_event;
         s_rtc_wakeup_event=0u;
         __set_PRIMASK(primask);
-        if(rtc_wakeup && RadioAlgo_BackgroundWakeNeeded())
-            RadioAlgo_RequestBatteryInspection();
+        if(rtc_wakeup && !pm_api_external_wake_pending()) {
+            /* WUT was armed only for ON/AUTO radio + inserted headset.
+             * Test the CURRENT headset level after resume: it can be
+             * unplugged while STOP1, with no rising-edge EXTI. */
+            s_bg_stage=PM_BG_START;
+            s_bg_started_at=Millis();
+            pm_controller_enter_background_check(&s_ctrl);
+            RadioAlgo_BeginBackgroundInspection();
+            return;
+        }
+        pm_controller_notify_wake(&s_ctrl);
+        pm_controller_mark_ui_active(&s_ctrl,1u);
+        pm_sleep_timer_clear_force();
+        s_forced=0u;
+        s_wake_guard=1u;s_wake_at=Millis();
     }
 }

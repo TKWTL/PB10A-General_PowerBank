@@ -12,6 +12,7 @@
 #include "i2c_scanner.h"
 #include "powerbank_app.h"
 #include "radio_app.h"
+#include "radio_algo.h"
 #include "system_algo.h"
 #include "power_algo.h"
 #include "sc7a20_algo.h"
@@ -135,6 +136,7 @@ void Create_MenuTree(ui_t *ui) {
             add_return(&s_sleep_wake,&s_settings,&s_sleep_wake_back,0);
             add_sleep_options(&s_sleep_wake);
             SC7A20Algo_AddWakeSettingsItems(&s_sleep_wake);
+            RadioAlgo_AddSleepWakeItems(&s_sleep_wake);
 
         AddPage("[System]",&s_sys,UI_PAGE_TEXT,&s_settings);
             add_return(&s_sys,&s_settings,&s_system_back,0);

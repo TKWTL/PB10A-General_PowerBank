@@ -1,6 +1,7 @@
 #ifndef PB10A_RADIO_ALGO_H
 #define PB10A_RADIO_ALGO_H
 #include <stdint.h>
+#include "ui_conf.h"
 
 /* Radio service is the sole owner of the RDA5807 async transport, FM
  * state machine and sorted station list. UI reads snapshots and posts
@@ -40,6 +41,16 @@ void RadioAlgo_Stop(void);     /* cooperative PM hook, enqueue only */
 /* ON-mode receiver may keep playing across STOP1. WUT checks use a fresh
  * SW6306 ADC + capacity snapshot from its existing owner coroutine. */
 uint8_t RadioAlgo_BackgroundWakeNeeded(void);
+/* Background inspection is owned by RadioAlgo; PM only orchestrates
+ * lightweight SW6306 resume/suspend. The display remains powered off. */
+void RadioAlgo_BeginBackgroundInspection(void);
+uint8_t RadioAlgo_BackgroundInspectionNeedsBattery(void);
 void RadioAlgo_RequestBatteryInspection(void);
+uint8_t RadioAlgo_BackgroundInspectionComplete(void);
+void RadioAlgo_AbortBackgroundInspection(void);
+void RadioAlgo_RequestFailSafeOff(void); /* PM requests; Radio coroutine owns state */
+void RadioAlgo_EndBackgroundInspection(void);
+void RadioAlgo_BackgroundResume(void);
+void RadioAlgo_AddSleepWakeItems(ui_page_t *page);
 uint8_t RadioAlgo_BootSleepAcknowledged(void);
 #endif

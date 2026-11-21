@@ -24,6 +24,7 @@ static uint8_t s_port_baseline_valid,s_previous_connections;
 /* Independent request/result mailbox, single owner: PowerAlgo_SW6306Thread. */
 static uint8_t s_radio_battery_check_request,s_radio_battery_check_result;
 static uint8_t s_radio_battery_adc_ok,s_radio_battery_pct;
+static uint8_t s_bg_radio_reads_allowed;
 static uint16_t s_radio_battery_mv;
 
 /* An insertion is a 0->1 transition in a successful live port snapshot.
@@ -145,6 +146,23 @@ static pm_hook_result_t sw_resume(void *ctx) {
 static const pm_device_node_t s_node={
     "sw6306",sw_prepare,sw_suspend,sw_resume,0,90u,0,0
 };
+pm_hook_result_t PowerAlgo_BackgroundResume(void) {
+    pm_hook_result_t result=sw_resume(0);
+    if(result==PM_HOOK_DONE)s_bg_radio_reads_allowed=1u;
+    return result;
+}
+pm_hook_result_t PowerAlgo_BackgroundSuspend(void) {
+    /* Stop starting new SW6306 transactions before checking for a
+     * completed actor. sw_suspend() itself waits for s_sw_owner_busy. */
+    s_bg_radio_reads_allowed=0u;
+    return sw_suspend(0);
+}
+void PowerAlgo_BackgroundAbort(void) {
+    s_bg_radio_reads_allowed=0u;
+    s_radio_battery_check_request=0u;
+    s_radio_battery_check_result=0u;
+}
+
 
 /************************* 附加 A 口与 ADC1 DMA *************************/
 /* ADC rank order: PA0 current, PA5 divided voltage, die temperature,
@@ -313,7 +331,8 @@ void PowerAlgo_AddStatisticsItems(ui_page_t *page) {
 char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
     THRD_BEGIN;
     for(;;) {
-        if(s_sw_low_power || pm_api_ui_should_block()) {
+        if(s_sw_low_power ||
+            (pm_api_ui_should_block() && !s_bg_radio_reads_allowed)) {
             THRD_DELAY(20u);
             continue;
         }
@@ -377,6 +396,12 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             continue;
         }
 
+        if(s_bg_radio_reads_allowed) {
+            /* No regular 5-phase scanner in UI_OFF. The inspection
+             * explicitly requests a fresh ADC + Capacity pair above. */
+            THRD_DELAY(20u);
+            continue;
+        }
         if(s_sw_phase==0u) {
             s_cycle_ok=1u;
             s_sw_owner_busy=1u;
@@ -487,6 +512,7 @@ void PowerAlgo_Init(void) {
     s_radio_battery_check_request=0u;
     s_radio_battery_check_result=0u;
     s_radio_battery_adc_ok=0u;
+    s_bg_radio_reads_allowed=0u;
     pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK,1u); /* fail closed until idle proven */
     (void)pm_device_register(&s_node);         /* SW6306 / order 90 */
     (void)pm_device_register(&s_power_adc_pm); /* SUB_EN + ADC / order 200 */

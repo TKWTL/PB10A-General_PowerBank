@@ -31,6 +31,9 @@ void pm_controller_refresh_idle(pm_controller_t *ctx);
 void pm_controller_pause_idle(pm_controller_t *ctx);
 void pm_controller_resume_idle(pm_controller_t *ctx);
 void pm_controller_notify_wake(pm_controller_t *ctx);
+/* STOP1 -> UI_OFF: hardware clocks have resumed, but OLED/UI remain off.
+ * Caller completes selective device work before normal policy resumes. */
+void pm_controller_enter_background_check(pm_controller_t *ctx);
 pm_power_state_t pm_controller_step(pm_controller_t *ctx);
 uint8_t pm_controller_is_ui_blocked(pm_controller_t *ctx);
 

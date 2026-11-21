@@ -4,6 +4,7 @@
  * Collar-Radio 87..108 MHz, 100 kHz tuning and 50 sorted presets retained.
  */
 #include "radio_algo.h"
+#include "core/ui.h"
 #include "rda5807m.h"
 #include "pm_device.h"
 #include "pm_api.h"
@@ -13,7 +14,9 @@
 #include "power_algo.h"
 #include <string.h>
 
-#define RADIO_PM_BLOCK       0x04u
+#define RADIO_PM_BLOCK       0x04u /* transient BSP boot/shutdown */
+#define RADIO_KEEP_AWAKE_BLOCK 0x10u /* optional, otherwise Radio never inhibits PM */
+#define RADIO_HEADPHONE_DEBOUNCE_MS 40u
 #define RADIO_QUERY_MS       180u
 #define RADIO_SEEK_TIMEOUT_MS 8000u
 #define RADIO_COMMAND_QUEUE  8u
@@ -27,10 +30,37 @@ static uint16_t s_freq_units=3480u,s_scan_last_freq;
 static uint16_t s_stations[RADIO_MAX_STATIONS];
 static uint32_t s_state_at,s_last_query;
 static uint8_t s_view_open,s_battery_inspection_pending,s_low_battery_latched;
+static uint8_t s_keep_awake_radio,s_phone_stable,s_phone_candidate;
+static uint8_t s_bg_inspection,s_bg_need_battery,s_bg_retry_count;
+static uint8_t s_fail_safe_shutdown_request;
+static uint32_t s_phone_changed_at;
+static ui_item_t s_keep_awake_item;
+static ui_data_t s_keep_awake_data;
+static ui_element_t s_keep_awake_element;
 static uint32_t s_last_battery_guard;
 static radio_command_t s_commands[RADIO_COMMAND_QUEUE];
 static uint8_t s_cmd_head,s_cmd_count;
 
+/* AUTO is insert-driven; ON is an explicit override that ignores
+ * MIC_INDET for start/stop and RTC monitoring. The physical pin is
+ * sampled on every foreground poll (no rising-edge EXTI needed). */
+static uint8_t radio_headphone_connected(void) {
+    return (uint8_t)!LL_GPIO_IsInputPinSet(MIC_INDET_GPIO_Port,MIC_INDET_Pin);
+}
+static uint8_t radio_power_permitted(void) {
+    return (uint8_t)(s_power_mode==RADIO_POWER_ON ||
+        (s_power_mode==RADIO_POWER_AUTO && s_phone_stable));
+}
+void RadioAlgo_AddSleepWakeItems(ui_page_t *page) {
+    if(!page)return;
+    s_keep_awake_data.name=" Radio Keep Awake";
+    s_keep_awake_data.ptr=&s_keep_awake_radio;
+    s_keep_awake_data.dataType=UI_DATA_SWITCH;
+    s_keep_awake_data.actionType=UI_DATA_ACTION_RW;
+    s_keep_awake_element.data=&s_keep_awake_data;
+    Create_element(&s_keep_awake_item,&s_keep_awake_element);
+    AddItem(" Radio Keep Awake",UI_ITEM_DATA,0,&s_keep_awake_item,page,0,0);
+}
 /* All operations below only queue BSP requests; no blocking I2C here. */
 static void radio_fail(uint8_t why) {
     s_state=RADIO_STATE_ERROR;
@@ -39,6 +69,7 @@ static void radio_fail(uint8_t why) {
     s_boot_sleep_ack=0u;
     LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_NOCLOCK,LL_RCC_MCO1_DIV_1);
     pm_api_set_sleep_block(RADIO_PM_BLOCK,0u);
+    pm_api_set_sleep_block(RADIO_KEEP_AWAKE_BLOCK,0u);
 }
 /* One common cutoff path for normal RUN monitoring and RTC inspections.
  * Once empty, do not let a stale button command restart the radio until
@@ -51,7 +82,8 @@ static void radio_force_low_battery_off(void) {
     s_stop_requested=1u;
 }
 static void radio_start(void) {
-    if(s_low_battery_latched || s_state!=RADIO_STATE_OFF ||
+    if(s_low_battery_latched || !radio_power_permitted() ||
+        s_state!=RADIO_STATE_OFF ||
         s_stop_pending || s_pm_stopping)return;
     RDA5807_AsyncResetStatus();
     s_error_code=0u;s_search_failed=0u;s_first_seek_pending=1u;
@@ -173,14 +205,11 @@ static void radio_handle_command(radio_command_t cmd) {
     switch(cmd) {
     case RADIO_CMD_VIEW_ENTER:
         s_view_open=1u;
-        if(s_power_mode!=RADIO_POWER_OFF) {
-            if(s_stop_pending)s_start_requested=1u;
-            else if(s_state==RADIO_STATE_OFF)radio_start();
-        }
+        /* Physical headphone policy, not the displayed page, owns power. */
         break;
     case RADIO_CMD_VIEW_EXIT:
         s_view_open=0u;
-        if(s_power_mode!=RADIO_POWER_ON)s_stop_requested=1u;
+        /* AUTO may continue across STOP1 while headphones remain inserted. */
         break;
     case RADIO_CMD_VOLUME_UP:radio_volume_step(1u);break;
     case RADIO_CMD_VOLUME_DOWN:radio_volume_step(0u);break;
@@ -203,11 +232,8 @@ static void radio_handle_command(radio_command_t cmd) {
             s_start_requested=0u;
             s_stop_requested=1u;
         }
-        else if((s_power_mode==RADIO_POWER_ON || s_view_open) &&
-            s_state==RADIO_STATE_OFF) {
-            if(s_stop_pending)s_start_requested=1u;
-            else radio_start();
-        }
+        /* Automatic start is centralized in RadioAlgo_Poll and requires
+         * a stable inserted headset even in explicit ON mode. */
         break;
     case RADIO_CMD_TOGGLE_STATION:
         if(s_mode==RADIO_MODE_PRESET)radio_start_full_scan();
@@ -250,17 +276,61 @@ uint8_t RadioAlgo_BootSleepAcknowledged(void) {
         !RDA5807_AsyncBusy() && s_state==RADIO_STATE_OFF);
 }
 uint8_t RadioAlgo_BackgroundWakeNeeded(void) {
-    return (uint8_t)(s_power_mode==RADIO_POWER_ON &&
+    /* This predicate is evaluated BEFORE STOP1 (and BEFORE the user
+     * unplugs during STOP1). RTC wakes unconditionally once armed. */
+    return (uint8_t)((s_power_mode==RADIO_POWER_ON ||
+        (s_power_mode==RADIO_POWER_AUTO && radio_headphone_connected())) &&
         (s_state==RADIO_STATE_READY || s_state==RADIO_STATE_SEARCH ||
          s_state==RADIO_STATE_TUNE_WAIT) &&
         !s_stop_pending && !s_stop_requested);
 }
+void RadioAlgo_BackgroundResume(void) {
+    s_pm_stopping=0u;
+    if(s_state!=RADIO_STATE_OFF && s_state!=RADIO_STATE_ERROR)
+        LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE,LL_RCC_MCO1_DIV_1);
+}
+void RadioAlgo_BeginBackgroundInspection(void) {
+    /* Called after WUT has physically resumed clocks; OLED stays off.
+     * Check *current level*, not the headset state saved before sleep. */
+    s_bg_inspection=1u;
+    s_bg_retry_count=0u;
+    s_bg_need_battery=RadioAlgo_BackgroundWakeNeeded();
+    RadioAlgo_BackgroundResume();
+    if(s_power_mode==RADIO_POWER_AUTO &&
+        !radio_headphone_connected() && s_state!=RADIO_STATE_OFF)
+        RadioAlgo_Stop();
+}
+uint8_t RadioAlgo_BackgroundInspectionNeedsBattery(void) {
+    return s_bg_need_battery;
+}
 void RadioAlgo_RequestBatteryInspection(void) {
-    if(RadioAlgo_BackgroundWakeNeeded()) {
+    if(s_bg_inspection && s_bg_need_battery &&
+       !s_battery_inspection_pending) {
         s_battery_inspection_pending=1u;
         PowerAlgo_RequestRadioBatteryCheck();
     }
 }
+uint8_t RadioAlgo_BackgroundInspectionComplete(void) {
+    return (uint8_t)(s_bg_inspection && !s_battery_inspection_pending &&
+        !s_stop_requested && !s_stop_pending && !RDA5807_AsyncBusy() &&
+        (s_bg_need_battery || s_state==RADIO_STATE_OFF ||
+         s_state==RADIO_STATE_ERROR));
+}
+void RadioAlgo_RequestFailSafeOff(void) {
+    /* Mailbox only. The PM may report a failed SW6306 resume/check,
+     * but the RadioServiceThread is the sole state machine writer. */
+    s_fail_safe_shutdown_request=1u;
+}
+void RadioAlgo_AbortBackgroundInspection(void) {
+    s_bg_inspection=0u;
+    s_bg_need_battery=0u;
+    s_battery_inspection_pending=0u;
+}
+void RadioAlgo_EndBackgroundInspection(void) {
+    s_bg_inspection=0u;
+    s_bg_need_battery=0u;
+}
+
 static pm_hook_result_t radio_prepare(void *ctx) {
     (void)ctx;
     if(!s_pm_stopping) {
@@ -268,8 +338,8 @@ static pm_hook_result_t radio_prepare(void *ctx) {
         s_cmd_count=0u;s_start_requested=0u;
     }
     s_pm_stopping=1u;
-    /* Power Mode ON is allowed to continue receiving through STOP1.
-     * Only wait for in-flight I2C; do NOT enqueue ENABLE=0 or stop MCO. */
+    /* ON/AUTO + plugged headset can play through STOP1 without
+     * preventing the PM idle policy, unless Keep Awake was enabled. */
     if(RadioAlgo_BackgroundWakeNeeded())
         return RDA5807_AsyncBusy()?PM_HOOK_PENDING:PM_HOOK_DONE;
     if(RadioAlgo_StopPending())RadioAlgo_Stop();
@@ -280,7 +350,7 @@ static pm_hook_result_t radio_resume(void *ctx) {
     /* SystemClock_Config() restores MCO=LSE unconditionally after STOP1.
      * Reapply the Radio ownership policy in the reverse-order PM resume:
      * keep clock for active FM, otherwise stop driving the output. */
-    if(RadioAlgo_BackgroundWakeNeeded())
+    if(s_state!=RADIO_STATE_OFF && s_state!=RADIO_STATE_ERROR)
         LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE,LL_RCC_MCO1_DIV_1);
     else if(!s_stop_pending)
         LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_NOCLOCK,LL_RCC_MCO1_DIV_1);
@@ -298,6 +368,10 @@ void RadioAlgo_Init(void) {
     s_station_count=0u;s_view_open=0u;s_full_scan=0u;
     s_battery_inspection_pending=0u;
     s_low_battery_latched=0u;s_last_battery_guard=Millis();
+    s_keep_awake_radio=0u;s_bg_inspection=0u;s_bg_need_battery=0u;
+    s_fail_safe_shutdown_request=0u;
+    s_phone_stable=radio_headphone_connected();
+    s_phone_candidate=s_phone_stable;s_phone_changed_at=Millis();
     LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE,LL_RCC_MCO1_DIV_1);
     s_boot_sleep_ack=(uint8_t)(RDA5807_AsyncBootSleep()==I2C_OK);
     s_stop_pending=s_boot_sleep_ack;
@@ -314,6 +388,10 @@ void RadioAlgo_Poll(void) {
     uint8_t ret;
     uint16_t status=0u,signal=0u;
     RDA5807_AsyncPoll();
+    if(s_fail_safe_shutdown_request) {
+        s_fail_safe_shutdown_request=0u;
+        radio_force_low_battery_off();
+    }
     if(s_stop_pending) {
         if(RDA5807_AsyncBusy())return;
         s_stop_pending=0u;
@@ -331,9 +409,36 @@ void RadioAlgo_Poll(void) {
         if(s_stop_pending)return;
     }
     if(s_pm_stopping)return;
+    /* The Radio coroutine owns the insertion/removal state, independent
+     * of EXTI rising edges. During a 30-minute RTC wake the inspection
+     * uses the instantaneous pin level; RUN uses 40ms debouncing. */
+    {
+        uint8_t raw=radio_headphone_connected();
+        if(raw!=s_phone_candidate) {
+            s_phone_candidate=raw;
+            s_phone_changed_at=now;
+        }
+        else if((uint32_t)(now-s_phone_changed_at)>=
+                RADIO_HEADPHONE_DEBOUNCE_MS)s_phone_stable=raw;
+    }
+    /* Optional keep-awake follows user-selected Radio ON regardless of
+     * MIC; AUTO requires stable inserted headphones. OFF never blocks PM. */
+    pm_api_set_sleep_block(RADIO_KEEP_AWAKE_BLOCK,
+        (uint8_t)(s_keep_awake_radio && radio_power_permitted() &&
+         !s_low_battery_latched && s_state!=RADIO_STATE_OFF &&
+         !s_bg_inspection));
+    if(!radio_power_permitted() || s_low_battery_latched) {
+        if(s_state!=RADIO_STATE_OFF && !s_stop_pending)
+            s_stop_requested=1u;
+    }
     /* A receiver running with the UI on also benefits from the same
      * cutoff. The 500 ms check reads SW6306's existing RAM mirror only. */
-    if((uint32_t)(now-s_last_battery_guard)>=500u) {
+    /* HAL Tick does not include time spent in STOP1. Cached telemetry
+     * therefore cannot be assumed fresh after a 30-minute sleep.
+     * During RTC inspections use ONLY the explicit fresh ADC+capacity
+     * operation result, never the ordinary RUN cache. */
+    if(!s_bg_inspection &&
+        (uint32_t)(now-s_last_battery_guard)>=500u) {
         power_monitor_t power;
         s_last_battery_guard=now;
         PowerAlgo_GetMonitor(&power);
@@ -352,11 +457,19 @@ void RadioAlgo_Poll(void) {
             s_battery_inspection_pending=0u;
             /* Inspect only complete fresh SW6306 transactions. Never
              * infer empty capacity from a communications failure. */
-            if(checked==1u &&
-                (battery_pct==0u || battery_mv<14000u)) {
-                /* Mandatory low battery shutdown: enforce OFF in the
-                 * algorithm-owned mirror so the Radio UI displays OFF.
-                 * Clear old UI commands to prevent automatic restart. */
+            if(checked==1u) {
+                if(battery_pct==0u || battery_mv<14000u)
+                    radio_force_low_battery_off();
+            }
+            else if(s_bg_inspection && ++s_bg_retry_count<3u) {
+                /* A transient failed I2C transfer is not equivalent to
+                 * an empty battery. Retry using the SAME SW6306 coroutine,
+                 * up to three full ADC+Capacity pairs before giving up. */
+                RadioAlgo_RequestBatteryInspection();
+            }
+            else if(s_bg_inspection) {
+                /* Cannot prove that unattended 30-minute playback is safe.
+                 * Fail closed, preserving the user's explicit OFF state. */
                 radio_force_low_battery_off();
             }
         }
@@ -365,12 +478,16 @@ void RadioAlgo_Poll(void) {
         s_start_requested=0u;
         radio_start();
     }
-    if(s_cmd_count) {
+    if(s_cmd_count && !s_bg_inspection) {
         radio_command_t cmd=s_commands[s_cmd_head];
         s_cmd_head=(uint8_t)((s_cmd_head+1u)%RADIO_COMMAND_QUEUE);
         --s_cmd_count;
         radio_handle_command(cmd);
     }
+    if(!s_bg_inspection && s_state==RADIO_STATE_OFF &&
+        radio_power_permitted() && !s_low_battery_latched && !s_stop_pending &&
+        !s_stop_requested)radio_start();
+    if(s_bg_inspection) return; /* no periodic FM I2C while inspecting */
     if(s_state==RADIO_STATE_OFF || s_state==RADIO_STATE_ERROR)return;
     if(s_state==RADIO_STATE_RESET_WAIT) {
         if((uint32_t)(now-s_state_at)<50u)return;
