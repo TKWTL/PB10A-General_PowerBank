@@ -21,6 +21,10 @@ static uint8_t s_sw_owner_busy,s_cycle_ok;
 static uint32_t s_sw_seq_before;
 static uint32_t s_retry_at;
 static uint8_t s_port_baseline_valid,s_previous_connections;
+/* Independent request/result mailbox, single owner: PowerAlgo_SW6306Thread. */
+static uint8_t s_radio_battery_check_request,s_radio_battery_check_result;
+static uint8_t s_radio_battery_adc_ok,s_radio_battery_pct;
+static uint16_t s_radio_battery_mv;
 
 /* An insertion is a 0->1 transition in a successful live port snapshot.
  * The initial snapshot is only a baseline, not a synthetic insert event. */
@@ -343,6 +347,35 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             THRD_DELAY(100u);
             continue;
         }
+        if(s_radio_battery_check_request) {
+            /* Complete a fresh ADC and capacity transaction pair in the
+             * same SW6306 owner coroutine after the normal PM resume.
+             * Do not treat a cached/failed snapshot as a valid 0% pack. */
+            s_radio_battery_check_request=0u;
+            s_sw_owner_busy=1u;
+            SW6306_OperationReset();
+            THRD_SPAWN_NOARG(SW6306_ADCLoad);
+            s_sw_owner_busy=0u;
+            s_radio_battery_adc_ok=SW6306_LastOperationOK();
+            if(s_radio_battery_adc_ok)
+                s_radio_battery_mv=SW6306_ReadVBAT();
+            s_sw_owner_busy=1u;
+            SW6306_OperationReset();
+            THRD_SPAWN_NOARG(SW6306_CapacityLoad);
+            s_sw_owner_busy=0u;
+            if(s_radio_battery_adc_ok && SW6306_LastOperationOK() &&
+                SW6306_CapacityLoadOK()) {
+                s_radio_battery_pct=SW6306_ReadCapacity();
+                if(s_radio_battery_pct>100u)s_radio_battery_pct=100u;
+                s_monitor.vbat_mv=s_radio_battery_mv;
+                s_monitor.capacity_pct=s_radio_battery_pct;
+                s_monitor.capacity_valid=1u;
+                s_radio_battery_check_result=1u;
+            }
+            else s_radio_battery_check_result=2u;
+            THRD_DELAY(100u);
+            continue;
+        }
 
         if(s_sw_phase==0u) {
             s_cycle_ok=1u;
@@ -426,6 +459,20 @@ void PowerAlgo_GetMonitor(power_monitor_t *out) {
         out->valid=0u;
 }
 
+void PowerAlgo_RequestRadioBatteryCheck(void) {
+    s_radio_battery_check_request=1u;
+    s_radio_battery_check_result=0u;
+}
+uint8_t PowerAlgo_TakeRadioBatteryCheck(uint16_t *vbat_mv,uint8_t *capacity_pct) {
+    uint8_t result=s_radio_battery_check_result;
+    if(result!=0u) {
+        if(vbat_mv)*vbat_mv=s_radio_battery_mv;
+        if(capacity_pct)*capacity_pct=s_radio_battery_pct;
+        s_radio_battery_check_result=0u;
+    }
+    return result;
+}
+
 /**************************** 服务注册与初始化 ***************************/
 void PowerAlgo_Init(void) {
     memset(&s_monitor,0,sizeof(s_monitor));
@@ -437,6 +484,9 @@ void PowerAlgo_Init(void) {
     s_sw_low_power=0u;s_sw_owner_busy=0u;
     s_sw_suspend_stage=0u;s_sw_resume_started=0u;
     s_cycle_ok=0u;
+    s_radio_battery_check_request=0u;
+    s_radio_battery_check_result=0u;
+    s_radio_battery_adc_ok=0u;
     pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK,1u); /* fail closed until idle proven */
     (void)pm_device_register(&s_node);         /* SW6306 / order 90 */
     (void)pm_device_register(&s_power_adc_pm); /* SUB_EN + ADC / order 200 */

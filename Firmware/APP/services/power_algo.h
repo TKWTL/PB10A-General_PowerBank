@@ -19,6 +19,12 @@ void PowerAlgo_Init(void);
 /* SW6306 owner thread: cooperative Init/ADC/Status/Port/Power/Capacity. */
 char PowerAlgo_SW6306Thread(coro_pt_t *pt);
 void PowerAlgo_GetMonitor(power_monitor_t *out);
+/* Radio WUT inspection: requests are serviced by the existing SW6306
+ * coroutine, never from RTC ISR. Take returns 0=pending/not available,
+ * 1=both fresh ADC and coulomb/capacity data valid, 2=I2C failure.
+ * A result is consumed once; voltage is millivolts of the 5S pack. */
+void PowerAlgo_RequestRadioBatteryCheck(void);
+uint8_t PowerAlgo_TakeRadioBatteryCheck(uint16_t *vbat_mv,uint8_t *capacity_pct);
 /* ADC_RTC_AuxAThread owns ADC calibration, DMA sampling and Aux-A updates. */
 void PowerAlgo_AdcInit(void);
 uint8_t PowerAlgo_AdcIsSuspended(void);

@@ -121,6 +121,24 @@ struct RDA5807_t{
 };//RDA5807参数句柄，需要定时更新或上传
 
 /* 声明给外部使用的变量 */
+/* SW6306-style dual calling convention for the low-level register I/O:
+ *   default: RDA5807_CompatWrite(pt,reg,value) and CompatRead(pt,reg,out)
+ *   without RDA5807_USE_PROTOTHREAD: CompatWrite(reg,value), etc.
+ * Only one dedicated owner coroutine may use the PT wrappers. The normal
+ * PB10A RadioAlgo path uses the separate serialized Async operation queue. */
+#define RDA5807_USE_PROTOTHREAD
+#ifdef RDA5807_USE_PROTOTHREAD
+#include "coroOS.h"
+#define RDA5807_RET char
+#define RDA5807_ARGS(...) struct pt *pt, __VA_ARGS__
+#else
+#define RDA5807_RET uint8_t
+#define RDA5807_ARGS(...) __VA_ARGS__
+#endif
+RDA5807_RET RDA5807_CompatWrite(RDA5807_ARGS(uint8_t reg,uint16_t value));
+RDA5807_RET RDA5807_CompatRead(RDA5807_ARGS(uint8_t reg,uint16_t *value));
+uint8_t RDA5807_CompatLastOK(void);
+
 /* Nonblocking RDA5807 register/operation interface for coroOS.
  * Enqueue only; RDA5807_AsyncPoll() runs in the dedicated Radio thread.
  * All I2C transfers complete via HAL IRQ and caller-owned persistent state.

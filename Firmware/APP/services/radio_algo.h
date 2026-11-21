@@ -37,5 +37,9 @@ uint8_t RadioAlgo_Request(radio_command_t command);
 void RadioAlgo_GetSnapshot(radio_snapshot_t *out);
 uint8_t RadioAlgo_StopPending(void);
 void RadioAlgo_Stop(void);     /* cooperative PM hook, enqueue only */
+/* ON-mode receiver may keep playing across STOP1. WUT checks use a fresh
+ * SW6306 ADC + capacity snapshot from its existing owner coroutine. */
+uint8_t RadioAlgo_BackgroundWakeNeeded(void);
+void RadioAlgo_RequestBatteryInspection(void);
 uint8_t RadioAlgo_BootSleepAcknowledged(void);
 #endif

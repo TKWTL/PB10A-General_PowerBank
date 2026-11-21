@@ -10,6 +10,7 @@
 #include "fonts/fonts.h"
 #include "display/dispDriver.h"
 #include "time_service.h"
+#include "millis.h"
 #include <stdio.h>
 
 #define RADIO_MENU_COUNT 5u
@@ -68,7 +69,7 @@ static uint8_t radio_has_station_view(uint16_t freq) {
 /* Collar-Radio Radio_Run() visual structure, kept in its original positions:
  * top signal/headphone/volume/battery status, 24px centre frequency,
  * 43/45/47px dial and station markers, RTC time/date at bottom.
- * Only unknown battery fill is omitted until a battery telemetry service exists.
+ * Battery bars and whole-icon low-capacity blink use the SW6306 cache.
  * This is a single-pass MiaoUI callback, not Collar's blocking while(1).
  */
 /* Collar-Radio original geometry: PID-driven disp_value1 slides the
@@ -102,16 +103,23 @@ void Radio_AppDraw(ui_t *ui) {
     (void)snprintf(buf,sizeof(buf),":%u%%",
         (unsigned)(((uint16_t)s_snapshot.volume+1u)*100u/16u));
     Disp_DrawStr(75u,(uint16_t)(10-slide),buf);
-    Disp_DrawXBMP(111u,(uint16_t)(2-slide),16u,8u,s_battery_icon);
-    /* Unlike Collar's global battery state, this uses PB10A's
-     * nonblocking SW6306 monitor cache; unknown capacity stays empty. */
+    /* Collar-Radio battery icon driven by the SW6306 cache. When pack
+     * capacity <=5%, flash the entire icon; above 5%, show the outline
+     * and 0/1/2/3/4 bars at >=10/30/50/70% respectively.
+     * An invalid/stale cache cannot be treated as 0% capacity. */
     PowerAlgo_GetMonitor(&power);
-    if(power.valid && power.capacity_valid) {
-        bars=(uint8_t)((power.capacity_pct+19u)/20u);
-        if(bars>4u)bars=4u;
-        if(bars)
-            Disp_DrawBox((uint16_t)(126u-3u*bars),
-                (uint16_t)(3-slide),(uint16_t)(3u*bars),6u);
+    if(!(power.valid && power.capacity_valid && power.capacity_pct<=5u &&
+        ((Millis()/800u)&1u)!=0u)) {
+        Disp_DrawXBMP(111u,(uint16_t)(2-slide),16u,8u,s_battery_icon);
+        if(power.valid && power.capacity_valid) {
+            bars=power.capacity_pct>=70u?4u:
+                power.capacity_pct>=50u?3u:
+                power.capacity_pct>=30u?2u:
+                power.capacity_pct>=10u?1u:0u;
+            if(bars)
+                Disp_DrawBox((uint16_t)(126u-3u*bars),
+                    (uint16_t)(3-slide),(uint16_t)(3u*bars),6u);
+        }
     }
 
     Disp_SetFont(font_radio_h24w12);

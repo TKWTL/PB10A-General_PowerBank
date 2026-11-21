@@ -7,10 +7,13 @@
 #include "pm_sleep_timer.h"
 #include "millis.h"
 #include "main.h"
+#include "power_algo.h"
+#include "radio_algo.h"
 #define PM_DEFAULT_TIMEOUT_MS 60000u
 static pm_controller_t s_ctrl;
 static uint8_t s_ready,s_block_mask,s_paused,s_forced;
 static volatile uint8_t s_irq_events;
+static volatile uint8_t s_rtc_wakeup_event;
 static uint8_t s_app_events; /* PM-dispatched sources for foreground services */
 static uint8_t s_refresh_request,s_wake_guard;
 static uint32_t s_wake_at;
@@ -25,6 +28,15 @@ void pm_api_init(void) {
 void pm_api_refresh_idle(void) {
     if(!pm_sleep_timer_is_forced())s_refresh_request=1u;
 }
+
+/* The callback runs in RTC_TAMP_IRQn; it must not call the PM FSM or I2C.
+ * In this 60-second debug build a WUT wake intentionally returns to RUN. */
+void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *rtc) {
+    if(rtc && rtc->Instance==RTC)s_rtc_wakeup_event=1u;
+}
+void pm_api_on_rtc_wakeup_irq(void){s_rtc_wakeup_event=1u;}
+uint8_t pm_api_rtc_wakeup_pending(void){return s_rtc_wakeup_event;}
+uint8_t pm_api_external_wake_pending(void){return s_irq_events!=0u;}
 
 void pm_api_on_exti_event(uint8_t source) {
     uint32_t primask=__get_PRIMASK();
@@ -71,7 +83,7 @@ uint8_t pm_api_is_unstable_wake(void)
 {return s_wake_guard && (uint32_t)(Millis()-s_wake_at)<200u;}
 void pm_api_poll(void) {
     pm_power_state_t previous,next;
-    uint8_t events;
+    uint8_t events,rtc_wakeup;
     uint32_t primask;
     pm_api_init();
     /* Consume once per PM poll without racing an EXTI that writes the flag. */
@@ -120,5 +132,15 @@ void pm_api_poll(void) {
         pm_sleep_timer_clear_force();
         s_forced=0u;
         s_wake_guard=1u;s_wake_at=Millis();
+        /* The platform has restored clocks and HAL Tick. Record the RTC
+         * event separately from external activity so it does not imitate
+         * a button press or post a UI navigation event. */
+        primask=__get_PRIMASK();
+        __disable_irq();
+        rtc_wakeup=s_rtc_wakeup_event;
+        s_rtc_wakeup_event=0u;
+        __set_PRIMASK(primask);
+        if(rtc_wakeup && RadioAlgo_BackgroundWakeNeeded())
+            RadioAlgo_RequestBatteryInspection();
     }
 }

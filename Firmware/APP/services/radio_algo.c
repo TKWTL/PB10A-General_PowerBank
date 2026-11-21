@@ -10,6 +10,7 @@
 #include "i2c.h"
 #include "millis.h"
 #include "main.h"
+#include "power_algo.h"
 #include <string.h>
 
 #define RADIO_PM_BLOCK       0x04u
@@ -25,7 +26,8 @@ static uint8_t s_boot_sleep_ack,s_full_scan,s_first_seek_pending,s_station_count
 static uint16_t s_freq_units=3480u,s_scan_last_freq;
 static uint16_t s_stations[RADIO_MAX_STATIONS];
 static uint32_t s_state_at,s_last_query;
-static uint8_t s_view_open;
+static uint8_t s_view_open,s_battery_inspection_pending,s_low_battery_latched;
+static uint32_t s_last_battery_guard;
 static radio_command_t s_commands[RADIO_COMMAND_QUEUE];
 static uint8_t s_cmd_head,s_cmd_count;
 
@@ -38,14 +40,26 @@ static void radio_fail(uint8_t why) {
     LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_NOCLOCK,LL_RCC_MCO1_DIV_1);
     pm_api_set_sleep_block(RADIO_PM_BLOCK,0u);
 }
+/* One common cutoff path for normal RUN monitoring and RTC inspections.
+ * Once empty, do not let a stale button command restart the radio until
+ * fresh charge telemetry has cleared the low-battery latch. */
+static void radio_force_low_battery_off(void) {
+    s_low_battery_latched=1u;
+    s_power_mode=RADIO_POWER_OFF;
+    s_cmd_count=0u;
+    s_start_requested=0u;
+    s_stop_requested=1u;
+}
 static void radio_start(void) {
-    if(s_state!=RADIO_STATE_OFF || s_stop_pending || s_pm_stopping)return;
+    if(s_low_battery_latched || s_state!=RADIO_STATE_OFF ||
+        s_stop_pending || s_pm_stopping)return;
     RDA5807_AsyncResetStatus();
     s_error_code=0u;s_search_failed=0u;s_first_seek_pending=1u;
     s_full_scan=0u;s_scan_last_freq=0u;
     s_volume=RADIO_DEFAULT_VOLUME;s_stereo=0u;s_rssi=0u;
     s_freq_units=3480u;s_station_count=0u;
-    pm_api_set_sleep_block(RADIO_PM_BLOCK,1u);
+    /* Active FM is not an idle-timer block. Its async operations are
+     * drained by radio_prepare before STOP1; MCO must keep running. */
     LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE,LL_RCC_MCO1_DIV_1);
     if(RDA5807_AsyncReset()!=I2C_OK) {
         radio_fail(1u);return;
@@ -177,6 +191,10 @@ static void radio_handle_command(radio_command_t cmd) {
         s_full_scan=0u;
         break;
     case RADIO_CMD_POWER_CYCLE:
+        if(s_low_battery_latched) {
+            s_power_mode=RADIO_POWER_OFF;
+            break;
+        }
         /* Collar-Radio cycles ON -> AUTO -> OFF -> ON.
          * Starting from default AUTO, first ENTER selects OFF. */
         s_power_mode=s_power_mode==RADIO_POWER_OFF?RADIO_POWER_ON:
@@ -231,6 +249,18 @@ uint8_t RadioAlgo_BootSleepAcknowledged(void) {
     return (uint8_t)(s_boot_sleep_ack && !s_stop_pending &&
         !RDA5807_AsyncBusy() && s_state==RADIO_STATE_OFF);
 }
+uint8_t RadioAlgo_BackgroundWakeNeeded(void) {
+    return (uint8_t)(s_power_mode==RADIO_POWER_ON &&
+        (s_state==RADIO_STATE_READY || s_state==RADIO_STATE_SEARCH ||
+         s_state==RADIO_STATE_TUNE_WAIT) &&
+        !s_stop_pending && !s_stop_requested);
+}
+void RadioAlgo_RequestBatteryInspection(void) {
+    if(RadioAlgo_BackgroundWakeNeeded()) {
+        s_battery_inspection_pending=1u;
+        PowerAlgo_RequestRadioBatteryCheck();
+    }
+}
 static pm_hook_result_t radio_prepare(void *ctx) {
     (void)ctx;
     if(!s_pm_stopping) {
@@ -238,11 +268,22 @@ static pm_hook_result_t radio_prepare(void *ctx) {
         s_cmd_count=0u;s_start_requested=0u;
     }
     s_pm_stopping=1u;
+    /* Power Mode ON is allowed to continue receiving through STOP1.
+     * Only wait for in-flight I2C; do NOT enqueue ENABLE=0 or stop MCO. */
+    if(RadioAlgo_BackgroundWakeNeeded())
+        return RDA5807_AsyncBusy()?PM_HOOK_PENDING:PM_HOOK_DONE;
     if(RadioAlgo_StopPending())RadioAlgo_Stop();
     return RadioAlgo_StopPending()?PM_HOOK_PENDING:PM_HOOK_DONE;
 }
 static pm_hook_result_t radio_resume(void *ctx) {
     (void)ctx;
+    /* SystemClock_Config() restores MCO=LSE unconditionally after STOP1.
+     * Reapply the Radio ownership policy in the reverse-order PM resume:
+     * keep clock for active FM, otherwise stop driving the output. */
+    if(RadioAlgo_BackgroundWakeNeeded())
+        LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE,LL_RCC_MCO1_DIV_1);
+    else if(!s_stop_pending)
+        LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_NOCLOCK,LL_RCC_MCO1_DIV_1);
     s_pm_stopping=0u;
     return PM_HOOK_DONE;
 }
@@ -255,6 +296,8 @@ void RadioAlgo_Init(void) {
     s_stop_pending=0u;s_stop_requested=0u;s_start_requested=0u;
     s_cmd_head=s_cmd_count=0u;
     s_station_count=0u;s_view_open=0u;s_full_scan=0u;
+    s_battery_inspection_pending=0u;
+    s_low_battery_latched=0u;s_last_battery_guard=Millis();
     LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE,LL_RCC_MCO1_DIV_1);
     s_boot_sleep_ack=(uint8_t)(RDA5807_AsyncBootSleep()==I2C_OK);
     s_stop_pending=s_boot_sleep_ack;
@@ -288,6 +331,36 @@ void RadioAlgo_Poll(void) {
         if(s_stop_pending)return;
     }
     if(s_pm_stopping)return;
+    /* A receiver running with the UI on also benefits from the same
+     * cutoff. The 500 ms check reads SW6306's existing RAM mirror only. */
+    if((uint32_t)(now-s_last_battery_guard)>=500u) {
+        power_monitor_t power;
+        s_last_battery_guard=now;
+        PowerAlgo_GetMonitor(&power);
+        if(power.valid && power.capacity_valid) {
+            if(power.capacity_pct==0u || power.vbat_mv<14000u)
+                radio_force_low_battery_off();
+            else if(power.capacity_pct>5u && power.vbat_mv>=14500u)
+                s_low_battery_latched=0u;
+        }
+    }
+    if(s_battery_inspection_pending) {
+        uint16_t battery_mv=0u;
+        uint8_t battery_pct=0u;
+        uint8_t checked=PowerAlgo_TakeRadioBatteryCheck(&battery_mv,&battery_pct);
+        if(checked!=0u) {
+            s_battery_inspection_pending=0u;
+            /* Inspect only complete fresh SW6306 transactions. Never
+             * infer empty capacity from a communications failure. */
+            if(checked==1u &&
+                (battery_pct==0u || battery_mv<14000u)) {
+                /* Mandatory low battery shutdown: enforce OFF in the
+                 * algorithm-owned mirror so the Radio UI displays OFF.
+                 * Clear old UI commands to prevent automatic restart. */
+                radio_force_low_battery_off();
+            }
+        }
+    }
     if(s_start_requested && s_state==RADIO_STATE_OFF) {
         s_start_requested=0u;
         radio_start();

@@ -199,11 +199,12 @@ until the asynchronous queue drains and its power-down transaction
 finishes. `RadioAlgo_BootSleepAcknowledged()` reports a successful
 boot power-down transaction, not merely enqueue acceptance.
 The dedicated RadioServiceThread (5 ms) owns FM startup, tune/seek,
-status polling, presets, power policy and I2C completion. Before
-STOP1 the Radio PM hook asynchronously requests shutdown; MCO is
-restored to the stopped state once the queued transaction completes.
-Power Mode ON retains the radio after leaving its WORD page. Errors
-turn off MCO and release the FM sleep block.
+status polling, presets, power policy and I2C completion. In AUTO
+or OFF the Radio PM hook asynchronously requests shutdown before STOP1;
+in ON mode it drains in-flight I2C and preserves active background
+playback and MCO. A dedicated RTC wake timer monitors the battery
+during this background mode. Errors turn off MCO and release any FM
+startup/shutdown sleep block.
 
 ### I2C scanner restoration (Collar-Radio visual compatibility)
 
@@ -228,9 +229,10 @@ Return, Power Mode (AUTO / ON / OFF), Radio Mode
 (Search / Preset / Frequency), Clear + Full Seek (Preset) or
 Save/Remove station (other modes), Exit Radio Page.
 
-Power Mode AUTO stops the radio when leaving its page; ON keeps audio
-and MCO running in background (PM block until an explicit stop);
-OFF powers down the receiver but leaves the page reachable.
+Power Mode AUTO (the boot default) stops the radio when leaving its
+page; ON keeps audio and MCO running across STOP1 without indefinitely
+pausing the PM idle timer; OFF powers down the receiver but leaves
+the page reachable.
 CONF long BACK leaves the Radio WORD page, even from its settings menu.
 UI sends commands through `RadioAlgo_Request()` and reads
 `RadioAlgo_GetSnapshot()`; the dedicated 5 ms radio coroutine
@@ -457,3 +459,63 @@ BMP180_AsyncRead/Write(); SW6306 uses its existing protothread BSP
 implementation. Legacy synchronous BSP helpers are retained as
 compatibility APIs but are not called by these active coroutines.
 No actual Keil build or on-device Radio validation has been done.
+
+### RTC wake-up / background Radio battery protection (debug configuration)
+
+The current **temporary** schedule is **60 seconds** using LSE-derived
+1 Hz `RTC_WAKEUPCLOCK_CK_SPRE_16BITS` with WUT counter 59.
+The intended later production interval is 30 minutes (counter 1799);
+the intended production path is STOP1 -> UI_OFF background check ->
+STOP1 without lighting OLED. **This commit deliberately uses full RUN
+and visible UI restoration on RTC wake for hardware bring-up**, so a
+periodic wake can be observed and the RTC IRQ verified.
+
+RTC Alarm A and Alarm B remain enabled in the CubeMX .ioc as resources
+for later calendar-based BEEP alarms, but default placeholder 00:00
+alarms are explicitly disabled after initialization. The correct
+`RTC_TAMP_IRQHandler()` dispatches both
+`HAL_RTC_AlarmIRQHandler()` and
+`HAL_RTCEx_WakeUpTimerIRQHandler()`; the WUT handler was **never**
+inside `MX_RTC_Init()`. Calendar validity is preserved by DR0=0xB10A.
+On later resets the user-code jump avoids overwriting date/time with
+CubeMX's defaults while still running the runtime alarm/WUT policy.
+CubeMX WUT settings in the .ioc are 1 Hz/59 rather than the previously
+generated RTCCLK/16 counter 0. WUT is deactivated at boot and is armed
+**only in the STM32 PM suspend hook before HAL_SuspendTick**, when an
+active Radio with Power Mode ON is allowed to enter STOP1; it is
+disarmed after any wake/abort. The ISR merely latches the WUT source
+in PM and never drives I2C or UI. A pending user EXTI wins over STOP
+entry; Alarm A/B are kept separate from PM activity reporting.
+
+After a WUT wake the existing normal resume hooks unlock the SW6306
+and restore the visible UI. The PM then requests a **fresh**
+`SW6306_ADCLoad()` + `SW6306_CapacityLoad()` sequence, executed
+entirely by the existing PowerAlgo_SW6306Thread and its IRQ-backed
+protothread. RadioAlgo consumes its completion result from RAM. A
+successful sample with capacity **0%** or a 5S pack voltage
+**strictly below 14,000 mV** (5 x 2.8 V) forces Radio Power Mode
+to OFF in the algorithm-owned mirror, cancels queued commands,
+enqueues RDA5807 power-down, and inhibits restart until fresh
+capacity is >5% and voltage >=14,500 mV. Running Radio also checks
+the ordinary fresh SW6306 monitor mirror every 500 ms. Invalid/I2C
+failed samples are *not* silently treated as empty capacity.
+
+Radio's Collar-Radio battery graphic now uses exactly:
+capacity >=70% = 4 bars; >=50% = 3; >=30% = 2; >=10% = 1;
+otherwise 0 bars. At <=5% the entire 16x8 battery icon blinks
+on/off every 800 ms. An unavailable SW6306 battery percentage
+renders an outline without implying a low battery.
+
+`BSP/RDA5807/rda5807m.h` additionally provides SW6306-style
+`RDA5807_USE_PROTOTHREAD` compatible write/read entry points
+(`RDA5807_CompatWrite/Read`) with coroutine/IRQ and legacy
+synchronous calling conventions. The PT adapters are single-owner
+helpers, separate from the production serialized Radio async
+command queue; existing synchronous legacy BSP operations are
+retained for compatibility. The application never calls them.
+
+**Hardware follow-up:** verify the RTC_TAMP WUT flag every minute,
+continuous background Radio reception and MCO/LSE over STOP1,
+fresh VBAT/SoC reads, error handling, cutoff below 14 V and
+recovery above 14.5 V. Keil/full-firmware compilation and physical
+STOP1 testing have not been performed in this edit.

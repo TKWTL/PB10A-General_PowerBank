@@ -6,10 +6,16 @@
 #include "millis.h"
 #include "main.h"
 #include "sc7a20_algo.h"
+#include "radio_algo.h"
+#include "pm_api.h"
+#include "rtc.h"
 #define OLED_PM_TIMEOUT_MS 500u
+/* TEMPORARY debug period: 60 s; release target is 30 min = 1800 s.
+ * RTC ck_spre is 1 Hz (LSE 32768 / (128 * 256)). */
+#define RADIO_WUT_SECONDS 60u
 void SystemClock_Config(void);
 static uint32_t adc_internal,oled_started;
-static uint8_t suspended,oled_target,oled_valid;
+static uint8_t suspended,oled_target,oled_valid,s_radio_wut_armed;
 static pm_hook_result_t oled_power(uint8_t off) {
     uint32_t now=Millis();
     if(!oled_valid || oled_target!=off) {
@@ -27,11 +33,26 @@ static pm_hook_result_t oled_prepare(void *ctx)
 {(void)ctx;return oled_power(1);}
 static pm_hook_result_t oled_resume(void *ctx)
 {(void)ctx;return oled_power(0);}
+static void radio_wut_disarm(void) {
+    if(s_radio_wut_armed) {
+        (void)HAL_RTCEx_DeactivateWakeUpTimer(&hrtc);
+        s_radio_wut_armed=0u;
+    }
+}
 static pm_hook_result_t stm32_suspend(void *ctx) {
     (void)ctx;
     if(suspended)return PM_HOOK_DONE;
     if(I2C_BusIsLocked() || SSD1306_Display_FrameBusy() ||
         SPI1_DmaTxState()!=SPI1_DMA_IDLE)return PM_HOOK_PENDING;
+    /* Arm the timer while HAL Tick still runs; the RTC IRQ only latches
+     * its source. A failed arm rejects STOP1 instead of leaving an active
+     * FM receiver without periodic battery monitoring. */
+    if(RadioAlgo_BackgroundWakeNeeded()) {
+        if(HAL_RTCEx_SetWakeUpTimer_IT(&hrtc,RADIO_WUT_SECONDS-1u,
+            RTC_WAKEUPCLOCK_CK_SPRE_16BITS)!=HAL_OK)
+            return PM_HOOK_ERROR;
+        s_radio_wut_armed=1u;
+    }
     adc_internal=ADC1_COMMON->CCR & (ADC_CCR_VREFEN|ADC_CCR_TSEN);
     ADC1_COMMON->CCR &= ~(ADC_CCR_VREFEN|ADC_CCR_TSEN);
     HAL_SuspendTick();suspended=1;return PM_HOOK_DONE;
@@ -47,14 +68,25 @@ static void stm32_deepsleep(void *ctx) {
     (void)ctx;
     /* PB5 is level-low when the sensor has already signalled a wake.
      * A cleared edge pending bit must not strand STOP1 on a held-low pin. */
-    if(!SC7A20Algo_WakeIRQ() || LL_GPIO_IsInputPinSet(INT_GPIO_Port,INT_Pin))
+    /* Any EXTI that arrived after the PM's last poll must prevent WFI:
+     * the edge might otherwise be cleared before STOP1 is entered. */
+    if(!pm_api_rtc_wakeup_pending() && !pm_api_external_wake_pending() &&
+        (!SC7A20Algo_WakeIRQ() || LL_GPIO_IsInputPinSet(INT_GPIO_Port,INT_Pin)))
         HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON,PWR_STOPENTRY_WFI);
     SystemClock_Config();
     if(suspended)stm32_restore();
+    /* Both a user wake and a 60-second WUT wake return to RUN in this
+     * bring-up version. Deactivate WUT before the next sleep sequence. */
+    radio_wut_disarm();
 }
 
 static pm_hook_result_t stm32_resume(void *ctx)
-{(void)ctx;if(suspended)stm32_restore();return PM_HOOK_DONE;}
+{
+    (void)ctx;
+    if(suspended)stm32_restore();
+    radio_wut_disarm();
+    return PM_HOOK_DONE;
+}
 static const pm_device_node_t oled_node={
     "oled",oled_prepare,0,oled_resume,0,230u,0,0
 };

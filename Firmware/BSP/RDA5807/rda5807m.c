@@ -663,3 +663,61 @@ void RDA5807_AsyncPoll(void) {
         s_async_active=1u;
     }
 }
+
+/************************ Dual-mode register helpers *************************
+ * Compile-time PT mode mirrors SW6306's calling style and uses IRQ-completed
+ * requests. Keep these separate from RadioAlgo's production write queue.
+ * Legacy single-call mode uses the synchronous BSP API. */
+static uint8_t s_compat_ok;
+uint8_t RDA5807_CompatLastOK(void){return s_compat_ok;}
+#ifdef RDA5807_USE_PROTOTHREAD
+RDA5807_RET RDA5807_CompatWrite(struct pt *pt,uint8_t reg,uint16_t value) {
+    static uint8_t data[2],admitted;
+    static volatile uint8_t flag;
+    static uint32_t deadline;
+    PT_BEGIN(pt);
+    data[0]=(uint8_t)(value>>8);data[1]=(uint8_t)value;
+    deadline=Millis()+100u;
+    admitted=0u;s_compat_ok=0u;
+    PT_WAIT_UNTIL(pt,
+        ((admitted=ASYNC_I2C_Transmit(RDA5807_Wr_REG_Addr,reg,data,2u,
+            0u,(uint8_t *)&flag))!=0u) ||
+         (int32_t)(Millis()-deadline)>=0);
+    if(!admitted)PT_EXIT(pt);
+    PT_WAIT_UNTIL(pt,flag!=I2C_ASYNC_PENDING);
+    s_compat_ok=(uint8_t)(flag==I2C_ASYNC_DONE);
+    PT_END(pt);
+}
+RDA5807_RET RDA5807_CompatRead(struct pt *pt,uint8_t reg,uint16_t *value) {
+    static uint8_t data[2],admitted;
+    static volatile uint8_t flag;
+    static uint32_t deadline;
+    PT_BEGIN(pt);
+    deadline=Millis()+100u;
+    admitted=0u;s_compat_ok=0u;
+    PT_WAIT_UNTIL(pt,
+        ((admitted=ASYNC_I2C_Receive(RDA5807_Wr_REG_Addr,reg,data,2u,
+            0u,(uint8_t *)&flag))!=0u) ||
+         (int32_t)(Millis()-deadline)>=0);
+    if(!admitted)PT_EXIT(pt);
+    PT_WAIT_UNTIL(pt,flag!=I2C_ASYNC_PENDING);
+    s_compat_ok=(uint8_t)(flag==I2C_ASYNC_DONE);
+    if(s_compat_ok && value)
+        *value=(uint16_t)(((uint16_t)data[0]<<8)|data[1]);
+    PT_END(pt);
+}
+#else
+RDA5807_RET RDA5807_CompatWrite(uint8_t reg,uint16_t value) {
+    uint8_t data[2]={(uint8_t)(value>>8),(uint8_t)value};
+    s_compat_ok=(uint8_t)(I2C_RegWrite(RDA5807_Wr_REG_Addr,reg,
+        data,2u)==I2C_OK);
+    return s_compat_ok?I2C_OK:I2C_ERROR;
+}
+RDA5807_RET RDA5807_CompatRead(uint8_t reg,uint16_t *value) {
+    uint8_t data[2];
+    s_compat_ok=(uint8_t)(value &&
+        I2C_RegRead(RDA5807_Wr_REG_Addr,reg,data,2u)==I2C_OK);
+    if(s_compat_ok)*value=(uint16_t)(((uint16_t)data[0]<<8)|data[1]);
+    return s_compat_ok?I2C_OK:I2C_ERROR;
+}
+#endif

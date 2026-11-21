@@ -11,6 +11,11 @@ extern "C" {
 #define PM_WAKE_MIC_INDET  0x04u
 #define PM_WAKE_SUB_INDET  0x08u
 void pm_api_on_exti_event(uint8_t source);
+/* RTC WUT is not an EXTI user-activity source. IRQ only sets a latch.
+ * Alarm A/B remain independent and reserved for the future alarm service. */
+void pm_api_on_rtc_wakeup_irq(void);
+uint8_t pm_api_rtc_wakeup_pending(void);
+uint8_t pm_api_external_wake_pending(void);
 /* Application consumer receives a separate copy of each PM-dispatched source. */
 uint8_t pm_api_take_events(void);
 void pm_api_init(void);
