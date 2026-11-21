@@ -672,19 +672,28 @@ screen face down, **Y=+1g**; with the right edge down, **X=+1g**.
 `SC7A20Algo` now publishes a separate, calibrated leveler-space
 vector `level_mg={native_Z,-native_X,native_Y}`, preserving
 native `raw[]` and `mg[]` for SC7A20 rotation, statistics and
-six-face calibration. The horizon's black/white polarity was then
-reversed independently in `level_draw_horizon()` following hardware
-observation: the complete implicit plane is negated, exchanging its
-filled half while keeping its zero contour (tilt and offset) fixed.
-The plumb/zenith mapping and the six-face sensor axes are unchanged.
+six-face calibration. After physical testing the horizon
+raster was corrected separately: top-white/bottom-black in the normal
+pose, original downward translation preserved, and horizon roll
+compensation opposite to case tilt. The plumb/zenith mapping and
+six-face sensor axes are unchanged.
 The six-face app's physical placement labels follow PB10A:
 UP=Z-, DOWN=Z+, LEFT=X+, RIGHT=X-, face-up=Y-, face-down=Y+.
 
 
-**Leveler display correction:** PB10A horizontal-mode screen polarity
-is now the inverse of the PB02B-derived raster. A negative level-X
-(normal flat PB10A) draws black above and white below, while
-the plumb mode retains its previously confirmed sensor orientation.
-The two XOR zenith discs have a **36px actual diameter** and no
-stationary third ring. When the two XOR discs precisely overlap they
-cancel, by design; there is no artificial circle at zero separation.
+**Leveler display correction (2026-11-21, hardware follow-up):**
+PB10A normal upright level-X=-1g is **white above, black below**
+(the previous black-above change was incorrect). For the horizon only,
+the scanline plane is
+`f=(levelY/h)*(px-63)+(levelX/h)*(py-31)+50*levelZ`.
+For the normal upright pose its boundary remains
+`py=31+50*levelZ`: raising the device still moves the black horizon
+downward. Right-edge-down roll now tilts the displayed horizon in the
+**opposite** direction to device rotation, preventing the doubled
+apparent angle. This change leaves the already-correct zenith/plumb
+axis map untouched. The two XOR zenith discs remain exactly **36px**
+in diameter with no stationary reference ring, and screen-face-up
+zenith retains a **white** background. The bottom-right default-font
+angle and degree mark now use `U8G2` draw color 2 (**XOR**) directly
+over the scene, **without an opaque backdrop**.
+When the two zenith XOR discs precisely overlap they cancel, by design.

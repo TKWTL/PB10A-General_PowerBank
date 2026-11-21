@@ -79,16 +79,21 @@ static void level_draw_horizon(float x,float y,float z) {
     float h=sqrtf(x*x+y*y);
     uint8_t white=1u,xor_color=2u;
     if(h<0.0001f)return;
-    /* PB10A on-device observation: the HORIZON black/white direction
-     * was reversed after the PB02B mounting-axis conversion. Negate
-     * the entire original implicit plane, including Z displacement:
-     * original f=(-Y/h)(px-cx)+(X/h)(py-cy)+50*Z;
-     * PB10A   f=-original_f. The zero contour (tilt and position)
-     * is unchanged, but the visible/hidden halves are exchanged.
-     * Crucially, the zenith/plumb drawing path is NOT changed. */
+    /* PB10A screen-space compensation, following physical tests:
+     * normal upright pose level_X=-1g -> white ABOVE, black BELOW.
+     * right-side-down rolls the case clockwise; the horizon MUST tilt
+     * counterclockwise relative to the case, or its world angle doubles.
+     *
+     * Fill when f >= 0, where:
+     *   f = (Y/h)*(px-63) + (X/h)*(py-31) + 50*Z.
+     * For X=-1,Y=0, f=31-py+50*Z: white is above the line and
+     * the boundary py=31+50*Z still moves DOWN on lifting (positive Z).
+     * Relative to the previous version, reverse the Y coefficient
+     * (roll compensation) and Z offset, but keep the X coefficient.
+     * This does not touch the correctly oriented zenith/plumb path. */
     nx=(int32_t)(( y/h)*1024.0f);
-    ny=(int32_t)((-x/h)*1024.0f);
-    offset=(int32_t)(-z*50.0f*1024.0f);
+    ny=(int32_t)(( x/h)*1024.0f);
+    offset=(int32_t)(z*50.0f*1024.0f);
     Disp_SetDrawColor(&white);
     for(row=0;row<64;row++) {
         int32_t v0=nx*(-63)+ny*(row-31)+offset;
@@ -168,21 +173,20 @@ static void level_draw_zenith(float x,float y,float z,float angle) {
 }
 static void level_angle_footer(float angle) {
     char text[16];
-    uint8_t black=0u,white=1u;
+    uint8_t xor_color=2u;
     uint16_t value,x,w;
     if(angle<0.0f)angle=-angle;
     if(angle>99.99f)angle=99.99f;
     value=(uint16_t)(angle*100.0f+0.5f);
     (void)snprintf(text,sizeof(text),"%2u.%02u",
                    (unsigned)(value/100u),(unsigned)(value%100u));
-    Disp_SetFont(UI_FONT); /* project's default font, not source UNSCII */
+    Disp_SetFont(UI_FONT); /* preserve PB10A default font */
     w=Disp_GetUTF8Width(text);
     x=(uint16_t)(120u-(w>45u?45u:w));
-    /* Opaque label only in bottom-right corner; full-width horizon is
-     * left unobstructed elsewhere, with no right-hand XYZ columns. */
-    Disp_SetDrawColor(&black);
-    Disp_DrawBox(x>4u?x-4u:0u,49u,(uint16_t)(128u-(x>4u?x-4u:0u)),15u);
-    Disp_SetDrawColor(&white);
+    /* Draw digits and degree mark directly with XOR: bright against
+     * black, dark against white, and inverted over the moving horizon.
+     * Never erase or paint an opaque rectangle behind the angle. */
+    Disp_SetDrawColor(&xor_color);
     Disp_DrawStr(x,62u,text);
     Disp_DrawCircle(124u,53u,2u,U8G2_DRAW_ALL);
 }
