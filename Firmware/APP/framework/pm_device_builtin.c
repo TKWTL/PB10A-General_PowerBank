@@ -34,8 +34,15 @@ static pm_hook_result_t oled_resume(void *ctx)
 {(void)ctx;return oled_power(0);}
 static void radio_wut_disarm(void) {
     if(s_radio_wut_armed) {
-        (void)HAL_RTCEx_DeactivateWakeUpTimer(&hrtc);
-        s_radio_wut_armed=0u;
+        /* HAL deactivation stops WUTE/WUTIE but does not explicitly
+         * clear RTC_SR.WUTF. The HAL IRQ handler normally clears a fired
+         * WUT flag; also clear it on cancellation from another wake
+         * source. Do NOT clear the software source latch here: PM must
+         * still inspect it to distinguish RTC patrol from a user IRQ. */
+        if(HAL_RTCEx_DeactivateWakeUpTimer(&hrtc)==HAL_OK) {
+            __HAL_RTC_WAKEUPTIMER_CLEAR_FLAG(&hrtc,RTC_FLAG_WUTF);
+            s_radio_wut_armed=0u;
+        }
     }
 }
 static pm_hook_result_t stm32_suspend(void *ctx) {
@@ -69,7 +76,8 @@ static void stm32_deepsleep(void *ctx) {
      * A cleared edge pending bit must not strand STOP1 on a held-low pin. */
     /* Any EXTI that arrived after the PM's last poll must prevent WFI:
      * the edge might otherwise be cleared before STOP1 is entered. */
-    if(!pm_api_rtc_wakeup_pending() && !pm_api_external_wake_pending() &&
+    if(!pm_api_rtc_wakeup_pending() && !pm_api_rtc_alarm_pending() &&
+        !pm_api_external_wake_pending() &&
         (!SC7A20Algo_WakeIRQ() || LL_GPIO_IsInputPinSet(INT_GPIO_Port,INT_Pin)))
         HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON,PWR_STOPENTRY_WFI);
     SystemClock_Config();

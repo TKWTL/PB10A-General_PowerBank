@@ -536,3 +536,45 @@ plug/unplug while RUN, AUTO unplugged during STOP1 and eventual
 30-minute shutdown without lighting OLED, STOP1 MCO continuity,
 headset-dependent Keep Awake, and low-voltage/error protection.
 No Keil full build or physical integration test was run in this edit.
+
+### RTC wake-source flags and fixed LSE drift compensation (2026-11-21)
+
+A STOP1 wake caused by any source (keys/EXTI, Alarm A/B, RTC WUT)
+returns through `stm32_deepsleep()`. If the Radio WUT was armed,
+`radio_wut_disarm()` deactivates the timer and WUT interrupt and
+clears the WUTF hardware flag only after successful deactivation.
+The HAL RTC IRQ handler clears WUTF on an actual WUT interrupt. The
+software WUT cause remains latched until `pm_api_poll()` consumes
+it *after* STOP1, so cancellation does not destroy wake-source
+classification. On the next STOP1 preparation the 30-minute WUT is
+rearmed from the beginning **only if**
+`RadioAlgo_BackgroundWakeNeeded()` is true (ON with or without
+headset; AUTO with the headphone still plugged in). OFF does not
+arm it. Calendar Alarm A/B are not disabled by this WUT lifecycle.
+
+`RTC_TAMP_IRQHandler()` dispatches both HAL alarm and WUT handlers.
+The PM ISR callbacks now record **separate** alarm event bits
+`PM_RTC_ALARM_A` / `PM_RTC_ALARM_B` and the WUT boolean
+`s_rtc_wakeup_event`, independently of external GPIO
+`s_irq_events`. The foreground may consume alarm reason bits via
+`pm_api_take_rtc_alarm_events()`. Alarm A/B are not actually
+scheduled yet; their default placeholder alarms remain disabled.
+When an Alarm and WUT arrive simultaneously, **Alarm takes
+precedence** and follows normal RUN wake rather than the silent
+Radio background patrol. The alarm cause remains available to a
+future alarm/BEEP task; simply recording an event does not play
+the buzzer yet.
+
+The RTC calendar uses the correct LSE prescaler product
+`(127+1)*(255+1)=32768`. For the measured +10 s over 41 hours
+(+67.75 ppm) the per-board provisional software correction is
+`PB10A_RTC_SMOOTH_CALM=71U`, applied with
+`HAL_RTCEx_SetSmoothCalib(&hrtc,RTC_SMOOTHCALIB_PERIOD_32SEC,
+RTC_SMOOTHCALIB_PLUSPULSES_RESET,71U)`. This subtracts about
+67.71 pulses per million. The call lives after
+`RTC_ConfigureEvents:` inside CubeMX's `USER CODE BEGIN RTC_Init 2`,
+so a valid backup calendar survives reset yet calibration is
+reapplied each initialization. Smooth calibration adjusts calendar
+rate, not original LSE oscillator frequency or PA8 MCO. Re-set
+calendar time once and measure residual drift for multiple days;
+the constant is not a measured guarantee for other boards.

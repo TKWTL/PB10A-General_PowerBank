@@ -14,6 +14,8 @@ static pm_controller_t s_ctrl;
 static uint8_t s_ready,s_block_mask,s_paused,s_forced;
 static volatile uint8_t s_irq_events;
 static volatile uint8_t s_rtc_wakeup_event;
+static volatile uint8_t s_rtc_alarm_events; /* RTC calendar Alarm A/B IRQs */
+static uint8_t s_app_rtc_alarm_events;      /* foreground consumption */
 static uint8_t s_app_events; /* PM-dispatched sources for foreground services */
 static uint8_t s_refresh_request,s_wake_guard;
 static uint32_t s_wake_at;
@@ -43,9 +45,25 @@ void pm_api_refresh_idle(void) {
 void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *rtc) {
     if(rtc && rtc->Instance==RTC)s_rtc_wakeup_event=1u;
 }
+void HAL_RTC_AlarmAEventCallback(RTC_HandleTypeDef *rtc) {
+    if(rtc && rtc->Instance==RTC)s_rtc_alarm_events|=PM_RTC_ALARM_A;
+}
+void HAL_RTCEx_AlarmBEventCallback(RTC_HandleTypeDef *rtc) {
+    if(rtc && rtc->Instance==RTC)s_rtc_alarm_events|=PM_RTC_ALARM_B;
+}
 void pm_api_on_rtc_wakeup_irq(void){s_rtc_wakeup_event=1u;}
 uint8_t pm_api_rtc_wakeup_pending(void){return s_rtc_wakeup_event;}
+uint8_t pm_api_rtc_alarm_pending(void){return s_rtc_alarm_events!=0u;}
 uint8_t pm_api_external_wake_pending(void){return s_irq_events!=0u;}
+uint8_t pm_api_take_rtc_alarm_events(void) {
+    uint32_t primask=__get_PRIMASK();
+    uint8_t events;
+    __disable_irq();
+    events=s_app_rtc_alarm_events;
+    s_app_rtc_alarm_events=0u;
+    __set_PRIMASK(primask);
+    return events;
+}
 
 void pm_api_on_exti_event(uint8_t source) {
     uint32_t primask=__get_PRIMASK();
@@ -145,7 +163,7 @@ static void pm_background_poll(void) {
 }
 void pm_api_poll(void) {
     pm_power_state_t previous,next;
-    uint8_t events,rtc_wakeup;
+    uint8_t events,rtc_wakeup,rtc_alarms;
     uint32_t primask;
     pm_api_init();
     /* Consume once per PM poll without racing an EXTI that writes the flag. */
@@ -153,12 +171,16 @@ void pm_api_poll(void) {
     __disable_irq();
     events=s_irq_events;
     s_irq_events=0u;
-    /* Every external interrupt is activity, including an unarmed sensor
-     * edge. Services receive the same sources after PM consumes them. */
+    rtc_alarms=s_rtc_alarm_events;
+    s_rtc_alarm_events=0u;
+    /* External GPIO and calendar alarm events must retain their original
+     * sources for the relevant foreground services. WUT stays separate:
+     * it must not refresh the user-idle timer or light the OLED. */
     s_app_events|=events;
+    s_app_rtc_alarm_events|=rtc_alarms;
     __set_PRIMASK(primask);
     if(s_bg_stage!=PM_BG_NONE) {
-        if(events)pm_background_abort_to_run();
+        if(events || rtc_alarms)pm_background_abort_to_run();
         else {
             pm_background_poll();
             if(s_bg_stage!=PM_BG_NONE)return;
@@ -167,8 +189,9 @@ void pm_api_poll(void) {
             return;
         }
     }
-    if(events) {
-        /* Do not suppress a RUN key or plug-in as post-STOP input. */
+    if(events || rtc_alarms) {
+        /* Physical EXTI and calendar alarms are explicit RUN wake sources.
+         * A future BEEP task can choose a different alarm UI policy. */
         uint8_t waking=pm_controller_is_ui_blocked(&s_ctrl)?1u:0u;
         pm_sleep_timer_clear_force();
         s_forced=0u;
@@ -209,10 +232,11 @@ void pm_api_poll(void) {
         rtc_wakeup=s_rtc_wakeup_event;
         s_rtc_wakeup_event=0u;
         __set_PRIMASK(primask);
-        if(rtc_wakeup && !pm_api_external_wake_pending()) {
-            /* WUT was armed only for ON/AUTO radio + inserted headset.
-             * Test the CURRENT headset level after resume: it can be
-             * unplugged while STOP1, with no rising-edge EXTI. */
+        if(rtc_wakeup && !pm_api_external_wake_pending() &&
+            !pm_api_rtc_alarm_pending()) {
+            /* WUT was armed for ON or inserted-AUTO Radio. Check CURRENT
+             * MIC_INDET after wake for AUTO, not an old insertion latch.
+             * If Alarm A/B or EXTI also fired, visible RUN takes priority. */
             s_bg_stage=PM_BG_START;
             s_bg_started_at=Millis();
             pm_controller_enter_background_check(&s_ctrl);

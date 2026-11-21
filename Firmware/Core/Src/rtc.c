@@ -21,7 +21,11 @@
 #include "rtc.h"
 
 /* USER CODE BEGIN 0 */
-
+/* Fixed initial calibration for measured LSE gain (+10s over 41h).
+ * 32 s smooth-calibration window: -71 / 2^20 = -67.71 ppm.
+ * Future revisions may replace this per-board value with a saved setting.
+ * This corrects RTC calendar rate, not the physical PA8 MCO frequency. */
+#define PB10A_RTC_SMOOTH_CALM 71U
 /* USER CODE END 0 */
 
 RTC_HandleTypeDef hrtc;
@@ -137,6 +141,18 @@ void MX_RTC_Init(void)
   /* The 30-minute WUT is armed by PM only for inserted-headset FM.
    * Never leave CubeMX's startup WUT enabled while the UI is in RUN. */
   (void)HAL_RTCEx_DeactivateWakeUpTimer(&hrtc);
+
+  /* Reapply the same smooth calibration on every MCU reset, including
+   * when the backup calendar is valid and its default time/date setup
+   * was skipped via RTC_ConfigureEvents. Smooth calibration does not
+   * retroactively correct elapsed clock error. */
+  if (HAL_RTCEx_SetSmoothCalib(&hrtc,
+                              RTC_SMOOTHCALIB_PERIOD_32SEC,
+                              RTC_SMOOTHCALIB_PLUSPULSES_RESET,
+                              PB10A_RTC_SMOOTH_CALM) != HAL_OK)
+  {
+    Error_Handler();
+  }
   /* USER CODE END RTC_Init 2 */
 
 }
