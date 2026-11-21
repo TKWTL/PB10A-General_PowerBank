@@ -133,11 +133,12 @@ void Radio_AppDraw(ui_t *ui) {
         (void)snprintf(buf,sizeof(buf),"I2C ERROR %u",(unsigned)s_snapshot.error_code);
         Disp_DrawStr(21u,36u,buf);
     }
-    else if(s_snapshot.state==RADIO_STATE_OFF) {
-        Disp_SetFont(font_radio_h12w6);
-        Disp_DrawStr(37u,36u,"Radio OFF");
-    }
     else {
+        /* A powered-down RDA5807 is not a display mode: preserve the
+         * last tuned frequency and the existing station ruler while
+         * OFF/AUTO is waiting for a headset. Headphone connection is
+         * already shown in the top status row. Seek/Tune animations are
+         * still shown above only while a search is really in progress. */
         fraction=(uint16_t)((s_snapshot.frequency%40u)*25u);
         if((fraction%10u)==0u)
             (void)snprintf(buf,sizeof(buf),"%u.%02u",

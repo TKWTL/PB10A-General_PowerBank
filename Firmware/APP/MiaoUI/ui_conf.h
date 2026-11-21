@@ -386,6 +386,11 @@ typedef struct ui_t {
     ui_optionbar_param_t optionbar;
     ui_scrollbar_t scrollbar;
     ui_nav_bookmark_t navBookmark;
+    /* One mosaic transition step per 20 ms MiaoUI pass. The existing
+     * scheduler is unchanged: no adaptive-game feature is merged. */
+    UI_ACTION fadeAction;
+    uint8_t fadePhase; /* 0 idle, 1 fade frames, 2 commit, 3 inside commit */
+    uint8_t fadeStep;  /* eight stages 0..7 */
 } ui_t;
 
 void Create_Parameter(ui_t *ui);

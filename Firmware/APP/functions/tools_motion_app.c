@@ -206,9 +206,13 @@ void Motion_LevelerRun(ui_t *ui) {
     }
     if(sample.seq!=s_level_seq) {
         s_level_seq=sample.seq;
-        x=sample.mg[0]*0.001f;
-        y=sample.mg[1]*0.001f;
-        z=sample.mg[2]*0.001f;
+        /* Use the explicit drawing-space vector prepared by
+         * SC7A20Algo; these are NOT the chip-native X/Y/Z axes.
+         * PB10A Z- -> PB02B horizontal, X- -> PB02B left-white
+         * vertical, Y- -> PB02B face-up dual zenith circle. */
+        x=sample.level_mg[0]*0.001f;
+        y=sample.level_mg[1]*0.001f;
+        z=sample.level_mg[2]*0.001f;
         if(!s_level_valid) {
             s_level_x=x;s_level_y=y;s_level_z=z;
             s_level_valid=1u;
@@ -243,9 +247,15 @@ void Motion_LevelerRun(ui_t *ui) {
     Disp_SendBuffer();
 }
 
-/* Six stable faces directly correspond to the PB02B six-face procedure:
- * X- screen top up, X+ bottom up, Y- right edge up, Y+ left edge up,
- * Z- screen face up and Z+ screen face down. */
+/* Physical PB10A face-to-label correspondence (do not copy PB02B):
+ * UP    -> Z- (normal flat placement, screen upright);
+ * DOWN  -> Z+ (opposite placement);
+ * RIGHT -> X- (right edge upwards);
+ * LEFT  -> X+ (right edge downwards);
+ * face UP   -> Y- (screen faces upwards);
+ * face DOWN -> Y+ (screen faces downwards).
+ * Face indices remain raw X-,X+,Y-,Y+,Z-,Z+ for the six-axis slope
+ * calculation and retained .noinit calibration data. */
 static uint8_t cal_detect(const int16_t raw[3]) {
     int16_t x=raw[0],y=raw[1],z=raw[2];
     int16_t ax=cal_abs(x),ay=cal_abs(y),az=cal_abs(z);
@@ -330,13 +340,13 @@ static void cal_draw(void) {
                            (unsigned)s_cal_intervals);
         else (void)snprintf(info,sizeof(info),"Hold 2s");
         Disp_DrawStr(77u,10u,info);
-        Disp_DrawStr(54u,22u,s_cal_done[0]?"OK":"UP");
-        Disp_DrawStr(48u,61u,s_cal_done[1]?"OK":"DOWN");
-        Disp_DrawStr(1u,36u,s_cal_done[3]?"OK":"LEFT");
-        Disp_DrawStr(94u,36u,s_cal_done[2]?"OK":"RIGHT");
+        Disp_DrawStr(54u,22u,s_cal_done[4]?"OK":"UP");
+        Disp_DrawStr(48u,61u,s_cal_done[5]?"OK":"DOWN");
+        Disp_DrawStr(1u,36u,s_cal_done[1]?"OK":"LEFT");
+        Disp_DrawStr(94u,36u,s_cal_done[0]?"OK":"RIGHT");
         (void)snprintf(info,sizeof(info),"ZU:%s ZD:%s",
-                       s_cal_done[4]?"OK":"--",
-                       s_cal_done[5]?"OK":"--");
+                       s_cal_done[2]?"OK":"--",
+                       s_cal_done[3]?"OK":"--");
         Disp_DrawStr(26u,47u,info);
     }
     Disp_SendBuffer();

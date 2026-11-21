@@ -14,7 +14,12 @@ void SC7A20Algo_AddStatisticsItems(ui_page_t *page);
  * mode: 0 normal 5Hz, 1 leveler 25Hz, 2 six-face calibration 5Hz. */
 typedef struct {
     int16_t raw[3];      /* uncalibrated right-aligned 12-bit codes */
-    int16_t mg[3];       /* calibrated milligravity */
+    int16_t mg[3];       /* PB10A physical sensor XYZ, calibrated mg */
+    /* PB02B leveler drawing coordinates, mapped from PB10A actual axes:
+     * level_X = sensor_Z; level_Y = -sensor_X; level_Z = sensor_Y.
+     * The physical raw[] and mg[] stay in chip-native order for
+     * six-face calibration, rotation and diagnostic statistics. */
+    int16_t level_mg[3];
     uint32_t seq;
 } sc7a20_sample_t;
 void SC7A20Algo_SetToolMode(uint8_t mode);

@@ -82,9 +82,37 @@ static void sc_offline(void) {
     SC7A20_AsyncSetReady(0u);
 }
 
-/* Board orientation: Z=-1g normal, Z=+1g rotated 180 degrees.
- * With the screen face down (Y=+1g) or the right edge down (X=+1g),
- * neither Z threshold applies, so the current orientation is retained. */
+/* PB10A SC7A20 measured mounting direction, from the user's original
+ * physical test (not inferred from the PB02B board layout):
+ *
+ * "系统是扁方盒，屏幕在侧面；
+ *  平放且屏幕正向时 Z 轴约 -1g；
+ *  屏幕面朝下时 Y 轴约 +1g；
+ *  屏幕右侧朝下时 X 轴约 +1g。"
+ *
+ * Opposite orientations invert the same native axis:
+ *   Z+ = upside-down from the normal flat Z- reference;
+ *   Y- = display face upwards (Y+ = face downwards);
+ *   X- = display RIGHT edge upwards (X+ = right edge downwards).
+ *
+ * This differs from the PB02B leveler source, which explicitly expects:
+ *   Leveler X=-1g -> horizontal horizon, top white/bottom black;
+ *   Leveler Y=+1g -> vertical horizon, left white/right black;
+ *   Leveler Z=-1g -> face-up zenith, black ground/white rings.
+ *
+ * Therefore ONLY the drawing-space vector is remapped:
+ *   level_X = PB10A Z, level_Y = -PB10A X, level_Z = PB10A Y.
+ * No hardware XYZ swapping and no change to raw six-face calibration
+ * order or screen-auto-rotation Z threshold. */
+static void sc_level_axes_update(void) {
+    s_sample.level_mg[0]=s_sample.mg[2];
+    s_sample.level_mg[1]=(int16_t)-s_sample.mg[0];
+    s_sample.level_mg[2]=s_sample.mg[1];
+}
+
+/* Screen auto-rotation remains based on native Z=-1g NORMAL and
+ * Z=+1g FLIPPED. When face-down (Y+) or right-edge-down (X+),
+ * neither Z threshold is crossed, so retain the previous orientation. */
 static void sc_orientation_update(int z_mg) {
     uint8_t next;
     if(z_mg<=-SC_ORIENT_ENTER_MG)next=SC7A20_ORIENT_NORMAL;
@@ -251,6 +279,7 @@ void SC7A20Algo_Poll(void) {
             s_sample.mg[0]=(int16_t)SC7A20_ReadX_mg();
             s_sample.mg[1]=(int16_t)SC7A20_ReadY_mg();
             s_sample.mg[2]=(int16_t)SC7A20_ReadZ_mg();
+            sc_level_axes_update(); /* PB10A -> PB02B drawing axes */
             ++s_sample.seq;if(!s_sample.seq)++s_sample.seq;
             s_sample_at=Millis();
             /* 25Hz leveler sampling must not speed up the 5Hz

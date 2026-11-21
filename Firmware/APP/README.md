@@ -641,3 +641,37 @@ Both MiaoUI items, their source icons, the new
 `APP/functions/tools_motion_app.c/.h`, `sc7a20_algo.c/.h`
 and MDK project source list are included in the same patch.
 Hardware calibration and front-panel visual tests are still needed.
+
+### Radio readout, DMA-safe menu mosaic and PB10A leveler axes
+
+The Radio page always renders its most recent frequency and the 43/45/47
+pixel station ruler even when the RDA5807 hardware is powered down.
+It only shows "Seeking..." during an active search and "Tuning..."
+during an active tune; it no longer overwrites the frequency with
+"Radio OFF". The top status row already reports headphone connection.
+This is display-only and does **not** start the receiver.
+
+The menu mosaic transition repair was extracted **only** from existing
+`feature/miaoui-adaptive-games-20261121` at
+`775a99934d92fd1fc1a8684f9f75c097c08c3a1c`.
+`UI_Disapper()`'s eight back-to-back writes were replaced with an
+eight-step randomized dissolve, one OLED DMA frame per existing
+20 ms `MiaoUiThread` pass. Navigation is committed only after the
+final mosaic frame has finished transmission. External UI navigation
+cancels the effect cleanly. The adaptive scheduler, game changes and
+branch history were **not** merged, and no new branch was created.
+
+PB02B's `leveler.c` explicitly defines X=-1g horizontal
+(top white/bottom black), Y=+1g vertical (left white/right black),
+Z=-1g zenith (black background/white XOR circles). PB10A's
+user-measured native mounting is different: a flat device with the
+screen in its normal orientation gives native **Z=-1g**; with the
+screen face down, **Y=+1g**; with the right edge down, **X=+1g**.
+`SC7A20Algo` now publishes a separate, calibrated leveler-space
+vector `level_mg={native_Z,-native_X,native_Y}`, preserving
+native `raw[]` and `mg[]` for SC7A20 rotation, statistics and
+six-face calibration. This restores the source horizon/zenith color
+conventions without swapping physical axes in BSP code.
+The six-face app's physical placement labels follow PB10A:
+UP=Z-, DOWN=Z+, LEFT=X+, RIGHT=X-, face-up=Y-, face-down=Y+.
+

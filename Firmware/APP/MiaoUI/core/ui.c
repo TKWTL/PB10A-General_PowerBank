@@ -480,40 +480,45 @@ default:
 #endif
 }
 
-/**
- * @brief 使屏幕上的内容逐渐消失的函数
- *
- * @param disapper 一个用于控制消失程度的参数，初始值建议为0，每次调用本函数会自动增加
- * @return uint8_t 返回调整后的disapper值，用于下次调用时继续消失过程
- */
-static uint8_t UI_Disapper(ui_t *ui, uint8_t disapper) {
-    short disapper_temp = 0;
-    // 计算屏幕缓冲区的总长度
-    int length = 8 * Disp_GetBufferTileHeight() * Disp_GetBufferTileWidth();
-    uint8_t *p = Disp_GetBufferPtr(); // 获取屏幕缓冲区的指针
-
-    // 如果背景色为黑色，那么执行与操作，让像素点逐渐变暗从而消失
-    if(ui->bgColor==0) {
-        for( int i = 0; i < length; i++) {
-            p[i] = p[i] & (rand()%0xff) >> disapper; // 通过与操作使像素点变暗
+/* The original Collar-Radio dissolve sent eight blocking frames.
+ * PB10A has a single 1024-byte framebuffer shared with asynchronous SPI DMA.
+ * Render one dissolve stage per MiaoUI pass, after the previous DMA finishes,
+ * and defer changing the page until the last stage is fully transmitted. */
+static uint32_t s_fade_rng=0xA5366B29u;
+static uint8_t UI_FadeRandomByte(void) {
+    uint32_t x=s_fade_rng;
+    x^=x<<13;
+    x^=x>>17;
+    x^=x<<5;
+    s_fade_rng=x;
+    return (uint8_t)x;
+}
+static void UI_FadeFrame(ui_t *ui, uint8_t step) {
+    const uint16_t len=(uint16_t)(8u*Disp_GetBufferTileHeight()*
+                                  Disp_GetBufferTileWidth());
+    uint8_t *const p=Disp_GetBufferPtr();
+    uint16_t i;
+    if(!p)return;
+    for(i=0u;i<len;i++) {
+        uint8_t a,b,drop;
+        if(step>=7u)drop=0xffu;
+        else {
+            a=UI_FadeRandomByte();
+            b=UI_FadeRandomByte();
+            if(step<2u)drop=(uint8_t)(a & b & UI_FadeRandomByte());
+            else if(step<4u)drop=(uint8_t)(a & b);
+            else if(step<6u)drop=a;
+            else drop=(uint8_t)(a|b);
         }
+        if(ui->bgColor==0u)p[i]&=(uint8_t)~drop;
+        else p[i]|=drop;
     }
-    else // 如果背景色不是黑色，执行或操作，让像素点逐渐变亮从而消失
-        {
-        for( int i = 0; i < length; i++) {
-            p[i] = p[i] | (rand()%0xff) >> disapper; // 通过或操作使像素点变亮
-        }
-    }
-
-    disapper += 2; // 每次调用使消失程度增加，以便逐渐完成消失过程
-    if(disapper >= 8) // 当消失程度达到最大值时重置为0，准备下一次调用
-        {
-        disapper = 0;
-    }
-
-    Disp_SendBuffer(); // 将更新后的缓冲区内容发送到OLED显示设备
-    disapper_temp = disapper;
-    return disapper_temp; // 返回调整后的disapper值，供外部调用者使用
+    Disp_SendBuffer();
+}
+static void UI_FadeBegin(ui_t *ui, UI_ACTION action) {
+    ui->fadeAction=action;
+    ui->fadeStep=0u;
+    ui->fadePhase=1u;
 }
 
 /**
@@ -978,6 +983,8 @@ uint8_t UI_NavigateTo(ui_t *ui, ui_item_t *target, ui_nav_mode_t mode) {
     }
     else if(mode==UI_NAV_REPLACE)ui->navBookmark.valid=0u;
     if(ui->navBookmark.valid)ui->navBookmark.target=target;
+    /* External navigation supersedes a pending dissolve. */
+    ui->fadePhase=0u;
     if(ui->menuState==UI_ITEM_RUNING || ui->menuState==UI_ITEM_DRAWING ||
         ui->menuState==UI_ITEM_EXIT)UI_LeaveCurrent(ui);
     indevClearPending();
@@ -1020,6 +1027,7 @@ uint8_t UI_NavigateTo(ui_t *ui, ui_item_t *target, ui_nav_mode_t mode) {
 uint8_t UI_NavigateBack(ui_t *ui) {
     ui_item_t *item;
     if(!ui || !ui->navBookmark.valid)return 0u;
+    ui->fadePhase=0u;
     if(ui->menuState==UI_ITEM_RUNING || ui->menuState==UI_ITEM_DRAWING ||
         ui->menuState==UI_ITEM_EXIT)UI_LeaveCurrent(ui);
     item=ui->navBookmark.item;
@@ -1055,8 +1063,34 @@ void Create_element(ui_item_t *item, ui_element_t *element) {
  * @param Dir 菜单操作方向，包括上、下、进入等操作
  */
 static void Process_UI_Run(ui_t *ui, UI_ACTION Action) {
-    uint8_t disapper = 0;
-    uint8_t i;
+    /* Save a navigation/exit event and run its dissolve across eight DMA
+     * frames. No second frame buffer or blocking display flush is required.
+     * fadePhase == 3 commits the saved event without starting another fade.
+     * Root screen-off and external bookmark returns are immediate. */
+    if(ui->fadePhase==0u) {
+        if(ui->menuState==UI_ITEM_EXIT) {
+            if(!(ui->navBookmark.valid &&
+                 ui->navBookmark.target==ui->nowItem)) {
+                UI_FadeBegin(ui,Action);
+                return;
+            }
+        }
+        else if(ui->menuState==UI_PAGE_RUNING && ui->nowItem) {
+            if(Action==UI_ACTION_ENTER) {
+                UI_FadeBegin(ui,Action);
+                return;
+            }
+            if(Action==UI_ACTION_BACK &&
+               ui->nowItem->page.location &&
+               ui->nowItem->page.location->parentPage &&
+               !(ui->navBookmark.valid && ui->navBookmark.target &&
+                 ui->nowItem->page.location==
+                     ui->navBookmark.target->page.location)) {
+                UI_FadeBegin(ui,Action);
+                return;
+            }
+        }
+    }
     switch (ui->menuState) // 根据当前菜单状态进行不同的操作
     {
     case UI_PAGE_RUNING:
@@ -1084,7 +1118,6 @@ static void Process_UI_Run(ui_t *ui, UI_ACTION Action) {
                 // 避免重复状态改变
                 if(ui->action != UI_ACTION_ENTER) Change_UIState(ui, UI_PAGE_RUNING);
 
-                for (i = 0; i < 8; i++) disapper = UI_Disapper(ui ,disapper);// 执行UI淡出操作
 
                 // 如果存在跳转页面且不为空，则绘制跳转页面并更新当前项
                 if(ui->nowItem->page.jumpPage != NULL && ui->nowItem->page.jumpPage->item.head != NULL) {
@@ -1100,7 +1133,6 @@ static void Process_UI_Run(ui_t *ui, UI_ACTION Action) {
                 // 避免重复状态改变
                 if(ui->action != UI_ACTION_ENTER) Change_UIState(ui, UI_PAGE_RUNING);
 
-                for (i = 0; i < 8; i++) disapper = UI_Disapper(ui ,disapper);// 执行UI淡出操作
 
                 // 如果存在跳转页面，则绘制跳转页面并更新当前项
                 if(ui->nowItem->page.jumpPage != NULL) {
@@ -1111,7 +1143,6 @@ static void Process_UI_Run(ui_t *ui, UI_ACTION Action) {
             }
             else // 如果当前项为空或非父项，则进入应用绘制状态
                 {
-                UI_Disapper(ui, 1);
                 Change_UIState(ui, UI_ITEM_DRAWING);
             }
             break;
@@ -1134,7 +1165,6 @@ static void Process_UI_Run(ui_t *ui, UI_ACTION Action) {
                 // 避免重复状态改变
                 if(ui->action != UI_ACTION_BACK) Change_UIState(ui, UI_PAGE_RUNING);
 
-                for (i = 0; i < 8; i++) disapper = UI_Disapper(ui ,disapper);// 执行UI淡出操作
 
                 // 如果不是最低级菜单
                 if(ui->nowItem->page.location->parentPage != NULL){
@@ -1144,7 +1174,6 @@ static void Process_UI_Run(ui_t *ui, UI_ACTION Action) {
                 }
             }
             else{ // 否则进入应用绘制状态
-                UI_Disapper(ui, 1);
                 Change_UIState(ui, UI_ITEM_DRAWING);
             }
             break;
@@ -1162,9 +1191,6 @@ static void Process_UI_Run(ui_t *ui, UI_ACTION Action) {
         Dialog_AnimationParam_Init(ui);
         Scrollbar_Init(ui);
         Change_UIState(ui, UI_PAGE_RUNING);
-        for (size_t i = 0; i < 8; i++) {
-            disapper = UI_Disapper(ui, disapper); // 执行UI淡出操作
-        }
         if(ui->nowItem != NULL) // 确保now_item非空
             {
             Draw_UI(ui, ui->nowItem->page.location, ui->nowItem, ui->nowItem);
@@ -1275,7 +1301,27 @@ default:
  * 无返回值
  */
 void ui_loop(ui_t *ui) {
-    UI_ACTION Action = indevScan(ui); // 根据当前页面类型映射五向按键
+    UI_ACTION Action;
+    if(!ui)return;
+    if(ui->fadePhase==1u) {
+        /* One mosaic frame per pass. MiaoUiThread checks FrameBusy()
+         * before calling ui_loop, so this never edits the DMA buffer
+         * while SPI is still transmitting the previous frame. */
+        UI_FadeFrame(ui,ui->fadeStep++);
+        if(ui->fadeStep>=8u)ui->fadePhase=2u;
+        return;
+    }
+    if(ui->fadePhase==2u) {
+        /* The last mosaic frame has finished DMA. Commit the saved
+         * navigation once, without triggering a recursive fade. */
+        UI_ACTION saved=ui->fadeAction;
+        ui->fadePhase=3u;
+        indevClearPending();
+        Process_UI_Run(ui,saved);
+        ui->fadePhase=0u;
+        return;
+    }
+    Action=indevScan(ui); // 根据当前页面类型映射五向按键
     if (ui->menuState == UI_PAGE_INIT) {
         ui->menuState = UI_PAGE_RUNING;
         // 初始化状态下，非空检查now_item并绘制当前菜单项
