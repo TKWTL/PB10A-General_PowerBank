@@ -15,6 +15,16 @@ them.
   **or any directional key** exits. The scanner prevents automatic
   sleep while open without monopolizing coroOS.
 
+- `tools_motion_app.c/.h`: PB02B six-face SC7A20 calibration and full-screen
+  Leveler port. Both are MiaoUI WORD apps under Tools and use the
+  SC7A20 algorithm's sequential RAM sample mirror, never UI-owned I2C.
+  Leveler draws a 128x64 gravity-translated/rotated horizon with a
+  plumb double-circle view and a default-font tilt angle at bottom right;
+  its icons are the Collar-Radio Gradienter and Calibration 30x30 XBM.
+  Calibration uses six stable ±axis placements, then records zero/slope
+  with CRC into RTC backup DR1–DR4 (DR0 remains the calendar marker).
+  Both applications release their distinct PM/rotation lock on leave.
+
 Shared/system services such as RTC calendar editing remain in `APP/services/`.
 For new MiaoUI applications, register their callbacks/pages in `ui_conf.c`
 and their sources in the Keil project. Do not put them in CubeMX-managed

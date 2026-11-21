@@ -826,6 +826,11 @@
               <FilePath>../APP/functions/radio_app.c</FilePath>
             </File>
             <File>
+              <FileName>tools_motion_app.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/functions/tools_motion_app.c</FilePath>
+            </File>
+            <File>
               <FileName>power_algo.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/services/power_algo.c</FilePath>

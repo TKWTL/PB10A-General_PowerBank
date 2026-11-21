@@ -578,3 +578,61 @@ reapplied each initialization. Smooth calibration adjusts calendar
 rate, not original LSE oscillator frequency or PA8 MCO. Re-set
 calendar time once and measure residual drift for multiple days;
 the constant is not a measured guarantee for other boards.
+
+### PB02B Leveler and six-face calibration (2026-11-21)
+
+The **Tools** icon page now offers two WORD-page apps:
+
+- `-Leveler` using Collar-Radio's original GPL-3.0
+  `img_gradienter` 30x30 XBM icon. It adapts the PB02B
+  `firmware/Applications/functions/leveler.c` 160x40 A8/LVGL
+  drawing to PB10A's native **128x64** SSD1306 with per-row
+  u8g2 span drawing (no additional framebuffer). There is **no
+  right-hand X/Y/Z acceleration column**. Horizon tilt and vertical
+  translation retain the original gravity-normal plane, plus
+  XOR tick marks. The 43-degree entry/47-degree exit hysteresis,
+  orientation-dependent white/black zenith view and dual XOR circles
+  are retained; a fixed ring makes the zenith visible when aligned.
+  Current tilt is overlaid in the **bottom-right** using the
+  project's default `UI_FONT` with a small degree-ring mark.
+- `-Accel Calibration` using Collar-Radio's
+  `img_gradienter_cal`. The PB02B six-face (not six independent
+  accelerometer axes) procedure is ported with the same threshold
+  and stability rules: X-/X+/Y-/Y+/Z-/Z+ with each candidate held
+  for 10 additional fresh 200ms intervals (about 2 seconds).
+  No partial face capture updates runtime calibration. When all
+  faces validate, derive each axis' zero midpoint and
+  slope=2000mg/(raw positive-negative span); the three sensors'
+  calibration setters receive the six validated results together.
+  Success is briefly displayed and the app exits automatically;
+  any key can exit early before completion.
+
+The existing `SC7A20Thread` remains the **only I2C user**:
+`SC7A20Algo_GetSample()` exports a coherent RAM copy of both
+unscaled codes and calibrated mg with a sequence number. Leveler
+requests 25Hz sampling (matching sensor ODR) with 0.2 EMA smoothing;
+calibration keeps 5Hz sampling. Normal orientation detection still
+uses its original 5Hz/2-second hysteresis even while the leveler
+is running. Both apps hold a distinct PM idle block (0x20) and
+temporarily enforce native R0 display orientation; their MiaoUI
+onLeave hooks always restore normal sampling, PM policy and
+auto-rotation eligibility.
+
+**Calibration persistence:** PB10A does not currently have
+PB02B's NVM worker. STM32G070 has **five RTC backup data registers**.
+DR0 is reserved for the calendar 0xB10A marker; DR1 through DR3
+store three signed 16-bit raw zeros and three unsigned 16-bit Q14
+slopes; DR4 stores a 16-bit version/magic and CRC16-CCITT of
+the packed values. The valid marker is written last, so an
+interrupted update cannot silently load a partial record.
+`SC7A20Algo_Init()` restores the record if it is well-formed.
+It survives software reset and power interruptions **only while
+the RTC backup domain remains supplied**; it is erased with the
+backup domain. There is no Flash erase/write or additional I2C
+owner. Future functions must not allocate DR1..DR4 without
+first migrating this calibration layout.
+
+Both MiaoUI items, their source icons, the new
+`APP/functions/tools_motion_app.c/.h`, `sc7a20_algo.c/.h`
+and MDK project source list are included in the same patch.
+Hardware calibration and front-panel visual tests are still needed.

@@ -38,7 +38,11 @@ THRD_DECLARE(MiaoUiThread) {
     for(;;) {
         if(SSD1306_Display_IsReady() && !SSD1306_Display_FrameBusy() && !pm_api_ui_should_block()) {
             MiaoUi_ProcessNavigate(&s_ui);
-            Disp_ResumeRotation(&s_ui);
+            /* PB02B Leveler/6-face views remain in native screen geometry.
+             * Do not let automatic Z-rotation turn the horizon or the
+             * six physical placement labels while these tools are open. */
+            if(SC7A20Algo_ToolMode()!=0u) Disp_SetRotation(0u);
+            else Disp_ResumeRotation(&s_ui);
             ui_loop(&s_ui);
         }
         THRD_DELAY(20u);

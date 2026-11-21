@@ -12,6 +12,7 @@
 #include "i2c_scanner.h"
 #include "powerbank_app.h"
 #include "radio_app.h"
+#include "tools_motion_app.h"
 #include "radio_algo.h"
 #include "system_algo.h"
 #include "power_algo.h"
@@ -28,7 +29,7 @@ static ui_item_t s_settings_back,s_stats_back,s_game_back,s_tools_back;
 static ui_item_t s_display_item,s_sleep_wake_item,s_system_item,s_display_back,s_sleep_wake_back,s_system_back;
 static ui_item_t s_stat_power_item,s_stat_battery_item,s_stat_sensors_item,s_stat_system_item;
 static ui_item_t s_stat_power_back,s_stat_battery_back,s_stat_sensors_back,s_stat_system_back;
-static ui_item_t s_dino,s_scanner,s_tools_info;
+static ui_item_t s_dino,s_scanner,s_tools_info,s_leveler,s_accel_cal;
 static ui_item_t s_sleep_options_item,s_sleep_options_back,s_sleep_items[9];
 static ui_data_t s_sleep_data[9];
 static ui_element_t s_sleep_elements[9];
@@ -172,6 +173,12 @@ void Create_MenuTree(ui_t *ui) {
 
     AddPage("[Tools]",&s_tools,UI_PAGE_ICON,&s_home);
         add_return(&s_tools,&s_home,&s_tools_back,0);
+        AddItem("-Leveler",UI_ITEM_WORD,img_gradienter,
+            &s_leveler,&s_tools,0,Motion_LevelerRun);
+        UI_SetLeaveHook(&s_leveler,Motion_LevelerOnLeave);
+        AddItem("-Accel Calibration",UI_ITEM_WORD,img_gradienter_cal,
+            &s_accel_cal,&s_tools,0,Motion_CalibrationRun);
+        UI_SetLeaveHook(&s_accel_cal,Motion_CalibrationOnLeave);
         AddItem("-I2C Scanner",UI_ITEM_WORD,img_scan,&s_scanner,&s_tools,0,i2c_Scanner);
         AddItem("-Diagnostics",UI_ITEM_WORD,img_burn_in,&s_tools_info,&s_tools,0,0);
 }

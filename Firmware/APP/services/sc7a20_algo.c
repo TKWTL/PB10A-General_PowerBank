@@ -7,8 +7,13 @@
 #include "core/ui.h"
 #include "main.h"
 #include "pm_api.h"
+#include "rtc.h"
+#include <string.h>
 
 #define SC_SAMPLE_MS 200u
+#define SC_LEVEL_SAMPLE_MS 40u
+#define SC_CAL_RECORD_TAG 0xA720u
+#define SC_CAL_Q14 (16384.0f)
 #define SC_RETRY_MS 2000u
 #define SC_ORIENT_ENTER_MG 650
 #define SC_ORIENT_CONFIRM 10u /* 10 stable updates at 5 Hz ~2 seconds */
@@ -36,6 +41,9 @@ static uint8_t s_buffer[6];
 static volatile uint8_t s_flag,s_pm_flag;
 static uint32_t s_last_sample,s_retry_at;
 static int s_axes[3];
+static uint8_t s_tool_mode,s_orient_div;
+static uint32_t s_sample_at;
+static sc7a20_sample_t s_sample;
 static ui_item_t s_items[3],s_wake_items[2];
 static ui_data_t s_data[3],s_wake_data[2];
 static ui_element_t s_elements[3],s_wake_elements[2];
@@ -57,6 +65,7 @@ static void sc_offline(void) {
     s_candidate=SC7A20_ORIENT_UNKNOWN;s_confirm=0u;
     s_stage=0u;
     s_retry_at=Millis()+SC_RETRY_MS;
+    s_sample.seq=0u;
     SC7A20_AsyncSetReady(0u);
 }
 
@@ -81,6 +90,88 @@ static void sc_orientation_update(int z_mg) {
 uint8_t SC7A20Algo_GetRotation(uint8_t *flipped) {
     if(s_orientation==SC7A20_ORIENT_UNKNOWN)return 0u;
     if(flipped)*flipped=(uint8_t)(s_orientation==SC7A20_ORIENT_FLIPPED);
+    return 1u;
+}
+
+/* RTC backup DR0 belongs to the calendar; DR1..4 belong exclusively
+ * to SC7A20 calibration. Q14 slopes retain 0.000061 mg/LSB resolution. */
+static uint16_t sc_record_crc(uint32_t a,uint32_t b,uint32_t c) {
+    uint16_t crc=0xFFFFu;
+    uint32_t words[3];
+    uint8_t i,j,k;
+    words[0]=a;words[1]=b;words[2]=c;
+    for(i=0u;i<3u;i++)for(j=0u;j<4u;j++) {
+        crc^=(uint16_t)((words[i]>>(j*8u))&255u)<<8;
+        for(k=0u;k<8u;k++)
+            crc=(uint16_t)((crc&0x8000u)?(crc<<1)^0x1021u:crc<<1);
+    }
+    return crc;
+}
+static void sc_calibration_load(void) {
+    uint32_t a,b,c,tag;
+    uint16_t xq,yq,zq;
+    a=HAL_RTCEx_BKUPRead(&hrtc,RTC_BKP_DR1);
+    b=HAL_RTCEx_BKUPRead(&hrtc,RTC_BKP_DR2);
+    c=HAL_RTCEx_BKUPRead(&hrtc,RTC_BKP_DR3);
+    tag=HAL_RTCEx_BKUPRead(&hrtc,RTC_BKP_DR4);
+    if((tag>>16)!=SC_CAL_RECORD_TAG ||
+       (uint16_t)tag!=sc_record_crc(a,b,c))return;
+    xq=(uint16_t)(b>>16);yq=(uint16_t)c;zq=(uint16_t)(c>>16);
+    if(xq<4096u||yq<4096u||zq<4096u ||
+       xq>49152u||yq>49152u||zq>49152u)return;
+    SC7A20_SetXCalibration((int16_t)(uint16_t)a,(float)xq/SC_CAL_Q14);
+    SC7A20_SetYCalibration((int16_t)(uint16_t)(a>>16),(float)yq/SC_CAL_Q14);
+    SC7A20_SetZCalibration((int16_t)(uint16_t)b,(float)zq/SC_CAL_Q14);
+}
+uint8_t SC7A20Algo_ApplySixFace(const int16_t face_raw[6][3]) {
+    int32_t spans[3],zero[3];
+    float slope[3];
+    uint16_t q[3];
+    uint32_t a,b,c;
+    uint8_t i;
+    if(!face_raw)return 0u;
+    for(i=0u;i<3u;i++) {
+        spans[i]=(int32_t)face_raw[2u*i+1u][i]-
+                 (int32_t)face_raw[2u*i][i];
+        if(spans[i]<1000 || spans[i]>4000)return 0u;
+        zero[i]=((int32_t)face_raw[2u*i+1u][i]+
+                 (int32_t)face_raw[2u*i][i])/2;
+        slope[i]=2000.0f/(float)spans[i];
+        q[i]=(uint16_t)(slope[i]*SC_CAL_Q14+0.5f);
+        if(q[i]<4096u||q[i]>49152u)return 0u;
+    }
+    /* DR1=Yzero:Xzero, DR2=XscaleQ14:Zzero, DR3=Zscale:Yscale,
+     * DR4=magic:CRC16. Invalidate DR4 first, write valid tag last. */
+    a=((uint32_t)(uint16_t)zero[1]<<16)|(uint16_t)zero[0];
+    b=((uint32_t)q[0]<<16)|(uint16_t)zero[2];
+    c=((uint32_t)q[2]<<16)|q[1];
+    HAL_RTCEx_BKUPWrite(&hrtc,RTC_BKP_DR4,0u);
+    HAL_RTCEx_BKUPWrite(&hrtc,RTC_BKP_DR1,a);
+    HAL_RTCEx_BKUPWrite(&hrtc,RTC_BKP_DR2,b);
+    HAL_RTCEx_BKUPWrite(&hrtc,RTC_BKP_DR3,c);
+    HAL_RTCEx_BKUPWrite(&hrtc,RTC_BKP_DR4,
+        ((uint32_t)SC_CAL_RECORD_TAG<<16)|sc_record_crc(a,b,c));
+    SC7A20_SetXCalibration((int16_t)zero[0],(float)q[0]/SC_CAL_Q14);
+    SC7A20_SetYCalibration((int16_t)zero[1],(float)q[1]/SC_CAL_Q14);
+    SC7A20_SetZCalibration((int16_t)zero[2],(float)q[2]/SC_CAL_Q14);
+    s_orientation=SC7A20_ORIENT_UNKNOWN;
+    s_candidate=SC7A20_ORIENT_UNKNOWN;
+    s_confirm=0u;
+    s_sample.seq=0u;
+    return 1u;
+}
+void SC7A20Algo_SetToolMode(uint8_t mode) {
+    if(mode>2u)mode=0u;
+    s_tool_mode=mode;
+    s_orient_div=0u;
+    s_sample.seq=0u; /* old sample must not be interpreted as new */
+}
+uint8_t SC7A20Algo_ToolMode(void) {return s_tool_mode;}
+uint8_t SC7A20Algo_GetSample(sc7a20_sample_t *out) {
+    if(!out || s_stage!=6u || s_suspended || s_paused ||
+       s_sample.seq==0u || (uint32_t)(Millis()-s_sample_at)>800u)
+        return 0u;
+    *out=s_sample; /* same foreground coroOS, no ISR writer */
     return 1u;
 }
 
@@ -130,7 +221,8 @@ void SC7A20Algo_Poll(void) {
         s_last_sample=Millis()-SC_SAMPLE_MS;
         s_stage=6u;break;
     case 6u:
-        if(!s_waiting && (uint32_t)(Millis()-s_last_sample)<SC_SAMPLE_MS)return;
+        if(!s_waiting && (uint32_t)(Millis()-s_last_sample)<
+            (s_tool_mode==1u?SC_LEVEL_SAMPLE_MS:SC_SAMPLE_MS))return;
         result=sc_transfer(1u,SC7A20_STRG_OUT_AUTO,6u);
         if(!result)return;
         if(result!=1u){sc_offline();return;}
@@ -139,7 +231,18 @@ void SC7A20Algo_Poll(void) {
         {int16_t x,y,z;
             SC7A20_ReadRawCode(&x,&y,&z);
             s_axes[0]=(int)x;s_axes[1]=(int)y;s_axes[2]=(int)z;
-            sc_orientation_update(s_axes[2]);
+            s_sample.raw[0]=x;s_sample.raw[1]=y;s_sample.raw[2]=z;
+            s_sample.mg[0]=(int16_t)SC7A20_ReadX_mg();
+            s_sample.mg[1]=(int16_t)SC7A20_ReadY_mg();
+            s_sample.mg[2]=(int16_t)SC7A20_ReadZ_mg();
+            ++s_sample.seq;if(!s_sample.seq)++s_sample.seq;
+            s_sample_at=Millis();
+            /* 25Hz leveler sampling must not speed up the 5Hz
+             * 2-second orientation hysteresis from the normal mode. */
+            if(s_tool_mode!=1u || ++s_orient_div>=5u) {
+                s_orient_div=0u;
+                sc_orientation_update(s_sample.mg[2]);
+            }
         }
         s_last_sample=Millis();break;
     default:sc_offline();break;
@@ -295,7 +398,10 @@ void SC7A20Algo_Init(void) {
     s_orientation=SC7A20_ORIENT_UNKNOWN;
     s_candidate=SC7A20_ORIENT_UNKNOWN;s_confirm=0u;
     s_pickup_wake=0u;s_motion_wake=0u;
+    s_tool_mode=0u;s_orient_div=0u;
+    memset(&s_sample,0,sizeof(s_sample));
     s_retry_at=Millis();
+    sc_calibration_load();
     SC7A20_AsyncSetReady(0u);
     (void)pm_device_register(&s_node);
 }
