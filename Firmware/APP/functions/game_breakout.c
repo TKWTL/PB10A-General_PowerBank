@@ -14,23 +14,22 @@
 #include "fonts/fonts.h"
 #include "buttons.h"
 #include "millis.h"
-#include "pm_api.h"
 #include <stdio.h>
 
-#define BREAKOUT_SLEEP_BLOCK 0x40u
 #define BREAKOUT_COLS 7u
 #define BREAKOUT_ROWS 5u
 #define BREAKOUT_BLOCK_W 15
 #define BREAKOUT_BLOCK_H 3
-#define BREAKOUT_BLOCK_XSTEP 17
-#define BREAKOUT_BLOCK_YSTEP 5
-#define BREAKOUT_BLOCK_TOP 11
-#define BREAKOUT_PADDLE_W 20
+#define BREAKOUT_BLOCK_XSTEP 16
+#define BREAKOUT_BLOCK_YSTEP 4
+#define BREAKOUT_BLOCK_TOP 10
+#define BREAKOUT_PADDLE_W 22
 #define BREAKOUT_PADDLE_H 4
 #define BREAKOUT_PADDLE_Y 60
 #define BREAKOUT_BALL_R 2
 #define BREAKOUT_Q 16
 #define BREAKOUT_PADDLE_SPEED 40 /* 2.5 pixels at 60 Hz */
+#define BREAKOUT_PADDLE_SLOW_SPEED 20 /* UP or DOWN held: 1.25 px/tick */
 #define BREAKOUT_LIVES 3u
 #define BREAKOUT_BRICKS 27u
 
@@ -86,7 +85,10 @@ static void breakout_move_paddle(void) {
     uint8_t left = breakout_pressed(KeyIndex_LEFT);
     uint8_t right = breakout_pressed(KeyIndex_RIGHT);
     if (left != right) {
-        int16_t delta = left ? -BREAKOUT_PADDLE_SPEED : BREAKOUT_PADDLE_SPEED;
+        int16_t speed = (breakout_pressed(KeyIndex_UP) ||
+                         breakout_pressed(KeyIndex_DOWN)) ?
+                        BREAKOUT_PADDLE_SLOW_SPEED : BREAKOUT_PADDLE_SPEED;
+        int16_t delta = left ? (int16_t)-speed : speed;
         s_game.paddle_x = (int16_t)(s_game.paddle_x + delta);
         if (s_game.paddle_x < 0)
             s_game.paddle_x = 0;
@@ -171,8 +173,8 @@ static void breakout_step_ball(void) {
         s_game.ball_x = (UI_HOR_RES - BREAKOUT_BALL_R - 1) * BREAKOUT_Q;
         if (s_game.vx > 0) s_game.vx = (int16_t)-s_game.vx;
     }
-    if (s_game.ball_y < (9 + BREAKOUT_BALL_R) * BREAKOUT_Q) {
-        s_game.ball_y = (9 + BREAKOUT_BALL_R) * BREAKOUT_Q;
+    if (s_game.ball_y < (8 + BREAKOUT_BALL_R) * BREAKOUT_Q) {
+        s_game.ball_y = (8 + BREAKOUT_BALL_R) * BREAKOUT_Q;
         if (s_game.vy < 0) s_game.vy = (int16_t)-s_game.vy;
     }
 
@@ -184,11 +186,14 @@ static void breakout_step_ball(void) {
         s_game.ball_y = (int16_t)(paddle_top - radius);
         hit_offset = (int16_t)(s_game.ball_x - s_game.paddle_x -
                               (BREAKOUT_PADDLE_W / 2) * BREAKOUT_Q);
-        if (hit_offset < -6 * BREAKOUT_Q) s_game.vx = -18;
-        else if (hit_offset < -2 * BREAKOUT_Q) s_game.vx = -10;
+        /* Seven paddle zones produce seven discrete outgoing directions. */
+        if (hit_offset < -8 * BREAKOUT_Q) s_game.vx = -21;
+        else if (hit_offset < -5 * BREAKOUT_Q) s_game.vx = -14;
+        else if (hit_offset < -2 * BREAKOUT_Q) s_game.vx = -7;
         else if (hit_offset <= 2 * BREAKOUT_Q) s_game.vx = 0;
-        else if (hit_offset <= 6 * BREAKOUT_Q) s_game.vx = 10;
-        else s_game.vx = 18;
+        else if (hit_offset <= 5 * BREAKOUT_Q) s_game.vx = 7;
+        else if (hit_offset <= 8 * BREAKOUT_Q) s_game.vx = 14;
+        else s_game.vx = 21;
         s_game.vy = -20;
     }
 
@@ -215,16 +220,20 @@ static void breakout_tick(void) {
 static void breakout_draw(void) {
     uint8_t color = 1u, row, col;
     char stats[32];
+    const char *state_text = 0, *action_text = 0;
     int16_t x, y;
+    uint16_t width;
     Disp_SetMaxClipWindow();
     Disp_ClearBuffer();
     Disp_SetDrawColor(&color);
     Disp_SetFont(font_home_h6w4);
-    (void)snprintf(stats, sizeof(stats), "L:%u SCORE:%u HI:%u",
-                   (unsigned)s_game.lives, (unsigned)s_game.score,
-                   (unsigned)s_best_score);
+    (void)snprintf(stats, sizeof(stats), "SCORE:%u HI:%u",
+                   (unsigned)s_game.score, (unsigned)s_best_score);
     Disp_DrawStr(1u, 7u, stats);
-    Disp_DrawLine(0u, 9u, UI_HOR_RES - 1u, 9u);
+    /* Remaining lives are drawn as small balls at the upper-right. */
+    for (col = 0u; col < s_game.lives; col++)
+        Disp_DrawDisc((uint16_t)(124u - 10u * col), 4u, 2u, U8G2_DRAW_ALL);
+    Disp_DrawLine(0u, 8u, UI_HOR_RES - 1u, 8u);
     for (row = 0u; row < BREAKOUT_ROWS; row++) {
         for (col = 0u; col < BREAKOUT_COLS; col++) {
             if (!(s_game.bricks[row] & (1u << col)))
@@ -242,17 +251,25 @@ static void breakout_draw(void) {
         Disp_DrawDisc((uint16_t)x, (uint16_t)y, BREAKOUT_BALL_R, U8G2_DRAW_ALL);
 
     if (s_game.state == BREAKOUT_READY) {
-        Disp_DrawStr(42u, 44u, "READY");
-        Disp_DrawStr(27u, 52u, "CONF: FIRE");
+        state_text = "READY";
+        action_text = "CONF: FIRE";
     } else if (s_game.state == BREAKOUT_WON) {
-        Disp_DrawStr(38u, 44u, "YOU WIN");
-        Disp_DrawStr(23u, 52u, "CONF: RESTART");
+        state_text = "YOU WIN";
+        action_text = "CONF: RESTART";
     } else if (s_game.state == BREAKOUT_OVER) {
-        Disp_DrawStr(34u, 44u, "GAME OVER");
-        Disp_DrawStr(28u, 52u, "CONF: RETRY");
+        state_text = "GAME OVER";
+        action_text = "CONF: RETRY";
     } else if (s_game.paused) {
-        Disp_DrawStr(42u, 44u, "PAUSED");
-        Disp_DrawStr(24u, 52u, "CONF: RESUME");
+        state_text = "PAUSED";
+        action_text = "CONF: RESUME";
+    }
+    if (state_text) {
+        width = Disp_GetUTF8Width(state_text);
+        Disp_DrawStr((uint16_t)((UI_HOR_RES - width) / 2u), 39u, state_text);
+        /* Use the 12 px menu font and center the entire prompt in one row. */
+        Disp_SetFont(UI_FONT);
+        width = Disp_GetUTF8Width(action_text);
+        Disp_DrawStr((uint16_t)((UI_HOR_RES - width) / 2u), 52u, action_text);
     }
     Disp_SendBuffer();
 }
@@ -263,8 +280,6 @@ void Game_BreakoutOnLeave(ui_t *ui) {
         return;
     s_game.active = 0u;
     s_game.step_accum = 0u;
-    pm_api_set_sleep_block(BREAKOUT_SLEEP_BLOCK, 0u);
-    pm_api_refresh_idle();
 }
 
 void Game_BreakoutRun(ui_t *ui) {
@@ -279,8 +294,6 @@ void Game_BreakoutRun(ui_t *ui) {
     if (!s_game.active) {
         s_game.active = 1u;
         breakout_reset(now);
-        pm_api_set_sleep_block(BREAKOUT_SLEEP_BLOCK, 1u);
-        pm_api_refresh_idle();
     }
     if (ui->action == UI_ACTION_ENTER) {
         if (s_game.state == BREAKOUT_READY) {
