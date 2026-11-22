@@ -4,6 +4,17 @@
 #include <stdio.h>
 #include <string.h>
 
+/* Regression CRC32 fingerprints computed from supplied original spritebank.h. */
+static uint32_t asset_crc32(const uint8_t *data, size_t length) {
+    uint32_t crc = 0xffffffffu;
+    for (size_t i = 0u; i < length; i++) {
+        crc ^= data[i];
+        for (unsigned bit = 0u; bit < 8u; bit++)
+            crc = (crc >> 1u) ^ ((crc & 1u) ? 0xedb88320u : 0u);
+    }
+    return ~crc;
+}
+
 int main(void) {
     pacman_game_t g;
     size_t i;
@@ -13,6 +24,12 @@ int main(void) {
     assert(sizeof(pacman_dots) == 1024u);
     assert(sizeof(pacman_caracters) == 192u);
     assert(sizeof(pacman_Music) == 140u);
+    assert(asset_crc32(pacman_BackBlitz, 1024u) == 0x7df30593u);
+    assert(asset_crc32(pacman_back, 1024u) == 0x63bc13e4u);
+    assert(asset_crc32(pacman_dots, 1024u) == 0x73738c64u);
+    assert(asset_crc32(pacman_caracters, 192u) == 0x0ce2d60fu);
+    assert(asset_crc32(pacman_fruits, 32u) == 0x36bedb03u);
+    assert(asset_crc32(pacman_Music, 140u) == 0x2fe77b41u);
     for (i=0;i<1024u;i++) if (pacman_dots[i]) ++n;
     assert(n == 64u);
     Pacman_CoreNewGame(&g, 1u);
