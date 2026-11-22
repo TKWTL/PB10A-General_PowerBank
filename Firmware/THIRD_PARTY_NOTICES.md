@@ -6,8 +6,8 @@
 
 | 组件 | 原作者 / 上游 | 本仓库位置 | 许可证及附带声明 |
 |---|---|---|---|
-| **Ardu-man** | Seth A. Robinson (2016)，<https://github.com/SethRobinson/arduman> | [`APP/functions/game_pacman_core.c`](APP/functions/game_pacman_core.c) | **MIT License**；参考其 128×64 吃豆人玩法独立改写，迷宫与幽灵算法并非逐行复刻；保留原作者声明及 [`APP/functions/LICENSE-ARDUMAN`](APP/functions/LICENSE-ARDUMAN)。 |
-| **BreakoutClone** | Mattias Jähnke (2016)，<https://github.com/mattiasjahnke/arduino-projects/tree/master/BreakoutClone> | [`APP/functions/game_breakout.c`](APP/functions/game_breakout.c) | **MIT License**；基于原版 7×5 砖块玩法移植，完整许可文本保留于 [`APP/functions/LICENSE-BREAKOUTCLONE`](APP/functions/LICENSE-BREAKOUTCLONE)，无需 Arduino/Arduboy 运行库。 |
+| **TinyPacman** | Daniel C（2018–2021），Tinyjoypad/ATtiny85；原版图形与碰撞资源见上传的 `spritebank.h`，项目 <https://github.com/phoenixbozo/TinyJoypad> | [`APP/functions/games/pacman/`](APP/functions/games/pacman/) | **GPL-3.0-or-later**；沿用原版像素素材、迷宫、6×7 碰撞及四幽灵随机运动，移植为非阻塞 C/MiaoUI。完整许可证 [`LICENSE-GPL-3.0`](APP/functions/games/pacman/LICENSE-GPL-3.0)；本仓库顶层 AGPL-3.0-only 并不替代第三方 GPL 版权声明。 |
+| **BreakoutClone** | Mattias Jähnke (2016)，<https://github.com/mattiasjahnke/arduino-projects/tree/master/BreakoutClone> | [`APP/functions/games/breakout/game_breakout.c`](APP/functions/games/breakout/game_breakout.c) | **MIT License**；基于原版 7×5 砖块玩法移植，完整许可文本保留于 [`APP/functions/games/breakout/LICENSE-BREAKOUTCLONE`](APP/functions/games/breakout/LICENSE-BREAKOUTCLONE)，无需 Arduino/Arduboy 运行库。 |
 | **MiaoUI** | JFeng-Z，<https://github.com/JFeng-Z/MiaoUI> | [`APP/MiaoUI/`](APP/MiaoUI/) | **MIT License**；保留 [`APP/MiaoUI/LICENSE`](APP/MiaoUI/LICENSE) 与源文件版权头。项目中进行了 MiaoUI 菜单、交互、帧调度与显示驱动等定制。 |
 | **u8g2**（Universal 8bit Graphics Library） | olikraus，<https://github.com/olikraus/u8g2> | [`BSP/u8g2/`](BSP/u8g2/) | **BSD 2-Clause 风格许可**；版权及完整条款见 [`BSP/u8g2/u8g2.h`](BSP/u8g2/u8g2.h) 与对应源文件头。 |
 | **Fusion Pixel Font**（缝合像素字体） | TakWolf，<https://github.com/TakWolf/fusion-pixel-font> | [`APP/MiaoUI/fonts/font_fusion_pixel_p12_zhcn.c`](APP/MiaoUI/fonts/font_fusion_pixel_p12_zhcn.c) 中的部分中文字形 | **SIL Open Font License 1.1**；见 [`LICENSE-OFL-FUSION`](APP/MiaoUI/fonts/LICENSE-OFL-FUSION)。 |

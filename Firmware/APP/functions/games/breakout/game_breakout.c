@@ -3,7 +3,7 @@
  * https://github.com/mattiasjahnke/arduino-projects/tree/master/BreakoutClone
  * Copyright (c) 2016 Mattias Jähnke.
  * Original source licensed under MIT. The full MIT license is retained in
- * APP/functions/LICENSE-BREAKOUTCLONE.
+ * APP/functions/games/breakout/LICENSE-BREAKOUTCLONE.
  *
  * PB10A port: pure C, Q4 fixed-point motion, life/win/lose states, RAM-only
  * best score, five-key input, cooperative 60 Hz update and MiaoUI rendering.
