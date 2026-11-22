@@ -26,12 +26,17 @@ static uint8_t pressed(KeyIndex_t k) {
     return (uint8_t)(v == KeyState_ShortPress || v == KeyState_LongPress);
 }
 
-/* Viewed after turning the whole PB10A 90 degrees counterclockwise. */
+/* Calibrated for the portrait-viewed PB10A:
+ * physical UP/DOWN -> visible up/down;
+ * physical LEFT/RIGHT -> visible left/right.
+ * TinyPacman's native page coordinates are rotated relative to the display,
+ * so horizontal physical keys require the opposite logical x direction.
+ * Read held key states directly (not MiaoUI auto-repeat events). */
 static pacman_direction_t read_direction(void) {
-    if (pressed(KeyIndex_RIGHT)) return PACMAN_UP;
-    if (pressed(KeyIndex_LEFT)) return PACMAN_DOWN;
-    if (pressed(KeyIndex_UP)) return PACMAN_LEFT;
-    if (pressed(KeyIndex_DOWN)) return PACMAN_RIGHT;
+    if (pressed(KeyIndex_UP)) return PACMAN_UP;
+    if (pressed(KeyIndex_DOWN)) return PACMAN_DOWN;
+    if (pressed(KeyIndex_LEFT)) return PACMAN_RIGHT;
+    if (pressed(KeyIndex_RIGHT)) return PACMAN_LEFT;
     return PACMAN_NONE;
 }
 
