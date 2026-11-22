@@ -821,6 +821,11 @@
               <FilePath>../APP/functions/tools_motion_app.c</FilePath>
             </File>
             <File>
+              <FileName>game_breakout.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/functions/game_breakout.c</FilePath>
+            </File>
+            <File>
               <FileName>power_algo.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/algorithm/power_algo.c</FilePath>

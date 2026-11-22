@@ -19,7 +19,7 @@ static ui_item_t s_settings_back,s_stats_back,s_game_back,s_tools_back;
 static ui_item_t s_display_item,s_sleep_wake_item,s_system_item,s_display_back,s_sleep_wake_back,s_system_back;
 static ui_item_t s_stat_power_item,s_stat_battery_item,s_stat_sensors_item,s_stat_system_item;
 static ui_item_t s_stat_power_back,s_stat_battery_back,s_stat_sensors_back,s_stat_system_back;
-static ui_item_t s_dino,s_scanner,s_tools_info,s_leveler,s_accel_cal;
+static ui_item_t s_breakout,s_dino,s_scanner,s_tools_info,s_leveler,s_accel_cal;
 static ui_item_t s_sleep_options_item,s_sleep_options_back,s_sleep_items[9];
 static ui_data_t s_sleep_data[9];
 static ui_element_t s_sleep_elements[9];
@@ -88,7 +88,7 @@ void Create_Text(ui_t *ui) {
     s_about_text.font=UI_FONT;s_about_text.fontHight=UI_FONT_HIGHT;
     s_about_text.fontWidth=UI_FONT_WIDTH;
     s_about_el.text=&s_about_text;Create_element(&s_about,&s_about_el);
-    s_dino_text.ptr="Game framework ready\nNo game installed";
+    s_dino_text.ptr="Dinosaur is not yet\navailable.";
     s_dino_text.font=UI_FONT;s_dino_text.fontHight=UI_FONT_HIGHT;
     s_dino_text.fontWidth=UI_FONT_WIDTH;
     s_dino_el.text=&s_dino_text;Create_element(&s_dino,&s_dino_el);
@@ -159,6 +159,8 @@ void Create_MenuTree(ui_t *ui) {
 
     AddPage("[Game]",&s_game,UI_PAGE_ICON,&s_home);
         add_return(&s_game,&s_home,&s_game_back,0);
+        AddItem("-Breakout",UI_ITEM_WORD,img_games,&s_breakout,&s_game,0,Game_BreakoutRun);
+        UI_SetLeaveHook(&s_breakout,Game_BreakoutOnLeave);
         AddItem("-Dinosaur",UI_ITEM_WORD,img_dinosuar,&s_dino,&s_game,0,0);
 
     AddPage("[Tools]",&s_tools,UI_PAGE_ICON,&s_home);

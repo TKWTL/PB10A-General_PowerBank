@@ -5,7 +5,7 @@ user-installed apps on an operating system. These modules may use system
 services and BSP interfaces, but the services and scheduler must not depend on
 them.
 
-- `i2c_scanner.c/.h`: visual UI restored from Collar-Radio: initial
+- `game_breakout.c/.h`: RAM-only 7x5 Breakout port based on the MIT-licensed\n  BreakoutClone. Fixed-point physics, three lives, 60 Hz simulation,\n  debounced held-key paddle control, and MiaoUI clean exit/power lock.\n  Session best score remains in RAM (no NVM); see LICENSE-BREAKOUTCLONE.\n\n- `i2c_scanner.c/.h`: visual UI restored from Collar-Radio: initial
   1.5s title `I2C / Scanner` in the original 24px font, followed by
   the full 16x8 hexadecimal address grid using the original 4px font.
   Draws `--` or the responding hex address **one cell at a time**
