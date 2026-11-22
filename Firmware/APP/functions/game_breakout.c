@@ -32,7 +32,7 @@
 #define BREAKOUT_PADDLE_SLOW_SPEED 20 /* UP held: 1.25 px/tick */
 #define BREAKOUT_PADDLE_FINE_SPEED 10 /* DOWN held: 0.625 px/tick */
 #define BREAKOUT_LIVES 3u
-#define BREAKOUT_BRICKS 32u
+#define BREAKOUT_PRESET_LEVELS 9u /* original layout + eight new designs */
 
 typedef enum {
     BREAKOUT_READY = 0,
@@ -45,29 +45,69 @@ typedef struct {
     uint8_t bricks[BREAKOUT_ROWS];
     breakout_state_t state;
     uint8_t active, paused, lives, left, frame_phase;
-    uint16_t score;
+    uint16_t score, level; /* levels 1..9 are fixed; 10+ are random */
     int16_t paddle_x, ball_x, ball_y, vx, vy; /* Q4 pixels */
     uint32_t last_ms, step_accum;             /* step_accum units: ms * 60 */
 } breakout_game_t;
 
+/* Original 8x5 field followed by eight other horizontally symmetric maps.
+ * Each row is one 8-bit column mask; row order is top to bottom. */
+static const uint8_t s_preset_maps[BREAKOUT_PRESET_LEVELS][BREAKOUT_ROWS] = {
+    {0xffu, 0x7eu, 0x3cu, 0x7eu, 0xffu}, /* 1: original diamond */
+    {0xffu, 0x81u, 0x81u, 0x81u, 0xffu}, /* 2: frame */
+    {0x18u, 0x3cu, 0x7eu, 0x3cu, 0x18u}, /* 3: diamond */
+    {0x18u, 0x3cu, 0x7eu, 0xffu, 0x18u}, /* 4: arrow */
+    {0xc3u, 0xc3u, 0xffu, 0xc3u, 0xc3u}, /* 5: pillars */
+    {0xffu, 0x66u, 0x3cu, 0x66u, 0xffu}, /* 6: hourglass */
+    {0xffu, 0x00u, 0xffu, 0x00u, 0xffu}, /* 7: stripes */
+    {0xa5u, 0x5au, 0xa5u, 0x5au, 0xa5u}, /* 8: checker */
+    {0x81u, 0xc3u, 0xe7u, 0xffu, 0x7eu}  /* 9: crown */
+};
+
 static breakout_game_t s_game;
 static uint16_t s_best_score; /* RAM only, survives leaving/re-entering game. */
 static uint8_t s_serve_seed;
+static uint32_t s_random_state = 0x6d2b79f5u;
+
+/* xorshift32: small RAM-only PRNG, no HAL RNG or persistent seed required. */
+static uint32_t breakout_random(void) {
+    uint32_t x = s_random_state;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    s_random_state = x;
+    return x;
+}
 
 static void breakout_attach_ball(void) {
     s_game.ball_x = (int16_t)(s_game.paddle_x + (BREAKOUT_PADDLE_W / 2) * BREAKOUT_Q);
     s_game.ball_y = (int16_t)((BREAKOUT_PADDLE_Y - BREAKOUT_BALL_R - 2) * BREAKOUT_Q);
 }
 
-static void breakout_reset(uint32_t now) {
-    /* Eight columns, mirrored about the centre line (5 rows, 32 bricks). */
-    static const uint8_t layout[BREAKOUT_ROWS] = {0xffu, 0x7eu, 0x3cu, 0x7eu, 0xffu};
-    uint8_t i;
-    for (i = 0u; i < BREAKOUT_ROWS; i++)
-        s_game.bricks[i] = layout[i];
-    s_game.left = BREAKOUT_BRICKS;
-    s_game.lives = BREAKOUT_LIVES;
-    s_game.score = 0u;
+static void breakout_load_level(uint32_t now) {
+    uint8_t row, col, count = 0u;
+    if (s_game.level <= BREAKOUT_PRESET_LEVELS) {
+        for (row = 0u; row < BREAKOUT_ROWS; row++)
+            s_game.bricks[row] = s_preset_maps[s_game.level - 1u][row];
+    } else {
+        /* Mix elapsed time and level into the evolving RAM PRNG state.
+         * Each row independently uses random() modulo 255 (0..254). */
+        s_random_state ^= now + (uint32_t)s_game.level * 0x9e3779b9u;
+        if (s_random_state == 0u)
+            s_random_state = 0x6d2b79f5u;
+        for (row = 0u; row < BREAKOUT_ROWS; row++)
+            s_game.bricks[row] = (uint8_t)(breakout_random() % 255u);
+    }
+    for (row = 0u; row < BREAKOUT_ROWS; row++)
+        for (col = 0u; col < BREAKOUT_COLS; col++)
+            if (s_game.bricks[row] & (1u << col)) ++count;
+
+    /* Never start an empty level: place two central bricks as fallback. */
+    if (count == 0u) {
+        s_game.bricks[BREAKOUT_ROWS / 2u] = 0x18u;
+        count = 2u;
+    }
+    s_game.left = count;
     s_game.paused = 0u;
     s_game.state = BREAKOUT_READY;
     s_game.paddle_x = (int16_t)(((UI_HOR_RES - BREAKOUT_PADDLE_W) / 2) * BREAKOUT_Q);
@@ -76,6 +116,18 @@ static void breakout_reset(uint32_t now) {
     s_game.last_ms = now;
     s_game.step_accum = 0u;
     breakout_attach_ball();
+}
+
+static void breakout_reset(uint32_t now) {
+    s_game.level = 1u;
+    s_game.lives = BREAKOUT_LIVES;
+    s_game.score = 0u;
+    breakout_load_level(now);
+}
+
+static void breakout_next_level(uint32_t now) {
+    if (s_game.level < UINT16_MAX) ++s_game.level;
+    breakout_load_level(now); /* Keep lives and cumulative score. */
 }
 
 static uint8_t breakout_pressed(KeyIndex_t key) {
@@ -133,7 +185,11 @@ static void breakout_hit_brick(int16_t old_x, int16_t old_y) {
 
             s_game.bricks[row] &= (uint8_t)~(1u << col);
             --s_game.left;
-            s_game.score += 10u;
+            /* Endless random stages must not wrap the 16-bit score. */
+            if (s_game.score <= UINT16_MAX - 10u)
+                s_game.score += 10u;
+            else
+                s_game.score = UINT16_MAX;
             if (s_game.score > s_best_score)
                 s_best_score = s_game.score;
 
@@ -222,7 +278,7 @@ static void breakout_tick(void) {
 
 static void breakout_draw(void) {
     uint8_t color = 1u, row, col;
-    char stats[32];
+    char stats[32], level_text[24];
     const char *state_text = 0, *action_text = 0;
     int16_t x, y;
     uint16_t width;
@@ -254,11 +310,14 @@ static void breakout_draw(void) {
         Disp_DrawDisc((uint16_t)x, (uint16_t)y, BREAKOUT_BALL_R, U8G2_DRAW_ALL);
 
     if (s_game.state == BREAKOUT_READY) {
-        state_text = "READY";
+        (void)snprintf(level_text, sizeof(level_text),
+                       s_game.level <= BREAKOUT_PRESET_LEVELS ?
+                       "LEVEL %u" : "RANDOM %u", (unsigned)s_game.level);
+        state_text = level_text;
         action_text = "CONF: FIRE";
     } else if (s_game.state == BREAKOUT_WON) {
-        state_text = "YOU WIN";
-        action_text = "CONF: RESTART";
+        state_text = "LEVEL CLEAR";
+        action_text = "CONF: NEXT";
     } else if (s_game.state == BREAKOUT_OVER) {
         state_text = "GAME OVER";
         action_text = "CONF: RETRY";
@@ -303,6 +362,8 @@ void Game_BreakoutRun(ui_t *ui) {
             breakout_launch();
         } else if (s_game.state == BREAKOUT_PLAYING) {
             s_game.paused = (uint8_t)!s_game.paused;
+        } else if (s_game.state == BREAKOUT_WON) {
+            breakout_next_level(now);
         } else {
             breakout_reset(now);
         }

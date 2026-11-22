@@ -5,12 +5,15 @@ user-installed apps on an operating system. These modules may use system
 services and BSP interfaces, but the services and scheduler must not depend on
 them.
 
-- `game_breakout.c/.h`: RAM-only 8x5 symmetrical Breakout field based on
-  the MIT-licensed BreakoutClone. Fixed-point physics, three lives, 60 Hz
-  simulation, and seven paddle rebound directions. LEFT/RIGHT move the
-  22x2 px paddle; hold UP for half speed or DOWN for quarter speed.
-  MiaoUI clean exit; automatic sleep is permitted during gameplay.
-  Session best score remains in RAM (no NVM); see LICENSE-BREAKOUTCLONE.
+- `game_breakout.c/.h`: RAM-only 8x5 Breakout game based on the
+  MIT-licensed BreakoutClone. The first nine levels use distinct symmetric
+  layouts (the original plus eight new designs); level 10 onward generates
+  independent random row masks (PRNG % 255), with a guaranteed nonempty board. CONF advances
+  after a level is cleared; lives and score carry across levels, and GAME OVER
+  restarts at level 1. Fixed-point 60 Hz gameplay, three lives, and seven
+  paddle rebound directions. LEFT/RIGHT move the 22x2 px paddle; hold UP
+  for half speed or DOWN for quarter speed. Automatic sleep is permitted.
+  Best score remains in RAM (no NVM); see LICENSE-BREAKOUTCLONE.
 
 - `i2c_scanner.c/.h`: visual UI restored from Collar-Radio: initial
   1.5s title `I2C / Scanner` in the original 24px font, followed by
