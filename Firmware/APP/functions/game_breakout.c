@@ -16,7 +16,7 @@
 #include "millis.h"
 #include <stdio.h>
 
-#define BREAKOUT_COLS 7u
+#define BREAKOUT_COLS 8u
 #define BREAKOUT_ROWS 5u
 #define BREAKOUT_BLOCK_W 15
 #define BREAKOUT_BLOCK_H 3
@@ -24,14 +24,15 @@
 #define BREAKOUT_BLOCK_YSTEP 4
 #define BREAKOUT_BLOCK_TOP 10
 #define BREAKOUT_PADDLE_W 22
-#define BREAKOUT_PADDLE_H 4
-#define BREAKOUT_PADDLE_Y 60
+#define BREAKOUT_PADDLE_H 2
+#define BREAKOUT_PADDLE_Y 62
 #define BREAKOUT_BALL_R 2
 #define BREAKOUT_Q 16
 #define BREAKOUT_PADDLE_SPEED 40 /* 2.5 pixels at 60 Hz */
-#define BREAKOUT_PADDLE_SLOW_SPEED 20 /* UP or DOWN held: 1.25 px/tick */
+#define BREAKOUT_PADDLE_SLOW_SPEED 20 /* UP held: 1.25 px/tick */
+#define BREAKOUT_PADDLE_FINE_SPEED 10 /* DOWN held: 0.625 px/tick */
 #define BREAKOUT_LIVES 3u
-#define BREAKOUT_BRICKS 27u
+#define BREAKOUT_BRICKS 32u
 
 typedef enum {
     BREAKOUT_READY = 0,
@@ -59,7 +60,8 @@ static void breakout_attach_ball(void) {
 }
 
 static void breakout_reset(uint32_t now) {
-    static const uint8_t layout[BREAKOUT_ROWS] = {0x7fu, 0x3eu, 0x1cu, 0x3eu, 0x7fu};
+    /* Eight columns, mirrored about the centre line (5 rows, 32 bricks). */
+    static const uint8_t layout[BREAKOUT_ROWS] = {0xffu, 0x7eu, 0x3cu, 0x7eu, 0xffu};
     uint8_t i;
     for (i = 0u; i < BREAKOUT_ROWS; i++)
         s_game.bricks[i] = layout[i];
@@ -85,9 +87,10 @@ static void breakout_move_paddle(void) {
     uint8_t left = breakout_pressed(KeyIndex_LEFT);
     uint8_t right = breakout_pressed(KeyIndex_RIGHT);
     if (left != right) {
-        int16_t speed = (breakout_pressed(KeyIndex_UP) ||
-                         breakout_pressed(KeyIndex_DOWN)) ?
-                        BREAKOUT_PADDLE_SLOW_SPEED : BREAKOUT_PADDLE_SPEED;
+        int16_t speed = breakout_pressed(KeyIndex_DOWN) ?
+                        BREAKOUT_PADDLE_FINE_SPEED :
+                        (breakout_pressed(KeyIndex_UP) ?
+                         BREAKOUT_PADDLE_SLOW_SPEED : BREAKOUT_PADDLE_SPEED);
         int16_t delta = left ? (int16_t)-speed : speed;
         s_game.paddle_x = (int16_t)(s_game.paddle_x + delta);
         if (s_game.paddle_x < 0)

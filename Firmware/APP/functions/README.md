@@ -5,12 +5,12 @@ user-installed apps on an operating system. These modules may use system
 services and BSP interfaces, but the services and scheduler must not depend on
 them.
 
-- `game_breakout.c/.h`: RAM-only 7x5 Breakout port based on the MIT-licensed
-  BreakoutClone. Fixed-point physics, three lives, 60 Hz simulation,
-  debounced held-key paddle control (UP/DOWN for slow movement), and
-  seven paddle rebound directions. MiaoUI clean exit; automatic sleep is
-  permitted during gameplay. Session best score remains in RAM (no NVM);
-  see LICENSE-BREAKOUTCLONE.
+- `game_breakout.c/.h`: RAM-only 8x5 symmetrical Breakout field based on
+  the MIT-licensed BreakoutClone. Fixed-point physics, three lives, 60 Hz
+  simulation, and seven paddle rebound directions. LEFT/RIGHT move the
+  22x2 px paddle; hold UP for half speed or DOWN for quarter speed.
+  MiaoUI clean exit; automatic sleep is permitted during gameplay.
+  Session best score remains in RAM (no NVM); see LICENSE-BREAKOUTCLONE.
 
 - `i2c_scanner.c/.h`: visual UI restored from Collar-Radio: initial
   1.5s title `I2C / Scanner` in the original 24px font, followed by
