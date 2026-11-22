@@ -9,7 +9,15 @@
  * service owns the TIM3 PWM channel; all hardware helpers are private.
  * TIM3=64 MHz, PSC=63 => 1 MHz time base. */
 #include "tim.h"
-static uint8_t s_beep_pwm_running;
+static uint8_t s_beep_pwm_running, s_volume;
+
+static uint16_t beep_hw_get_ccr(uint16_t arr, uint8_t volume) {
+    static const uint16_t duty_q15[BEEP_VOLUME_MAX + 1u] = {
+        0u, 652u, 1307u, 2636u, 5461u, 16384u
+    };
+    uint32_t period = (uint32_t)arr + 1u;
+    return (uint16_t)((period * duty_q15[volume] + 16384u) >> 15);
+}
 static void beep_hw_init(void) {
     s_beep_pwm_running=0u;
     __HAL_TIM_SET_PRESCALER(&htim3,63u);
@@ -27,7 +35,7 @@ static void beep_hw_stop(void) {
 static void beep_hw_set_arr(uint16_t arr) {
     if(arr==0u){beep_hw_stop();return;}
     __HAL_TIM_SET_AUTORELOAD(&htim3,arr);
-    __HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_4,((uint32_t)arr+1u)/2u);
+    __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, beep_hw_get_ccr(arr, s_volume));
     __HAL_TIM_SET_COUNTER(&htim3,0u);
     htim3.Instance->EGR=TIM_EGR_UG;
     if(!s_beep_pwm_running) {
@@ -45,19 +53,19 @@ static const beep_note_t s_key_sound[] = {
 static const beep_note_t *s_queue[BEEP_QUEUE_CAPACITY];
 static const beep_note_t *s_current;
 static uint32_t s_step_started;
-static uint8_t s_head,s_tail,s_count,s_index,s_key_enabled,s_muted;
+static uint8_t s_head,s_tail,s_count,s_index,s_key_enabled;
 
 void beep_init(void) {
     s_head=s_tail=s_count=s_index=0u;
     s_current=0;s_step_started=0u;
     s_key_enabled=0u; /* Click Beep: default OFF */
-    s_muted=0u;       /* Mute Beep : default OFF */
+    s_volume = BEEP_VOLUME_MAX; /* Beep Volume: default maximum */
     beep_hw_init();
     beep_hw_stop();
 }
 
 uint8_t beep_enqueue(const beep_note_t *sequence) {
-    if(s_muted || !sequence || sequence[0].duration_ms==0u ||
+    if(s_volume == 0u || !sequence || sequence[0].duration_ms==0u ||
         s_count>=BEEP_QUEUE_CAPACITY)return 0u;
     s_queue[s_head]=sequence;
     s_head=(uint8_t)((s_head+1u)%BEEP_QUEUE_CAPACITY);
@@ -106,17 +114,25 @@ uint8_t beep_queue_count(void){return s_count;}
 uint8_t beep_note_index(void){return s_index;}
 void beep_set_key_enabled(uint8_t enabled){s_key_enabled=enabled?1u:0u;}
 uint8_t beep_get_key_enabled(void){return s_key_enabled;}
-void beep_set_muted(uint8_t muted) {
-    muted=muted?1u:0u;
-    if(s_muted==muted)return;
-    s_muted=muted;
-    if(s_muted)beep_stop();
+void beep_set_volume(uint8_t volume) {
+    if (volume > BEEP_VOLUME_MAX) volume = BEEP_VOLUME_MAX;
+    if (s_volume == volume) return;
+
+    s_volume = volume;
+    if (volume == 0u) {
+        beep_stop();
+    } else if (s_beep_pwm_running) {
+        uint16_t arr = (uint16_t)__HAL_TIM_GET_AUTORELOAD(&htim3);
+        __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, beep_hw_get_ccr(arr, volume));
+    }
 }
 
-uint8_t beep_is_muted(void){return s_muted;}
+uint8_t beep_get_volume(void) {
+    return s_volume;
+}
 void beep_key_click(void) {
     /* Don't flood the queue with auto-repeat or delay a popup melody. */
-    if(s_key_enabled && !s_muted && !beep_busy())
+    if(s_key_enabled && s_volume != 0u && !beep_busy())
         (void)beep_enqueue(s_key_sound);
 }
 

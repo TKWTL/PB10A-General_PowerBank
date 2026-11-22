@@ -6,21 +6,24 @@
 #include "power_algo.h"
 #include "main.h"
 #include "core/ui.h"
-static ui_item_t s_click_item,s_mute_item,s_reset_item;
+static ui_item_t s_click_item,s_volume_item,s_reset_item;
 static ui_item_t s_radio_auto_item,s_power_auto_item,s_aux_auto_item;
 static ui_item_t s_vdda_item,s_temp_item;
 static ui_data_t s_vdda_data,s_temp_data;
 static ui_element_t s_vdda_element,s_temp_element;
 static int s_vdda_mv,s_die_temp_c10;
-static ui_data_t s_click_data,s_mute_data;
+static ui_data_t s_click_data,s_volume_data;
 static ui_data_t s_radio_auto_data,s_power_auto_data,s_aux_auto_data;
-static ui_element_t s_click_element,s_mute_element;
+static ui_element_t s_click_element,s_volume_element;
 static ui_element_t s_radio_auto_element,s_power_auto_element,s_aux_auto_element;
-static uint8_t s_click_on,s_muted,s_radio_auto,s_power_auto,s_aux_auto;
+static uint8_t s_click_on,s_radio_auto,s_power_auto,s_aux_auto;
+static int s_volume_level;
 static void system_click_changed(ui_t *ui)
 { (void)ui;beep_set_key_enabled(s_click_on); }
-static void system_mute_changed(ui_t *ui)
-{ (void)ui;beep_set_muted(s_muted); }
+static void system_volume_changed(ui_t *ui) {
+    (void)ui;
+    beep_set_volume((uint8_t)s_volume_level);
+}
 void System_Reset(void) {
     beep_stop();
     NVIC_SystemReset();
@@ -40,16 +43,19 @@ void System_AddSettingsItems(ui_page_t *page) {
     s_click_element.data=&s_click_data;
     Create_element(&s_click_item,&s_click_element);
     AddItem(" Click Beep",UI_ITEM_DATA,0,&s_click_item,page,0,0);
-    s_muted=beep_is_muted();
-    s_mute_data.name=" Mute Beep";
-    s_mute_data.ptr=&s_muted;
-    s_mute_data.function=system_mute_changed;
-    s_mute_data.functionType=UI_DATA_FUNCTION_STEP_EXECUTE;
-    s_mute_data.dataType=UI_DATA_SWITCH;
-    s_mute_data.actionType=UI_DATA_ACTION_RW;
-    s_mute_element.data=&s_mute_data;
-    Create_element(&s_mute_item,&s_mute_element);
-    AddItem(" Mute Beep",UI_ITEM_DATA,0,&s_mute_item,page,0,0);
+    s_volume_level = (int)beep_get_volume();
+    s_volume_data.name = "Beep Volume";
+    s_volume_data.ptr = &s_volume_level;
+    s_volume_data.function = system_volume_changed;
+    s_volume_data.functionType = UI_DATA_FUNCTION_STEP_EXECUTE;
+    s_volume_data.dataType = UI_DATA_INT;
+    s_volume_data.actionType = UI_DATA_ACTION_RW;
+    s_volume_data.min = 0;
+    s_volume_data.max = BEEP_VOLUME_MAX;
+    s_volume_data.step = 1;
+    s_volume_element.data = &s_volume_data;
+    Create_element(&s_volume_item, &s_volume_element);
+    AddItem(" Beep Volume", UI_ITEM_DATA, 0, &s_volume_item, page, 0, 0);
     s_radio_auto_data.name=" Headphone Auto UI";
     s_radio_auto_data.ptr=&s_radio_auto;
     s_radio_auto_data.dataType=UI_DATA_SWITCH;

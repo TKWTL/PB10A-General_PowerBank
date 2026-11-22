@@ -14,6 +14,7 @@
 #define BEEP_END           {0u,0u}
 #define BEEP_QUEUE_CAPACITY 8u
 #define BEEP_SEQUENCE_MAX_STEPS 64u
+#define BEEP_VOLUME_MAX 5u
 
 /* Rounded equal-temperament note names, translated to ARR at compile time.
  * Custom frequency constants may use BEEP_ARR_HZ(hz) directly. */
@@ -59,10 +60,11 @@ uint8_t beep_queue_count(void);
 uint8_t beep_note_index(void);        /* 0-based index of current note */
 void beep_set_key_enabled(uint8_t enabled);
 uint8_t beep_get_key_enabled(void);
-/* Independent global mute. Enabling immediately stops output and clears
- * queued audio; callers can unmute without changing the Click Beep setting. */
-void beep_set_muted(uint8_t muted);
-uint8_t beep_is_muted(void);
+/* Volume levels 0..5 (default 5). Level 0 stops and clears playback;
+ * levels 1..5 set nominal 6 dB fundamental-power steps via PWM duty.
+ * This is not an acoustically calibrated loudness scale. */
+void beep_set_volume(uint8_t volume);
+uint8_t beep_get_volume(void);
 void beep_key_click(void);            /* opt-in/out 100ms at ~2.7kHz */
 uint8_t beep_popup(const beep_note_t *sequence);
 
