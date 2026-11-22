@@ -1300,16 +1300,37 @@ default:
  * 无参数
  * 无返回值
  */
-void ui_loop(ui_t *ui) {
+void UI_RequestNextFrame(ui_t *ui, uint32_t delay_ms) {
+    if (!ui) return;
+    if (!ui->nextFrameRequested || delay_ms < ui->nextFrameDelay) {
+        ui->nextFrameDelay = delay_ms;
+        ui->nextFrameRequested = 1u;
+    }
+}
+
+static uint32_t UI_NextFrameDelay(const ui_t *ui) {
+    if (ui->fadePhase != 0u || !ui->nextFrameRequested)
+        return 20u;
+    /* WORD applications remain in UI_ITEM_DRAWING after the fade.
+     * Menu drawing and numeric dialog animation must retain 20 ms. */
+    if (ui->nowItem && ui->nowItem->itemType == UI_ITEM_WORD &&
+        (ui->menuState == UI_ITEM_DRAWING || ui->menuState == UI_ITEM_RUNING))
+        return ui->nextFrameDelay;
+    return 20u;
+}
+
+uint32_t ui_loop(ui_t *ui) {
     UI_ACTION Action;
-    if(!ui)return;
+    if (!ui) return 20u;
+    ui->nextFrameRequested = 0u;
+    ui->nextFrameDelay = 20u;
     if(ui->fadePhase==1u) {
         /* One mosaic frame per pass. MiaoUiThread checks FrameBusy()
          * before calling ui_loop, so this never edits the DMA buffer
          * while SPI is still transmitting the previous frame. */
         UI_FadeFrame(ui,ui->fadeStep++);
         if(ui->fadeStep>=8u)ui->fadePhase=2u;
-        return;
+        return 20u;
     }
     if(ui->fadePhase==2u) {
         /* The last mosaic frame has finished DMA. Commit the saved
@@ -1319,7 +1340,7 @@ void ui_loop(ui_t *ui) {
         indevClearPending();
         Process_UI_Run(ui,saved);
         ui->fadePhase=0u;
-        return;
+        return 20u;
     }
     Action=indevScan(ui); // 根据当前页面类型映射五向按键
     if (ui->menuState == UI_PAGE_INIT) {
@@ -1353,6 +1374,7 @@ void ui_loop(ui_t *ui) {
             break;
         }
     }
+    return UI_NextFrameDelay(ui);
 }
 
 /* TKWTL的注释
@@ -1407,5 +1429,7 @@ void Create_UI(ui_t *ui, ui_item_t *item) {
     ui->bgColor = 0;
     ui->rotation = 1; /* Gravity-based Screen Flip enabled by default. */
     ui->navBookmark.valid=0u;
+    ui->nextFrameDelay = 20u;
+    ui->nextFrameRequested = 0u;
     AnimationParam_Init(&ui->animation);
 }

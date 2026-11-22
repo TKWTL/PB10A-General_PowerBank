@@ -38,10 +38,10 @@ static const uint16_t s_determination_rh[] = {
     BEEP_CS5, 174u, BEEP_DS5, 174u, BEEP_AS4, 174u,
     /* m6 */
     BEEP_B5, 174u, BEEP_REST, 174u, BEEP_GS4, 174u,
-    BEEP_REST, 174u, BEEP_DS5, 174u, BEEP_F5, 174u,
+    BEEP_REST, 174u, BEEP_DS4, 174u, BEEP_F4, 174u,
     /* m7 */
-    BEEP_FS5, 174u, BEEP_REST, 174u, BEEP_F5, 174u,
-    BEEP_REST, 174u, BEEP_CS6, 174u, BEEP_REST, 174u,
+    BEEP_FS4, 174u, BEEP_REST, 174u, BEEP_F4, 174u,
+    BEEP_REST, 174u, BEEP_CS4, 174u, BEEP_REST, 174u,
     /* m8 */
     BEEP_DS4, 696u, BEEP_REST, 348u,
     BEEP_END

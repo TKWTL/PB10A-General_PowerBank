@@ -2,6 +2,7 @@
  * The UI never performs I2C: it displays the coherent foreground cache
  * updated by the independent 100ms SW6306 service coroutine. */
 #include "powerbank_app.h"
+#include "core/ui.h"
 #include "power_algo.h"
 #include "display/dispDriver.h"
 #include "fonts/fonts.h"
@@ -12,6 +13,7 @@ void Powerbank_AppRun(ui_t *ui) {
     char line[32];
     if(!ui)return;
     if(ui->action==UI_ACTION_BACK)return; /* WORD page exits on long CONF */
+    UI_RequestNextFrame(ui, 200u); /* Foreground cache updates independently. */
     ui->action=UI_ACTION_NONE; /* do not exit on other key actions */
     PowerAlgo_GetMonitor(&m);
     Disp_SetMaxClipWindow();

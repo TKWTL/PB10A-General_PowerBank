@@ -24,19 +24,39 @@ THRD_DECLARE(OledServiceThread) {
     THRD_END;
 }
 
+static uint32_t s_ui_next_deadline, s_ui_next_interval;
+static uint8_t s_ui_woke_early;
 THRD_DECLARE(MiaoUiThread) {
     THRD_BEGIN;
+    s_ui_next_deadline = Millis();
     for(;;) {
-        if(SSD1306_Display_IsReady() && !SSD1306_Display_FrameBusy() && !pm_api_ui_should_block()) {
-            MiaoUi_ProcessNavigate(&s_ui);
-            /* PB02B Leveler/6-face views remain in native screen geometry.
-             * Do not let automatic Z-rotation turn the horizon or the
-             * six physical placement labels while these tools are open. */
-            if(SC7A20Algo_ToolMode()!=0u) Disp_SetRotation(0u);
-            else Disp_ResumeRotation(&s_ui);
-            ui_loop(&s_ui);
-        }
-        THRD_DELAY(20u);
+        /* A key or completed navigation arbitration may wake a slow page.
+         * During the mosaic fade, key events must not accelerate its steps. */
+        THRD_UNTIL((int32_t)(Millis() - s_ui_next_deadline) >= 0 ||
+                   (s_ui.fadePhase == 0u && indevHasPending()) ||
+                   MiaoUi_NavigationReady());
+        s_ui_woke_early = (uint8_t)((int32_t)(Millis() - s_ui_next_deadline) < 0);
+
+        /* The SPI DMA reads the shared framebuffer in place. Waiting here
+         * does not count a missed drawing opportunity as a completed frame. */
+        THRD_UNTIL(SSD1306_Display_IsReady() &&
+                   !SSD1306_Display_FrameBusy() &&
+                   !pm_api_ui_should_block());
+
+        MiaoUi_ProcessNavigate(&s_ui);
+        /* Leveler and calibration views retain their physical orientation. */
+        if (SC7A20Algo_ToolMode() != 0u) Disp_SetRotation(0u);
+        else Disp_ResumeRotation(&s_ui);
+
+        s_ui_next_interval = ui_loop(&s_ui);
+        /* Advance absolute deadlines without accumulating 1 ms scheduler
+         * jitter. Skip missed slots rather than running catch-up frames.
+         * Key/navigation wakes begin a fresh interval from this frame. */
+        if (s_ui_woke_early ||
+            (int32_t)(Millis() - s_ui_next_deadline) >= (int32_t)s_ui_next_interval)
+            s_ui_next_deadline = Millis() + s_ui_next_interval;
+        else
+            s_ui_next_deadline += s_ui_next_interval;
     }
     THRD_END;
 }

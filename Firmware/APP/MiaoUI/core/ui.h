@@ -53,7 +53,11 @@ uint8_t UI_NavigateTo(ui_t *ui, ui_item_t *target, ui_nav_mode_t mode);
 uint8_t UI_NavigateBack(ui_t *ui);
 void UI_SetLeaveHook(ui_item_t *item, ui_item_function hook);
 
-void ui_loop(ui_t *ui);
+/* Request the next application frame interval during the current ui_loop pass.
+ * Explicit requests override the default 20 ms; multiple requests use the
+ * shortest interval. Menu and transition animations always keep 20 ms. */
+void UI_RequestNextFrame(ui_t *ui, uint32_t delay_ms);
+uint32_t ui_loop(ui_t *ui);
 
 #ifdef __cplusplus
 }

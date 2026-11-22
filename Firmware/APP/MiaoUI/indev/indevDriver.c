@@ -23,6 +23,10 @@ static void queue_event(uint8_t ev) {
     queue[head]=ev;head=next;
 }
 
+uint8_t indevHasPending(void) {
+    return (uint8_t)(head != tail);
+}
+
 void indevInit(void) {
     Key_Init();clear_events();
     conf_valid=0u;conf_long=0u;suppressed=0u;

@@ -36,6 +36,7 @@ extern "C" {
 void indevInit(void);
 void indevClearPending(void); /* Discard key actions captured before external navigation. */
 void indevService_10ms(void);
+uint8_t indevHasPending(void); /* Read-only queue status; does not consume. */
 UI_ACTION indevScan(const ui_t *ui);
 
 #ifdef __cplusplus

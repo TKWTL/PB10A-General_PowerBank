@@ -10,6 +10,7 @@
  * positions remain "--". This preserves the original 16x8 layout.
  */
 #include "i2c_scanner.h"
+#include "core/ui.h"
 #include "millis.h"
 #include "i2c.h"
 #include "display/dispDriver.h"
@@ -98,6 +99,14 @@ void i2c_Scanner(ui_t *ui) {
     else if(s_phase==SCANNER_HOLD &&
         (uint32_t)(now-s_phase_at)>=SCANNER_RESCAN_MS)
     scanner_start(now,0u);
+
+    /* Only the active scan needs one cell per 20 ms UI frame.
+     * Splash and hold can sleep until the next state transition; keys
+     * still wake the UI independently of this requested interval. */
+    if(s_phase==SCANNER_TITLE)
+        UI_RequestNextFrame(ui, SCANNER_SPLASH_MS - (uint32_t)(now-s_phase_at));
+    else if(s_phase==SCANNER_HOLD)
+        UI_RequestNextFrame(ui, SCANNER_RESCAN_MS - (uint32_t)(now-s_phase_at));
 
     scanner_clear(ui);
     if(s_phase==SCANNER_TITLE) {

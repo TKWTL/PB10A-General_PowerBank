@@ -184,13 +184,17 @@ void MiaoUi_RequestNavigate(ui_target_t target) {
     }
 }
 
+uint8_t MiaoUi_NavigationReady(void) {
+    /* Powerbank yields 100 ms to a possible higher-priority Radio request. */
+    return (uint8_t)(s_nav_pending==1u ||
+        (s_nav_pending==2u &&
+         (uint32_t)(Millis()-s_power_nav_requested_at)>=100u));
+}
+
 void MiaoUi_ProcessNavigate(ui_t *ui) {
     ui_item_t *item;
     uint8_t request;
-    if(!ui || !s_nav_pending)return;
-    /* Powerbank yields a short arbitration window to a debounced MIC event. */
-    if(s_nav_pending==2u &&
-        (uint32_t)(Millis()-s_power_nav_requested_at)<100u)return;
+    if(!ui || !MiaoUi_NavigationReady())return;
     request=s_nav_pending;
     s_nav_pending=0u;
     if(!ui->navBookmark.valid)s_nav_active=0u;

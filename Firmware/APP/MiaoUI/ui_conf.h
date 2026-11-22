@@ -386,11 +386,12 @@ typedef struct ui_t {
     ui_optionbar_param_t optionbar;
     ui_scrollbar_t scrollbar;
     ui_nav_bookmark_t navBookmark;
-    /* One mosaic transition step per 20 ms MiaoUI pass. The existing
-     * scheduler is unchanged: no adaptive-game feature is merged. */
+    /* Eight-stage mosaic transition retains its 20 ms animation step. */
     UI_ACTION fadeAction;
     uint8_t fadePhase; /* 0 idle, 1 fade frames, 2 commit, 3 inside commit */
     uint8_t fadeStep;  /* eight stages 0..7 */
+    uint32_t nextFrameDelay; /* Application-requested interval in ms. */
+    uint8_t nextFrameRequested;
 } ui_t;
 
 void Create_Parameter(ui_t *ui);
@@ -401,6 +402,7 @@ void MiaoUi_Setup(ui_t *ui);
 typedef enum { UI_TARGET_RADIO=0, UI_TARGET_POWERBANK=1 } ui_target_t;
 void MiaoUi_RequestNavigate(ui_target_t target);
 void MiaoUi_ProcessNavigate(ui_t *ui);
+uint8_t MiaoUi_NavigationReady(void); /* Pending request past arbitration. */
 void MiaoUi_ExternalEventService(void);
 
 #ifdef __cplusplus
