@@ -1,23 +1,15 @@
 /* PB10A task table: MiaoUI, OLED DMA, PM and shared services. */
 #include "app_task.h"
 #include "coroOS.h"
-#include "core/ui.h"
-#include "indev/indevDriver.h"
-#include "display/dispDriver.h"
+#include "miaoui.h"
 #include "ssd1306_display.h"
 #include "pm_api.h"
 #include "millis.h"
 #include "i2c.h"
 #include "time_service.h"
 #include "beep_service.h"
-#include "system_algo.h"
-#include "sc7a20_algo.h"
-#include "mmc5603_algo.h"
-#include "bmp180_algo.h"
-#include "power_algo.h"
-#include "radio_algo.h"
+#include "algorithms.h"
 #include "radio_app.h"
-
 static ui_t s_ui;
 static coro_scheduler_t s_scheduler;
 static coro_pt_t s_states[10];

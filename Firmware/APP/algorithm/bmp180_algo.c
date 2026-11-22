@@ -1,11 +1,7 @@
 /* BMP180: nonblocking calibration and alternating temperature/pressure samples. */
 #include "bmp180_algo.h"
 #include "bmp180.h"
-#include "i2c.h"
-#include "millis.h"
-#include "pm_device.h"
-#include "core/ui.h"
-
+#include "sensor_common.h"
 #define BMP_SAMPLE_MS 500u
 #define BMP_RETRY_MS 2000u
 

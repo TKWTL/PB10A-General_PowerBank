@@ -1,11 +1,7 @@
 /* MMC5603: asynchronous single-shot magnetic field service. */
 #include "mmc5603_algo.h"
 #include "mmc5603.h"
-#include "i2c.h"
-#include "millis.h"
-#include "pm_device.h"
-#include "core/ui.h"
-
+#include "sensor_common.h"
 #define MMC_SAMPLE_MS 250u
 #define MMC_RETRY_MS 2000u
 #define MMC_CONVERT_MS 10u

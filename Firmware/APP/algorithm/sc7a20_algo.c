@@ -1,14 +1,10 @@
 /* SC7A20: IRQ-driven I2C initialization, XYZ sampling and STOP1 policy. */
 #include "sc7a20_algo.h"
 #include "sc7a20.h"
-#include "i2c.h"
-#include "millis.h"
-#include "pm_device.h"
-#include "core/ui.h"
+#include "sensor_common.h"
 #include "main.h"
 #include "pm_api.h"
 #include <string.h>
-
 #define SC_SAMPLE_MS 200u
 #define SC_LEVEL_SAMPLE_MS 40u
 #define SC_CAL_RECORD_TAG 0xA720u
