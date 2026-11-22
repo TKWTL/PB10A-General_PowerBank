@@ -15,6 +15,22 @@ RIGHT=PACMAN_RIGHT. LEFT/RIGHT here are actual physical buttons rather
 than names of the Pac-Man movement enum; their mappings were swapped
 after an initial on-device report showed both directions reversed.
 
+On the attract/READY screen, the otherwise unused lives/fruit strip shows
+`TURN 90 CCW` in a 5x7 pixel font, oriented for reading after turning the
+board. The text is painted into the existing 1024-byte SSD1306 page buffer;
+no additional display buffer or u8g2 rotation is required. During gameplay
+the original lives/fruit drawings are unchanged.
+
+Directional controls support **one queued turn**. A fresh directional key
+press replaces the previous pending direction; releasing a key does not
+cancel it. While the original pixel collision mask still blocks that turn,
+Pac-Man continues straight and executes it at the first legal opportunity.
+Reversing direction on the current axis is immediate. CONF pressed or short
+released clears the queued turn without stopping current motion. Input is
+captured on debounced key transitions rather than from MiaoUI auto-repeat;
+existing physical UP/DOWN/LEFT/RIGHT mappings are unchanged. Pending input is
+reset on death, next level, restart and leaving/re-entering the game.
+
 CONF short release starts/restarts when waiting/game-over. During play,
 **holding** CONF freezes updates; releasing resumes without any menu-toggle
 pause. Holding CONF for ~700 ms raises MiaoUI BACK and leaves the WORD page.

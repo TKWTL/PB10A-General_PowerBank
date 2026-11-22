@@ -19,22 +19,33 @@
 
 static pacman_game_t s_game;  /* all mutable game state, no heap or NVM */
 static uint32_t s_last_time, s_accum;
-static uint8_t s_active;
+static uint8_t s_active, s_prev_dpad_mask;
 
 static uint8_t pressed(KeyIndex_t k) {
     KeyState_t v = KEY_GetState(k);
     return (uint8_t)(v == KeyState_ShortPress || v == KeyState_LongPress);
 }
 
-/* PB10A physical key mapping, based on real-device direction feedback.
- * LEFT/RIGHT refer to physical buttons, not PACMAN direction enum names.
- * Read held key states directly (not MiaoUI auto-repeat events). */
-static pacman_direction_t read_direction(void) {
-    if (pressed(KeyIndex_UP)) return PACMAN_UP;
-    if (pressed(KeyIndex_DOWN)) return PACMAN_DOWN;
-    if (pressed(KeyIndex_LEFT)) return PACMAN_LEFT;
-    if (pressed(KeyIndex_RIGHT)) return PACMAN_RIGHT;
-    return PACMAN_NONE;
+/* Read debounced held states on every MiaoUI pass. Rising edges are one-shot:
+ * an older held direction cannot overwrite a newer press. Last rising key wins
+ * if multiple keys appear in the same pass. Do not use menu DAS repeats. */
+static pacman_direction_t read_new_direction(void) {
+    static const KeyIndex_t keys[4] = {
+        KeyIndex_UP, KeyIndex_DOWN, KeyIndex_LEFT, KeyIndex_RIGHT
+    };
+    static const pacman_direction_t dirs[4] = {
+        PACMAN_UP, PACMAN_DOWN, PACMAN_LEFT, PACMAN_RIGHT
+    };
+    uint8_t mask = 0u, new_presses;
+    uint8_t i;
+    pacman_direction_t latest = PACMAN_NONE;
+    for (i = 0u; i < 4u; ++i)
+        if (pressed(keys[i])) mask |= (uint8_t)(1u << i);
+    new_presses = (uint8_t)(mask & (uint8_t)~s_prev_dpad_mask);
+    s_prev_dpad_mask = mask;
+    for (i = 0u; i < 4u; ++i)
+        if (new_presses & (1u << i)) latest = dirs[i];
+    return latest;
 }
 
 /* Keep service-owned sound short, non-blocking and lowest priority. Skip
@@ -116,6 +127,59 @@ static uint8_t draw_fruit(uint8_t x, uint8_t page) {
     return pacman_fruits[(uint16_t)frame * 8u + x];
 }
 
+/* Original lives/fruit margin is x=0..7 in native screen coordinates,
+ * which appears at the bottom when the board is turned 90 degrees CCW.
+ * Draw a minimal 5x7 upright-in-portrait caption there only in READY.
+ * Each 7-bit font column is mapped directly into the native page buffer;
+ * the 1024-byte shared framebuffer is not rotated or duplicated. */
+static const uint8_t *intro_glyph(char c) {
+    static const uint8_t glyphs[8][5] = {
+        {0x01u, 0x01u, 0x7fu, 0x01u, 0x01u}, /* T */
+        {0x3fu, 0x40u, 0x40u, 0x40u, 0x3fu}, /* U */
+        {0x7fu, 0x09u, 0x19u, 0x29u, 0x46u}, /* R */
+        {0x7fu, 0x02u, 0x04u, 0x08u, 0x7fu}, /* N */
+        {0x46u, 0x49u, 0x49u, 0x29u, 0x1fu}, /* 9 */
+        {0x3eu, 0x45u, 0x49u, 0x51u, 0x3eu}, /* 0 */
+        {0x3eu, 0x41u, 0x41u, 0x41u, 0x22u}, /* C */
+        {0x3fu, 0x40u, 0x38u, 0x40u, 0x3fu}  /* W */
+    };
+    switch (c) {
+    case 'T': return glyphs[0];
+    case 'U': return glyphs[1];
+    case 'R': return glyphs[2];
+    case 'N': return glyphs[3];
+    case '9': return glyphs[4];
+    case '0': return glyphs[5];
+    case 'C': return glyphs[6];
+    case 'W': return glyphs[7];
+    default: return 0;
+    }
+}
+
+static void draw_intro_rotation_hint(uint8_t *buf) {
+    static const char hint[] = "TURN 90 CCW";
+    uint8_t page, native_x, u = 1u, i;
+    for (page = 0u; page < 8u; ++page)
+        for (native_x = 0u; native_x < 8u; ++native_x)
+            buf[(uint16_t)page * 128u + native_x] = 0u;
+    for (i = 0u; hint[i]; ++i) {
+        const uint8_t *glyph = intro_glyph(hint[i]);
+        uint8_t column, row;
+        if (!glyph) { u = (uint8_t)(u + 4u); continue; }
+        for (column = 0u; column < 5u; ++column) {
+            uint8_t native_y = (uint8_t)(u + column);
+            for (row = 0u; row < 7u; ++row) {
+                if (glyph[column] & (1u << row)) {
+                    native_x = (uint8_t)(7u - row);
+                    buf[(uint16_t)(native_y >> 3) * 128u + native_x] |=
+                        (uint8_t)(1u << (native_y & 7u));
+                }
+            }
+        }
+        u = (uint8_t)(u + 6u);
+    }
+}
+
 /* u8g2 R0 128x64 full buffer is SSD1306 page-packed. The original game's
  * main image lives across x=0..127; users view it in portrait by turning
  * the physical board, not by applying u8g2 R1/R3 raster rotation. */
@@ -138,6 +202,7 @@ static void render(void) {
             buf[pos] = b;
         }
     }
+    if (s_game.phase == PACMAN_READY) draw_intro_rotation_hint(buf);
     Disp_SendBuffer();
 }
 
@@ -145,25 +210,41 @@ void Game_PacmanOnLeave(ui_t *ui) {
     (void)ui;
     s_active = 0u; /* Re-entry calls NewGame; no NVM and no pointless memset. */
     s_accum = 0u;
+    s_prev_dpad_mask = 0u;
+    Pacman_CoreClearQueuedDirection(&s_game);
 }
 
 void Game_PacmanRun(ui_t *ui) {
     uint32_t now, elapsed;
-    uint8_t hold_confirm;
+    uint8_t hold_confirm, confirm_released;
     uint8_t steps;
+    pacman_direction_t new_direction;
     if (!ui) return;
-    if (ui->action == UI_ACTION_BACK) return; /* MiaoUI owns long-CONF exit. */
+    if (ui->action == UI_ACTION_BACK) {
+        Pacman_CoreClearQueuedDirection(&s_game);
+        return; /* MiaoUI owns long-CONF exit. */
+    }
     now = Millis();
     if (!s_active) {
         Pacman_CoreNewGame(&s_game, now);
         s_active = 1u;
         s_accum = 0u;
         s_last_time = now;
+        s_prev_dpad_mask = 0u;
     }
     hold_confirm = pressed(KeyIndex_CONF);
-    if (ui->action == UI_ACTION_ENTER &&
+    confirm_released = (uint8_t)(ui->action == UI_ACTION_ENTER);
+    new_direction = read_new_direction();
+    if (confirm_released &&
         (s_game.phase == PACMAN_READY || s_game.phase == PACMAN_GAME_OVER))
         Pacman_CoreStart(&s_game);
+    if (hold_confirm || confirm_released) {
+        /* CONF cancels the queued turn, even when a short release is all
+         * that arrives in this UI frame. It never stops current movement. */
+        Pacman_CoreClearQueuedDirection(&s_game);
+    } else {
+        Pacman_CoreQueueDirection(&s_game, new_direction);
+    }
     ui->action = UI_ACTION_NONE; /* Consume menu direction and CONF release. */
 
     elapsed = (uint32_t)(now - s_last_time);
@@ -175,7 +256,7 @@ void Game_PacmanRun(ui_t *ui) {
     } else if (!hold_confirm) {
         s_accum += elapsed;
         for (steps = 0u; s_accum >= PACMAN_LOGIC_MS && steps < 3u; steps++) {
-            Pacman_CoreTick(&s_game, read_direction());
+            Pacman_CoreTick(&s_game, PACMAN_NONE);
             s_accum -= PACMAN_LOGIC_MS;
         }
     } /* CONF held: preserve only sub-frame progress, no catch-up. */

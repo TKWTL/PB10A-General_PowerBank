@@ -73,6 +73,7 @@ static void reset_actors(pacman_game_t *g) {
     g->power_active = 0u;
     g->power_timer = 0u;
     g->frame = 0u;
+    g->queued_direction = PACMAN_NONE; /* Never carry a turn across deaths/levels. */
 }
 
 static void init_dots(pacman_game_t *g) {
@@ -228,8 +229,77 @@ static void next_level(pacman_game_t *g) {
     g->phase = PACMAN_PLAYING;
 }
 
+/* One pending direction survives key release and blocked intersections.
+ * A later physical press replaces it; CONF cancels it without stopping motion. */
+void Pacman_CoreQueueDirection(pacman_game_t *g, pacman_direction_t dir) {
+    if (g->phase == PACMAN_PLAYING && dir < PACMAN_NONE)
+        g->queued_direction = (uint8_t)dir;
+}
+
+void Pacman_CoreClearQueuedDirection(pacman_game_t *g) {
+    g->queued_direction = PACMAN_NONE;
+}
+
+/* Probe one prospective pixel step using the original page-mask collision.
+ * No tentative turn modifies the real actor until it is actually legal. */
+static uint8_t player_can_step(const pacman_actor_t *p, pacman_direction_t dir) {
+    pacman_actor_t probe = *p;
+    uint8_t horizontal;
+    probe.dir_h = probe.dir_v = PACMAN_DIR_STOP;
+    switch (dir) {
+    case PACMAN_UP:
+        probe.dir_h = 0u;
+        if (probe.offset_y) --probe.offset_y;
+        else {
+            probe.offset_y = 7u;
+            --probe.page_y;
+            if (probe.page_y == -2) probe.page_y = 8;
+        }
+        horizontal = 0u;
+        break;
+    case PACMAN_DOWN:
+        probe.dir_h = 1u;
+        if (probe.offset_y < 7u) ++probe.offset_y;
+        else {
+            probe.offset_y = 0u;
+            ++probe.page_y;
+            if (probe.page_y == 9) probe.page_y = -1;
+        }
+        horizontal = 0u;
+        break;
+    case PACMAN_LEFT:
+        probe.dir_v = 0u;
+        if (probe.page_y != 3 || probe.x != 86u) --probe.x;
+        horizontal = 1u;
+        break;
+    case PACMAN_RIGHT:
+        probe.dir_v = 1u;
+        ++probe.x;
+        horizontal = 1u;
+        break;
+    default:
+        return 0u;
+    }
+    return (uint8_t)!Pacman_CoreCollisionBack(&probe, horizontal);
+}
+
+static void player_apply_queued_turn(pacman_game_t *g) {
+    pacman_actor_t *p = &g->actors[PACMAN_PLAYER];
+    pacman_direction_t requested = (pacman_direction_t)g->queued_direction;
+    uint8_t along_vertical = (uint8_t)(requested == PACMAN_UP || requested == PACMAN_DOWN);
+    if (requested == PACMAN_NONE) return;
+    /* Reversing (or repeating) along the current axis is immediate. A
+     * perpendicular turn waits until the original collision masks allow it. */
+    if (!((along_vertical && p->dir_h != PACMAN_DIR_STOP) ||
+          (!along_vertical && p->dir_v != PACMAN_DIR_STOP)) &&
+        !player_can_step(p, requested)) return;
+    p->dir_h = p->dir_v = PACMAN_DIR_STOP;
+    if (along_vertical) p->dir_h = (uint8_t)(requested == PACMAN_DOWN);
+    else p->dir_v = (uint8_t)(requested == PACMAN_RIGHT);
+    g->queued_direction = PACMAN_NONE;
+}
+
 void Pacman_CoreTick(pacman_game_t *g, pacman_direction_t direction) {
-    pacman_actor_t *p = &g->actors[0];
     if (g->phase == PACMAN_DYING || g->phase == PACMAN_CLEARED) {
         if (g->delay_ticks) --g->delay_ticks;
         if (!g->delay_ticks) {
@@ -241,10 +311,8 @@ void Pacman_CoreTick(pacman_game_t *g, pacman_direction_t direction) {
         return;
     }
     if (g->phase != PACMAN_PLAYING) return;
-    if (direction == PACMAN_UP) p->dir_h = 0u;
-    if (direction == PACMAN_DOWN) p->dir_h = 1u;
-    if (direction == PACMAN_LEFT) p->dir_v = 0u;
-    if (direction == PACMAN_RIGHT) p->dir_v = 1u;
+    Pacman_CoreQueueDirection(g, direction);
+    player_apply_queued_turn(g);
     if (g->power_timer) {
         if (--g->power_timer == 0u) g->power_active = 0u;
     }

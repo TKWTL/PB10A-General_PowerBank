@@ -43,11 +43,14 @@ typedef struct {
     uint8_t power_active, power_timer, frame;
     uint8_t dots_left, level, phase, sound_event;
     uint8_t delay_ticks;
+    uint8_t queued_direction; /* Last not-yet-executable requested turn. */
     uint32_t random_state;
 } pacman_game_t;
 
 void Pacman_CoreNewGame(pacman_game_t *g, uint32_t seed);
 void Pacman_CoreStart(pacman_game_t *g);
+void Pacman_CoreQueueDirection(pacman_game_t *g, pacman_direction_t dir);
+void Pacman_CoreClearQueuedDirection(pacman_game_t *g);
 void Pacman_CoreTick(pacman_game_t *g, pacman_direction_t dir);
 pacman_sound_t Pacman_CoreTakeSound(pacman_game_t *g);
 uint8_t Pacman_CoreDotVisible(const pacman_game_t *g, uint8_t number);
