@@ -826,6 +826,16 @@
               <FilePath>../APP/functions/game_breakout.c</FilePath>
             </File>
             <File>
+              <FileName>game_pacman.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/functions/game_pacman.c</FilePath>
+            </File>
+            <File>
+              <FileName>game_pacman_core.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/functions/game_pacman_core.c</FilePath>
+            </File>
+            <File>
               <FileName>power_algo.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/algorithm/power_algo.c</FilePath>

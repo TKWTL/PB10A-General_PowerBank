@@ -19,7 +19,7 @@ static ui_item_t s_settings_back,s_stats_back,s_game_back,s_tools_back;
 static ui_item_t s_display_item,s_sleep_wake_item,s_system_item,s_display_back,s_sleep_wake_back,s_system_back;
 static ui_item_t s_stat_power_item,s_stat_battery_item,s_stat_sensors_item,s_stat_system_item;
 static ui_item_t s_stat_power_back,s_stat_battery_back,s_stat_sensors_back,s_stat_system_back;
-static ui_item_t s_breakout,s_dino,s_scanner,s_tools_info,s_leveler,s_accel_cal;
+static ui_item_t s_breakout,s_pacman,s_dino,s_scanner,s_tools_info,s_leveler,s_accel_cal;
 static ui_item_t s_sleep_options_item,s_sleep_options_back,s_sleep_items[9];
 static ui_data_t s_sleep_data[9];
 static ui_element_t s_sleep_elements[9];
@@ -161,6 +161,8 @@ void Create_MenuTree(ui_t *ui) {
         add_return(&s_game,&s_home,&s_game_back,0);
         AddItem("-Breakout",UI_ITEM_WORD,img_games,&s_breakout,&s_game,0,Game_BreakoutRun);
         UI_SetLeaveHook(&s_breakout,Game_BreakoutOnLeave);
+        AddItem("-Pac-Man",UI_ITEM_WORD,img_games,&s_pacman,&s_game,0,Game_PacmanRun);
+        UI_SetLeaveHook(&s_pacman,Game_PacmanOnLeave);
         AddItem("-Dinosaur",UI_ITEM_WORD,img_dinosuar,&s_dino,&s_game,0,0);
 
     AddPage("[Tools]",&s_tools,UI_PAGE_ICON,&s_home);

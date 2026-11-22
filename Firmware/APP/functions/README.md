@@ -5,6 +5,17 @@ user-installed apps on an operating system. These modules may use system
 services and BSP interfaces, but the services and scheduler must not depend on
 them.
 
+- `game_pacman.c/.h`, `game_pacman_core.c/.h`: 128x64 Pac-Man-style
+  game adapted from Seth A. Robinson's MIT-licensed Ardu-man. Compact
+  integer-only 21x11 maze, four ghosts with distinct simplified steering,
+  pellets and power pellets, three lives, tunnel wrap, pause, and levels.
+  Static RAM state is reset upon leaving the game; no EEPROM, Flash or
+  other nonvolatile save, allocation, Arduboy runtime, or new coroutine.
+  Uses native MiaoUI WORD-page callbacks and 33/33/34 ms frame requests;
+  automatic system sleep remains permitted. LICENSE-ARDUMAN retains the
+  upstream license. Host-only tests live in `pacman_tests/`; this is not
+  a line-for-line reproduction of the original ghost AI.
+
 - `game_breakout.c/.h`: RAM-only 8x5 Breakout game based on the
   MIT-licensed BreakoutClone. The first nine levels use distinct symmetric
   layouts (the original plus eight new designs); level 10 onward generates

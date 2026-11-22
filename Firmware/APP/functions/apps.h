@@ -3,6 +3,7 @@
 
 /* Application page entry points; for UI composition only. */
 #include "game_breakout.h"
+#include "game_pacman.h"
 #include "i2c_scanner.h"
 #include "powerbank_app.h"
 #include "radio_app.h"
