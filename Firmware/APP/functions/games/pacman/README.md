@@ -9,10 +9,11 @@ This is **not** the previous MIT Ardu-man/21x11 game.
 
 The native SSD1306 128x64 physical page buffer is used unscaled. Turn the
 entire PB10A **counterclockwise 90 degrees** to read the portrait maze. In this
-orientation, the PB10A key mapping is calibrated from on-device movement:
-physical UP=visible up, DOWN=visible down, LEFT=visible left, RIGHT=visible
-right. Native TinyPacman direction enums differ from visual directions:
-UP=PACMAN_UP, DOWN=PACMAN_DOWN, LEFT=PACMAN_RIGHT, RIGHT=PACMAN_LEFT.
+orientation, the PB10A physical key mapping (confirmed against user feedback)
+is UP=PACMAN_UP, DOWN=PACMAN_DOWN, LEFT=PACMAN_LEFT and
+RIGHT=PACMAN_RIGHT. LEFT/RIGHT here are actual physical buttons rather
+than names of the Pac-Man movement enum; their mappings were swapped
+after an initial on-device report showed both directions reversed.
 
 CONF short release starts/restarts when waiting/game-over. During play,
 **holding** CONF freezes updates; releasing resumes without any menu-toggle
