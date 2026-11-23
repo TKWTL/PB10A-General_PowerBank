@@ -64,8 +64,9 @@ ADC 保持每 **500 ms** 发布一组数据，但组内由原来的 4 次扩展�
 
 Hardware-independent RLE decompression (four control modes, WRITE/XOR) and
 32-bit power-of-two SPSC FIFO are in [LIB](LIB/) and included in the Keil
-project. They are not yet wired to game assets or existing service queues;
-measure linked size before introducing those migrations. This byte RLE is
+project. RLE now stores Pac-Man/Bomber/Invaders page images losslessly,
+and FIFO now manages Beep Service pointer records. Measure real linked
+size after Keil compilation rather than assuming theoretical gains. This byte RLE is
 unrelated to u8g2 font RLE. See [LIB/README.md](LIB/README.md).
 
 Radio now reuses the 12px main UI font for identical ASCII glyphs. The 24px

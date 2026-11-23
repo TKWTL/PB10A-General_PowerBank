@@ -1,8 +1,10 @@
 # TinyPacman PB10A v2
 
 Original **Tiny PACMAN** (Daniel C, 2018–2021), licensed under GPL-3.0-or-later.
-The byte-for-byte original `BackBlitz`, `back`, `dots`, `caracters`,
-`fruits` and `Music` tables were extracted from the supplied `spritebank.h`.
+The original `BackBlitz`, `back` and `dots` raster images are now
+stored losslessly (four-mode byte RLE + XOR delta + sparse 16-bit dots).
+Their full decoded bitmaps retain the original CRC32 values. Character,
+fruit, sound and icon resource arrays remain uncompressed.
 Gameplay is rewritten in portable C while preserving the original movement,
 6x7 pixel-mask wall checks, random turns, pellet order and power-pill timing.
 This is **not** the previous MIT Ardu-man/21x11 game.
@@ -50,7 +52,8 @@ but is **not** played to avoid prolonged exclusive buzzer use.
 
 - `game_pacman.c/.h` MiaoUI adapter, fixed physical rotation, keys and DMA.
 - `pacman_core.c/.h` original-style state, ghosts, frame steps, collisions.
-- `pacman_assets.c/.h` original unchanged graphics/audio table bytes.
+- `pacman_assets.c/.h` losslessly packed maze/dot resources and unchanged
+  original characters/fruits/music.
 - `LICENSE-GPL-3.0` full upstream license (GPL-3.0-or-later).
 
 Host tests check array bounds, original asset hashes/sizes, collision and
@@ -64,3 +67,26 @@ The user-provided `img_pacman[120]` XBM icon is defined in
 SSD1306 page-packed sprites), and is used directly by
 `APP/MiaoUI/ui_conf.c`. The original gameplay artwork is
 unmodified. See [shared porting guide](../SKILL.md).
+ 
+## Shared SRAM map, dot masks and Flash reduction
+
+The 1024-byte original maze is `pacman_BackBlitz_rle[362]`. On entering
+the page it is decompressed into the shared GameBuffer and the
+`pacman_back_xor_rle[207]` delta is applied with `RLE_XOR`, yielding
+the bit-for-bit original 1024-byte collision mask (CRC32 0x63bc13e4).
+Each OLED frame independently decompresses the display maze directly
+into the existing display framebuffer (CRC32 0x7df30593), overlays
+sprites and dots, and submits via DMA.
+
+`pacman_dot_records[64]` (128 B) encodes seven-bit X, three-bit SSD1306
+page, and three-bit index into `pacman_dot_masks[8]` (8 B). This is
+**136 B instead of 1024 B**, without allocating a separate dot raster.
+Records retain original page-major ascending-X scan order and eight
+special indices 0/1/12/13/50/51/62/63, so all four corner power pills
+keep the original **two adjacent pixels**, original 0x06/0xC0 masks,
+flashing intervals and frightened-ghost activation. Scanning dots per
+logic tick is now O(64) rather than O(1024).
+
+On leave, `Pacman_CoreBindBack(NULL)` precedes
+`GameBuffer_Release(GAME_OWNER_PACMAN)`; the cache is cleared to zero.
+On STOP1 the cached collision image persists, with no catch-up ticks.

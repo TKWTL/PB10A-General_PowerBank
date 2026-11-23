@@ -4,6 +4,8 @@
 #include "game_bomber.h"
 #include "bomber_core.h"
 #include "bomber_assets.h"
+#include "../game_shared.h"
+#include "rle.h"
 #include "display/dispDriver.h"
 #include "core/ui.h"
 #include "buttons.h"
@@ -131,15 +133,15 @@ static void render(void) {
     uint8_t page, x;
     uint8_t *buffer = Disp_GetBufferPtr();
     if (!buffer) return;
-    for (page = 0u; page < 8u; page++) {
-        for (x = 0u; x < 128u; x++) {
-            uint16_t pos = (uint16_t)page * 128u + x;
-            if (s_game.phase == BOMBER_READY || s_game.phase == BOMBER_GAME_OVER) {
-                buffer[pos] = bomber_BackBlitz[pos];
-            } else {
+    if (RLE_Decode(bomber_BackBlitz_rle, sizeof(bomber_BackBlitz_rle),
+                   buffer, GAME_BUFFER_SIZE, RLE_WRITE) != RLE_OK) return;
+    if (s_game.phase != BOMBER_READY && s_game.phase != BOMBER_GAME_OVER) {
+        for (page = 0u; page < 8u; ++page) {
+            for (x = 0u; x < 128u; ++x) {
+                uint16_t pos = (uint16_t)page * 128u + x;
                 buffer[pos] = (uint8_t)(lives_mask(x, page) &
-                    (bomber_BackBlitz[pos] | actors_byte(x, page) |
-                     block_byte(x, page) | bomb_byte(x, page) | fire_byte(x, page)));
+                    (buffer[pos] | actors_byte(x, page) | block_byte(x, page) |
+                     bomb_byte(x, page) | fire_byte(x, page)));
             }
         }
     }
@@ -151,6 +153,20 @@ void Game_BomberOnLeave(ui_t *ui) {
     s_active = 0u;
     s_place_pending = 0u;
     s_elapsed_ms = 0u;
+    Bomber_CoreBindBack(0);
+    GameBuffer_Release(GAME_OWNER_BOMBER);
+}
+
+static uint8_t load_collision_map(void) {
+    uint8_t *buffer = GameBuffer_Acquire(GAME_OWNER_BOMBER);
+    if (!buffer) return 0u;
+    if (RLE_Decode(bomber_back_rle, sizeof(bomber_back_rle),
+                   buffer, GAME_BUFFER_SIZE, RLE_WRITE) != RLE_OK) {
+        GameBuffer_Release(GAME_OWNER_BOMBER);
+        return 0u;
+    }
+    Bomber_CoreBindBack(buffer);
+    return 1u;
 }
 
 void Game_BomberRun(ui_t *ui) {
@@ -163,6 +179,11 @@ void Game_BomberRun(ui_t *ui) {
     }
     now = Millis();
     if (!s_active) {
+        if (!load_collision_map()) {
+            ui->action = UI_ACTION_NONE;
+            UI_RequestNextFrame(ui, BOMBER_RENDER_MS);
+            return;
+        }
         Bomber_CoreNewGame(&s_game, now);
         s_active = 1u;
         s_elapsed_ms = 0u;

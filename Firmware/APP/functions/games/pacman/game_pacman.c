@@ -6,6 +6,8 @@
 #include "game_pacman.h"
 #include "pacman_core.h"
 #include "pacman_assets.h"
+#include "../game_shared.h"
+#include "rle.h"
 #include "display/dispDriver.h"
 #include "core/ui.h"
 #include "buttons.h"
@@ -101,20 +103,6 @@ static uint8_t draw_actors(uint8_t x, uint8_t page) {
     return v;
 }
 
-static uint8_t draw_dot(uint8_t x, uint8_t page, uint8_t *count) {
-    uint8_t v = pacman_dots[(uint16_t)page * 128u + x];
-    uint8_t special;
-    if (!v) return 0u;
-    special = (uint8_t)(*count == 0u || *count == 1u || *count == 12u ||
-                        *count == 13u || *count == 50u || *count == 51u ||
-                        *count == 62u || *count == 63u);
-    if (!Pacman_CoreDotVisible(&s_game, *count)) v = 0u;
-    if (special && ((s_game.frame >= 6u && s_game.frame <= 12u) ||
-                    (s_game.frame >= 18u && s_game.frame <= 24u))) v = 0u;
-    ++*count;
-    return v;
-}
-
 static uint8_t draw_lives(uint8_t x, uint8_t page) {
     return (uint8_t)((page < s_game.lives && x < 8u) ?
         pacman_caracters[x + 8u] : 0u);
@@ -184,25 +172,47 @@ static void draw_intro_rotation_hint(uint8_t *buf) {
  * main image lives across x=0..127; users view it in portrait by turning
  * the physical board, not by applying u8g2 R1/R3 raster rotation. */
 static void render(void) {
-    uint8_t page, x, dot_index = 0u;
+    uint8_t page, x;
     uint8_t *buf = Disp_GetBufferPtr();
     if (!buf) return;
-    for (page = 0u; page < 8u; page++) {
-        for (x = 0u; x < 128u; x++) {
+    /* Decode display maze directly to existing OLED DMA framebuffer. Wall
+     * collision stays in the separate shared SRAM asset cache. */
+    if (RLE_Decode(pacman_BackBlitz_rle, sizeof(pacman_BackBlitz_rle),
+                   buf, GAME_BUFFER_SIZE, RLE_WRITE) != RLE_OK) return;
+    for (page = 0u; page < 8u; ++page) {
+        for (x = 0u; x < 128u; ++x) {
             uint16_t pos = (uint16_t)page * 128u + x;
-            uint8_t b = (uint8_t)(pacman_BackBlitz[pos] |
-                                  draw_actors(x, page));
+            uint8_t b = (uint8_t)(buf[pos] | draw_actors(x, page));
             if (s_game.phase == PACMAN_READY) {
                 b = (uint8_t)~b; /* Original attract-mode inversion. */
             } else {
-                b |= draw_dot(x, page, &dot_index);
                 b |= draw_lives(x, page);
                 b |= draw_fruit(x, page);
             }
             buf[pos] = b;
         }
     }
-    if (s_game.phase == PACMAN_READY) draw_intro_rotation_hint(buf);
+    if (s_game.phase == PACMAN_READY) {
+        draw_intro_rotation_hint(buf);
+    } else {
+        /* Original corner pills each occupy two adjacent bytes and blink
+         * together; preserve all eight exact mask values/indices. */
+        uint8_t i;
+        uint8_t blink = (uint8_t)((s_game.frame >= 6u && s_game.frame <= 12u) ||
+                                   (s_game.frame >= 18u && s_game.frame <= 24u));
+        for (i = 0u; i < 64u; ++i) {
+            uint16_t dot;
+            uint8_t mask_index;
+            if (!Pacman_CoreDotVisible(&s_game, i)) continue;
+            if (blink && (i == 0u || i == 1u || i == 12u || i == 13u ||
+                          i == 50u || i == 51u || i == 62u || i == 63u))
+                continue;
+            dot = pacman_dot_records[i];
+            mask_index = (uint8_t)((dot >> 10) & 7u);
+            buf[(((dot >> 7) & 7u) * 128u) + (dot & 127u)] |=
+                pacman_dot_masks[mask_index];
+        }
+    }
     Disp_SendBuffer();
 }
 
@@ -212,6 +222,22 @@ void Game_PacmanOnLeave(ui_t *ui) {
     s_accum = 0u;
     s_prev_dpad_mask = 0u;
     Pacman_CoreClearQueuedDirection(&s_game);
+    Pacman_CoreBindBack(0);
+    GameBuffer_Release(GAME_OWNER_PACMAN);
+}
+
+static uint8_t load_collision_map(void) {
+    uint8_t *buffer = GameBuffer_Acquire(GAME_OWNER_PACMAN);
+    if (!buffer) return 0u;
+    if (RLE_Decode(pacman_BackBlitz_rle, sizeof(pacman_BackBlitz_rle),
+                   buffer, GAME_BUFFER_SIZE, RLE_WRITE) != RLE_OK ||
+        RLE_Decode(pacman_back_xor_rle, sizeof(pacman_back_xor_rle),
+                   buffer, GAME_BUFFER_SIZE, RLE_XOR) != RLE_OK) {
+        GameBuffer_Release(GAME_OWNER_PACMAN);
+        return 0u;
+    }
+    Pacman_CoreBindBack(buffer);
+    return 1u;
 }
 
 void Game_PacmanRun(ui_t *ui) {
@@ -226,6 +252,11 @@ void Game_PacmanRun(ui_t *ui) {
     }
     now = Millis();
     if (!s_active) {
+        if (!load_collision_map()) {
+            ui->action = UI_ACTION_NONE;
+            UI_RequestNextFrame(ui, PACMAN_FRAME_MS);
+            return;
+        }
         Pacman_CoreNewGame(&s_game, now);
         s_active = 1u;
         s_accum = 0u;

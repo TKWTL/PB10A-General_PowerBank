@@ -1,5 +1,6 @@
 #include "../bomber_core.h"
 #include "../bomber_assets.h"
+#include "rle.h"
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -16,16 +17,21 @@ static uint32_t crc32(const uint8_t *data, unsigned length) {
 }
 
 static void test_resources(void) {
-    assert(sizeof(bomber_BackBlitz) == 1024u);
-    assert(sizeof(bomber_back) == 1024u);
+    uint8_t image[1024], walls[1024];
+    assert(sizeof(bomber_BackBlitz_rle) == 257u);
+    assert(sizeof(bomber_back_rle) == 125u);
+    assert(RLE_Decode(bomber_BackBlitz_rle,sizeof(bomber_BackBlitz_rle),
+                      image,sizeof(image),RLE_WRITE)==RLE_OK);
+    assert(RLE_Decode(bomber_back_rle,sizeof(bomber_back_rle),
+                      walls,sizeof(walls),RLE_WRITE)==RLE_OK);
     assert(sizeof(bomber_caracters) == 192u);
     assert(sizeof(bomber_fire) == 216u);
     assert(sizeof(bomber_BlocDetect) == 128u);
     assert(sizeof(bomber_level) == 42u);
     assert(sizeof(bomber_bomb) == 24u);
     assert(sizeof(bomber_Music) == 42u);
-    assert(crc32(bomber_BackBlitz, 1024u) == 0xa58aefdau);
-    assert(crc32(bomber_back, 1024u) == 0x669c74eeu);
+    assert(crc32(image,sizeof(image)) == 0xa58aefdau);
+    assert(crc32(walls,sizeof(walls)) == 0x669c74eeu);
     assert(crc32(bomber_caracters, 192u) == 0xfb289dc8u);
     assert(crc32(bomber_fire, 216u) == 0x8308cb8fu);
     assert(crc32(bomber_BlocDetect, 128u) == 0xbf7c6a60u);
@@ -184,6 +190,10 @@ static void test_random_walk(void) {
 }
 
 int main(void){
+    uint8_t collision[1024];
+    assert(RLE_Decode(bomber_back_rle,sizeof(bomber_back_rle),
+                      collision,sizeof(collision),RLE_WRITE)==RLE_OK);
+    Bomber_CoreBindBack(collision);
     test_resources();
     test_level_and_blocks();
     test_spawn_lane_fe_sentinel();

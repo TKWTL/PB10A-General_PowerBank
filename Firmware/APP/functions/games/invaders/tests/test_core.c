@@ -1,5 +1,6 @@
 #include "../invaders_core.h"
 #include "../invaders_assets.h"
+#include "rle.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -18,8 +19,14 @@ static void test_assets(void) {
     assert(sizeof(invaders_shoot)==2u && crc32(invaders_shoot,2u)==0xc5daeed3u);
     assert(sizeof(invaders_monsters)==168u && crc32(invaders_monsters,168u)==0x49d812e6u);
     assert(sizeof(invaders_ship)==26u && crc32(invaders_ship,26u)==0x43963b5cu);
-    assert(sizeof(invaders_back)==1024u && crc32(invaders_back,1024u)==0xc2b6b4d0u);
-    assert(sizeof(invaders_intro)==1024u && crc32(invaders_intro,1024u)==0x5c55e996u);
+    uint8_t background[1024], title[1024];
+    assert(sizeof(invaders_back_rle)==420u && sizeof(invaders_intro_rle)==557u);
+    assert(RLE_Decode(invaders_back_rle,sizeof(invaders_back_rle),
+                      background,sizeof(background),RLE_WRITE)==RLE_OK);
+    assert(RLE_Decode(invaders_intro_rle,sizeof(invaders_intro_rle),
+                      title,sizeof(title),RLE_WRITE)==RLE_OK);
+    assert(crc32(background,sizeof(background))==0xc2b6b4d0u);
+    assert(crc32(title,sizeof(title))==0x5c55e996u);
 }
 static void test_intro_and_render_pure(void) {
     invaders_game_t g, before;
@@ -27,7 +34,12 @@ static void test_intro_and_render_pure(void) {
     Invaders_CoreInit(&g,123u);
     assert(g.phase==INVADERS_TITLE && g.lives==3u && g.monster_count==24u);
     Invaders_CoreRender(&g,buffer);
-    assert(memcmp(buffer,invaders_intro,1024u)==0);
+    {
+        uint8_t title[1024];
+        assert(RLE_Decode(invaders_intro_rle,sizeof(invaders_intro_rle),
+                          title,sizeof(title),RLE_WRITE)==RLE_OK);
+        assert(memcmp(buffer,title,sizeof(buffer))==0);
+    }
     Invaders_CoreStart(&g);
     assert(g.phase==INVADERS_READY);
     for(unsigned i=0;i<30u;i++) Invaders_CoreTick(&g,INVADERS_NO_MOVE,0u);
@@ -131,6 +143,10 @@ static void test_stress(void) {
     }
 }
 int main(void) {
+    uint8_t cached_background[1024];
+    assert(RLE_Decode(invaders_back_rle,sizeof(invaders_back_rle),
+                      cached_background,sizeof(cached_background),RLE_WRITE)==RLE_OK);
+    Invaders_CoreBindBackground(cached_background);
     test_assets();test_intro_and_render_pure();test_ship_fire_and_formations();
     test_enemy_hit();test_shield_two_way();test_ufo_bonus_and_levels();
     test_death_lives();test_stress();

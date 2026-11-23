@@ -37,6 +37,8 @@ typedef struct {
     uint32_t random_state;
 } bomber_game_t;
 
+/* Bind 1024-byte fixed-wall map for the active game; unbind on page leave. */
+void Bomber_CoreBindBack(const uint8_t *collision_map);
 void Bomber_CoreNewGame(bomber_game_t *g, uint32_t seed);
 void Bomber_CoreStart(bomber_game_t *g);
 void Bomber_CoreTick(bomber_game_t *g, bomber_direction_t input, uint8_t place);

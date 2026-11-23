@@ -4,8 +4,14 @@
  * deterministic tick processing from read-only SSD1306 page rendering. */
 #include "invaders_core.h"
 #include "invaders_assets.h"
+#include "rle.h"
 #include <string.h>
 
+/* Cached 128x64 scrolling background; game owns its single shared buffer. */
+static const uint8_t *s_cached_background;
+void Invaders_CoreBindBackground(const uint8_t *background) {
+    s_cached_background = background;
+}
 #define INVADERS_SHIP_MIN 5u
 #define INVADERS_SHIP_MAX 114u
 #define INVADERS_SHOT_NONE (-1)
@@ -367,11 +373,13 @@ static uint8_t monster_pixel(const invaders_game_t *g, uint8_t x, uint8_t page) 
 
 uint8_t Invaders_CorePixel(const invaders_game_t *g, uint8_t x, uint8_t page) {
     uint8_t b, bg;
-    uint16_t pos = (uint16_t)page * 128u + x;
+    /* TITLE/GAME_OVER are decoded as one whole image by CoreRender().
+     * CorePixel is only used for the active-scene layer composition. */
     if (g->phase == INVADERS_TITLE || g->phase == INVADERS_GAME_OVER)
-        return invaders_intro[pos];
+        return 0u;
     bg = (uint8_t)(((uint16_t)g->ship_bg_offset + x) & 127u);
-    b = (uint8_t)~invaders_back[(uint16_t)page * 128u + bg];
+    b = (uint8_t)~(s_cached_background ?
+                  s_cached_background[(uint16_t)page * 128u + bg] : 0u);
     if (page == 7u) {
         if (x < (uint8_t)(g->lives * 5u)) b |= invaders_lives[x];
         if (x >= g->ship_pos && x < (uint16_t)g->ship_pos + 13u) {
@@ -397,7 +405,13 @@ uint8_t Invaders_CorePixel(const invaders_game_t *g, uint8_t x, uint8_t page) {
 
 void Invaders_CoreRender(const invaders_game_t *g, uint8_t *framebuffer) {
     uint8_t page, x;
-    if (!framebuffer) return;
+    if (!g || !framebuffer) return;
+    if (g->phase == INVADERS_TITLE || g->phase == INVADERS_GAME_OVER) {
+        /* Render original 1024-byte title frame without a second buffer. */
+        (void)RLE_Decode(invaders_intro_rle,sizeof(invaders_intro_rle),
+                         framebuffer,1024u,RLE_WRITE);
+        return;
+    }
     for (page = 0u; page < 8u; ++page)
         for (x = 0u; x < 128u; ++x)
             framebuffer[(uint16_t)page * 128u + x] = Invaders_CorePixel(g, x, page);

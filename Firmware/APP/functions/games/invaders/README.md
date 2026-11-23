@@ -2,9 +2,10 @@
 
 Source: **Daniel C**, Tinyjoypad ATTINY85 / Tiny Invaders v3.1 (2018–2021),
 **GPL-3.0-or-later**. Original source is supplied in the Tiny-invaders ZIP.
-This port retains the original seven resource tables **byte for byte**, including
-`intro[]`, `back[]`, `Monsters[]`, `vesso[]`, `LIVE[]`, `SHOOT[]`, and the ten
-`MonstersLevels[]` layouts. The full upstream `COPYING.txt` is retained as
+The original resource data is preserved losslessly: the full-screen
+`intro[]` and `back[]` are now four-mode RLE byte streams (decoded
+CRC32s unchanged), while the other original five tables retain identical
+uncompressed byte sequences. There are still ten `MonstersLevels[]` layouts. The full upstream `COPYING.txt` is retained as
 `LICENSE-GPL-3.0`. No Arduino, AVR or `FastTinyDriver` code is required.
 
 ## Gameplay
@@ -68,3 +69,15 @@ The user-provided `img_invaders[120]` XBM icon is defined in
 SSD1306 page-packed sprites), and is used directly by
 `APP/MiaoUI/ui_conf.c`. The original gameplay artwork is
 unmodified. See [shared porting guide](../SKILL.md).
+ 
+## Shared resource cache and RLE
+
+`invaders_back_rle[420]` decodes at game entry into GameBuffer's sole
+1024-byte SRAM asset block. The core reads it by native SSD1306
+page and scrolling X offset during active play, with no per-pixel RLE
+cost. The original full-screen `invaders_intro_rle[557]` decompresses
+directly into the OLED framebuffer on title/game-over screens. Neither
+operation allocates a second display buffer. The title image is handled
+by `Invaders_CoreRender()`; `Invaders_CorePixel()` composes active-scene
+pixels only. Exit unbinds the cached backdrop and clears owner data,
+while STOP1 preserves SRAM and discards simulation backlog.

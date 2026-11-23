@@ -47,6 +47,9 @@ typedef struct {
     uint32_t random_state;
 } pacman_game_t;
 
+/* Bind the pre-decompressed 1024-byte collision map for this one game page.
+ * Caller must unbind before releasing the shared game resource buffer. */
+void Pacman_CoreBindBack(const uint8_t *collision_map);
 void Pacman_CoreNewGame(pacman_game_t *g, uint32_t seed);
 void Pacman_CoreStart(pacman_game_t *g);
 void Pacman_CoreQueueDirection(pacman_game_t *g, pacman_direction_t dir);

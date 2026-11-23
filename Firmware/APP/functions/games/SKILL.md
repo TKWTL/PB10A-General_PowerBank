@@ -15,6 +15,7 @@ bugs, actual PB10A hardware mismatches and intentional gameplay changes.
 ```text
 games/
   SKILL.md
+  game_shared.c/.h       One 1024-byte owner-checked SRAM asset cache
   <name>/
     game_<name>.c/.h       MiaoUI adapter: controls, frame buffer, beeps
     <name>_core.c/.h       Portable C game state, mechanics and collisions
@@ -127,3 +128,55 @@ is not part of the 30px UI and may be dropped; all visible data stays intact.
    sound, exit and STOP1 resume. Compare Keil .map `Code + RO + RW`
    before/after under `-Os` + LTO: source reuse does not guarantee
    smaller linked Flash.
+
+## Shared 1 KiB cache, byte RLE and sparse dots (PB10A implementation)
+
+- The only shared game resource SRAM is `game_shared.c`'s **1024-byte**
+  `s_game_buffer` (additional to the existing SSD1306 DMA framebuffer).
+  `GameBuffer_Acquire(GAME_OWNER_*)` obtains exclusive ownership; another
+  owner is rejected, the same owner may reacquire without clearing.
+  `GameBuffer_Release(owner)` zeros all 1024 bytes and releases the owner.
+  Never release on STOP1/display suspension; release only on the UI leave
+  hook, and unbind game-core pointers **before** clearing. Breakout needs no
+  cache. No heap, lazy allocation or third 1024-byte screen buffer.
+- Image compression uses hardware-independent `Firmware/LIB/rle.c`:
+  upper two control bits choose literal/zero/FF/repeat, lower six bits
+  encode length-1 (1..64). `RLE_WRITE` reconstructs, `RLE_XOR` applies
+  a delta. Compress off-device and verify **exact original CRC32** after
+  decoding. This is unrelated to u8g2 font RLE.
+- **Pac-Man:** `BackBlitz` compressed (362 B) is decoded directly into
+  OLED framebuffer for each render; at first entry decode the same maze
+  into GameBuffer, then apply the 207-byte `back XOR delta` into it.
+  Collision then reads cached SRAM at native page+X offsets. The
+  original 1024-byte `dots` raster is replaced by 64 ordered 16-bit
+  records + eight original byte masks (136 B). Record bits: X[6:0],
+  page[9:7], mask-index[12:10], reserved[15:13]=0. Iterate only the
+  64 records for consumption and overlay visible masks directly into
+  the OLED buffer. Preserve original page-major/X-increasing order:
+  indices 0,1,12,13,50,51,62,63 are the four corner **two-byte power
+  pills**; each top corner uses mask 0x06, each bottom corner 0xC0.
+  Keep their flashing and ghost-reversal timing; do not merge two
+  adjacent entries into one item.
+- **Bomber:** decompress the 125-byte static-wall mask to GameBuffer
+  at game entry, bind it to the core; decompress 257-byte backdrop
+  directly into display buffer each frame. Destructible block bits
+  remain distinct from fixed walls; preserve 0xFE collision sentinel
+  semantics and the intentional 40x40 blast changes.
+- **Invaders:** decompress 420-byte scrolling backdrop to GameBuffer
+  at entry, allowing unmodified random X+offset access during play.
+  Decode the 557-byte title raster directly to OLED buffer for READY
+  and GAME_OVER; normal scene composition is otherwise unchanged.
+- Cache is bound by game adapter to a pure C game core; the core does
+  not call MiaoUI, RLE or GameBuffer to allocate anything. The game
+  adapter performs resource decompression only on first entry, and
+  continues to preserve existing long STOP1-gap timing behavior.
+- Host tests must reconstruct every original 1024-byte image and
+  Pac-Man's 64-dot bitmap and compare historical CRC32s; they must
+  additionally verify ownership exclusivity, owner-safe release,
+  1024-byte clearing, leave/re-entry and no STOP1 release.
+- Capacity accounting: three former Pac-Man, two Bomber and two
+  Invaders 1024-byte raster arrays total **7168 bytes** in Flash,
+  now encoded in **2064 bytes** total including Pac-Man dot records.
+  Gross static data reduction is **5104 bytes**, before decoder,
+  pointers and alignment. Measure real `Program Size` after Keil
+  `-Os`+LTO; cache adds 1024 bytes to ZI RAM.

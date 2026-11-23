@@ -5,6 +5,9 @@ user-installed apps on an operating system. These modules may use system
 services and BSP interfaces, but the services and scheduler must not depend on
 them.
 
+- **Shared game resources:** `games/game_shared.c/.h` provides one
+  owner-checked 1024-byte SRAM asset cache used in turn by Pac-Man,
+  Bomber and Invaders; see [games/SKILL.md](games/SKILL.md).
 - **Game porting guide:** [`games/SKILL.md`](games/SKILL.md) covers source/asset audits,
   nonblocking state machines, OLED frame buffers, gameplay inputs, STOP1,
   third-party licenses and regression tests. Game index icons are defined

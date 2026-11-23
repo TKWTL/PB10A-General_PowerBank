@@ -1,12 +1,13 @@
 /* TinyPacman by Daniel C (2018-2021), GPL-3.0-or-later.
- * Unmodified page-packed original graphics extracted from spritebank.h.
- * byte index = (y_page * 128 + x), bits 0..7 are successive rows. */
+ * Page-packed maze and collision masks restored byte-exact by RLE/XOR;
+ * 64 compact dot records preserve all original pixel masks and order. */
 #ifndef PB10A_TINYPACMAN_ASSETS_H
 #define PB10A_TINYPACMAN_ASSETS_H
 #include <stdint.h>
-extern const uint8_t pacman_BackBlitz[1024];
-extern const uint8_t pacman_back[1024];
-extern const uint8_t pacman_dots[1024];
+extern const uint8_t pacman_BackBlitz_rle[362];
+extern const uint8_t pacman_back_xor_rle[207];
+extern const uint16_t pacman_dot_records[64]; /* x7 | page3 << 7 | mask3 << 10 */
+extern const uint8_t pacman_dot_masks[8];
 extern const uint8_t pacman_caracters[192];
 extern const uint8_t pacman_fruits[32];
 extern const uint8_t pacman_Music[140];

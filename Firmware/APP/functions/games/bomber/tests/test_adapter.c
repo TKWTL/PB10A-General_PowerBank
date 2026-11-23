@@ -1,5 +1,7 @@
 #include "../game_bomber.h"
 #include "../bomber_assets.h"
+#include "../game_shared.h"
+#include "rle.h"
 #include "buttons.h"
 #include <assert.h>
 #include <stdint.h>
@@ -25,7 +27,13 @@ int main(void) {
     Game_BomberRun(&ui);
     assert(frames==1u && frame_delay==44u);
     memcpy(title,framebuffer,1024u);
-    assert(memcmp(title,bomber_BackBlitz,1024u)==0);
+    {
+        uint8_t original[1024];
+        assert(RLE_Decode(bomber_BackBlitz_rle,sizeof(bomber_BackBlitz_rle),
+                          original,sizeof(original),RLE_WRITE)==RLE_OK);
+        assert(memcmp(title,original,sizeof(title))==0);
+    }
+    assert(GameBuffer_Owner()==GAME_OWNER_BOMBER);
     ui.action=UI_ACTION_ENTER;
     now_ms+=44u;
     Game_BomberRun(&ui);
@@ -58,7 +66,13 @@ int main(void) {
     uint32_t old_frames=frames;
     Game_BomberRun(&ui);
     assert(frames==old_frames && ui.action==UI_ACTION_BACK);
-    Game_BomberOnLeave(&ui);
+    {
+        uint8_t *cached = GameBuffer_Acquire(GAME_OWNER_BOMBER);
+        assert(cached != 0);
+        Game_BomberOnLeave(&ui);
+        assert(GameBuffer_Owner() == GAME_OWNER_NONE);
+        for (unsigned i=0u;i<1024u;i++) assert(cached[i] == 0u);
+    }
     keys[KeyIndex_CONF]=KeyState_None;
     ui.action=UI_ACTION_NONE;
     now_ms+=44u;

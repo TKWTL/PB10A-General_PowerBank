@@ -1,8 +1,8 @@
 # Hardware-independent firmware algorithms
 
 `Firmware/LIB/` holds small, pure C utilities without STM32 HAL, MiaoUI,
-U8g2 or application dependencies. Keeping algorithms here **does not** imply
-that game images are already converted to compressed form. Add an algorithm's
+U8g2 or application dependencies. Pac-Man, Bomber and Invaders now use
+this RLE codec for native page data, and Beep Service uses FIFO records. Add an algorithm's
 `.c` file to the Keil project only when it is used; with `-Os` and LTO,
 measure the final linked Flash rather than assuming abstraction saves space.
 
@@ -49,3 +49,13 @@ or interrupts-disabled critical section. Compatible with ArmClang/GCC.
   timing and binary size benefit first.
 
 Run `bash Firmware/LIB/tests/run.sh` on a host with GCC and Clang installed.
+ 
+## Game resource cache integration
+
+`Firmware/APP/functions/games/game_shared.c/.h` provides an independent
+owner-checked 1024-byte SRAM cache, in addition to SSD1306's existing
+1024-byte framebuffer. The game adapters call `RLE_Decode` at entry
+and render; the core logic reads the uncompressed cache for random-access
+collision or scrolling. Pac-Man applies an RLE_XOR delta after the
+base bitmap decode. Invalid source/destination sizes are checked;
+buffers must not alias. No dynamic allocation.

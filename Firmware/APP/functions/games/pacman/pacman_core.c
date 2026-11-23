@@ -9,6 +9,11 @@
 #include "pacman_assets.h"
 #include <string.h>
 
+/* Cached collision image is owned by the currently active Pac-Man page.
+ * Core never stores or decompresses hardware resources itself. */
+static const uint8_t *s_back_map;
+void Pacman_CoreBindBack(const uint8_t *map) { s_back_map = map; }
+
 #define PACMAN_ACTORS 5u
 #define PACMAN_DOTS 64u
 #define PACMAN_PLAYER 0u
@@ -26,7 +31,7 @@ static uint32_t next_random(pacman_game_t *g) {
 
 static uint8_t back_byte(int16_t x, int16_t page) {
     if (x < 0 || x >= 128 || page < 0 || page >= 8) return 0;
-    return pacman_back[(uint16_t)page * 128u + (uint16_t)x];
+    return s_back_map ? s_back_map[(uint16_t)page * 128u + (uint16_t)x] : 0u;
 }
 
 /* Original CheckCollisionWithBack/RecupeBacktoCompV/H/Trim masks. */
@@ -113,29 +118,38 @@ uint8_t Pacman_CoreDotVisible(const pacman_game_t *g, uint8_t number) {
     return (uint8_t)((g->dots_mem[number / 8u] & (0x80u >> (number % 8u))) != 0u);
 }
 
+/* Dot table preserves original page-major, ascending-x bitmap scan order.
+ * Indices 0,1,12,13,50,51,62,63 are the 2-byte four-corner power pills. */
+static uint8_t is_power_dot(uint8_t index) {
+    return (uint8_t)(index == 0u || index == 1u ||
+                     index == 12u || index == 13u ||
+                     index == 50u || index == 51u ||
+                     index == 62u || index == 63u);
+}
+
 static void consume_dots(pacman_game_t *g) {
-    uint8_t idx = 0u, page;
+    uint8_t idx;
     const pacman_actor_t *p = &g->actors[0];
-    for (page = 0u; page < 8u; page++) {
-        uint8_t x;
-        for (x = 0u; x < 128u; x++) {
-            if (!pacman_dots[(uint16_t)page * 128u + x]) continue;
-            if (idx < PACMAN_DOTS && Pacman_CoreDotVisible(g, idx) &&
-                (int16_t)p->x < (int16_t)x && (int16_t)p->x > (int16_t)x - 6 &&
-                ((p->page_y == (int8_t)page && p->offset_y < 6u) ||
-                 ((p->page_y == (int8_t)page - 1 && p->offset_y > 5u)))) {
-                g->dots_mem[idx / 8u] &= (uint8_t)~(0x80u >> (idx % 8u));
-                if (g->dots_left) --g->dots_left;
-                if (idx == 0u || idx == 1u || idx == 12u || idx == 13u ||
-                    idx == 50u || idx == 51u || idx == 62u || idx == 63u) {
-                    g->power_active = 1u;
-                    g->power_timer = g->level_speed;
-                    g->sound_event = PACMAN_SOUND_POWER;
-                } else if (g->sound_event == PACMAN_SOUND_NONE) {
-                    g->sound_event = PACMAN_SOUND_DOT;
-                }
+    for (idx = 0u; idx < PACMAN_DOTS; ++idx) {
+        uint16_t record;
+        uint8_t x, page;
+        if (!Pacman_CoreDotVisible(g, idx)) continue;
+        record = pacman_dot_records[idx];
+        x = (uint8_t)(record & 0x7fu);
+        page = (uint8_t)((record >> 7) & 7u);
+        if ((int16_t)p->x < (int16_t)x &&
+            (int16_t)p->x > (int16_t)x - 6 &&
+            ((p->page_y == (int8_t)page && p->offset_y < 6u) ||
+             (p->page_y == (int8_t)page - 1 && p->offset_y > 5u))) {
+            g->dots_mem[idx / 8u] &= (uint8_t)~(0x80u >> (idx % 8u));
+            if (g->dots_left) --g->dots_left;
+            if (is_power_dot(idx)) {
+                g->power_active = 1u;
+                g->power_timer = g->level_speed;
+                g->sound_event = PACMAN_SOUND_POWER;
+            } else if (g->sound_event == PACMAN_SOUND_NONE) {
+                g->sound_event = PACMAN_SOUND_DOT;
             }
-            ++idx;
         }
     }
 }

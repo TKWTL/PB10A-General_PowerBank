@@ -1,5 +1,6 @@
 #include "../pacman_core.h"
 #include "../pacman_assets.h"
+#include "rle.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -118,22 +119,45 @@ static void test_queued_turns(void) {
 
 int main(void) {
     pacman_game_t g;
-    test_queued_turns();
+    uint8_t backdrop[1024], collision[1024], dots[1024] = {0};
     size_t i;
-    unsigned n = 0;
-    assert(sizeof(pacman_BackBlitz) == 1024u);
-    assert(sizeof(pacman_back) == 1024u);
-    assert(sizeof(pacman_dots) == 1024u);
+    unsigned n = 0u;
+    assert(sizeof(pacman_BackBlitz_rle) == 362u);
+    assert(sizeof(pacman_back_xor_rle) == 207u);
+    assert(sizeof(pacman_dot_records) == 128u);
+    assert(sizeof(pacman_dot_masks) == 8u);
     assert(sizeof(pacman_caracters) == 192u);
     assert(sizeof(pacman_Music) == 140u);
-    assert(asset_crc32(pacman_BackBlitz, 1024u) == 0x7df30593u);
-    assert(asset_crc32(pacman_back, 1024u) == 0x63bc13e4u);
-    assert(asset_crc32(pacman_dots, 1024u) == 0x73738c64u);
-    assert(asset_crc32(pacman_caracters, 192u) == 0x0ce2d60fu);
-    assert(asset_crc32(pacman_fruits, 32u) == 0x36bedb03u);
-    assert(asset_crc32(pacman_Music, 140u) == 0x2fe77b41u);
-    for (i=0;i<1024u;i++) if (pacman_dots[i]) ++n;
+    assert(RLE_Decode(pacman_BackBlitz_rle,sizeof(pacman_BackBlitz_rle),
+                      backdrop,sizeof(backdrop),RLE_WRITE)==RLE_OK);
+    assert(asset_crc32(backdrop,sizeof(backdrop)) == 0x7df30593u);
+    memcpy(collision,backdrop,sizeof(backdrop));
+    assert(RLE_Decode(pacman_back_xor_rle,sizeof(pacman_back_xor_rle),
+                      collision,sizeof(collision),RLE_XOR)==RLE_OK);
+    assert(asset_crc32(collision,sizeof(collision)) == 0x63bc13e4u);
+    for (i=0u;i<64u;i++) {
+        uint16_t d = pacman_dot_records[i];
+        uint16_t pos = (uint16_t)(((d >> 7) & 7u)*128u+(d & 127u));
+        uint8_t index = (uint8_t)((d >> 10) & 7u);
+        assert((d & 0xe000u) == 0u && pos < 1024u);
+        assert(dots[pos] == 0u);
+        dots[pos] = pacman_dot_masks[index];
+        n++;
+        if (i==0u || i==1u || i==12u || i==13u) {
+            assert((d & 127u)==17u || (d & 127u)==18u ||
+                   (d & 127u)==119u || (d & 127u)==120u);
+            assert(pacman_dot_masks[index]==0x06u);
+        }
+        if (i==50u || i==51u || i==62u || i==63u)
+            assert(pacman_dot_masks[index]==0xc0u);
+    }
     assert(n == 64u);
+    assert(asset_crc32(dots,sizeof(dots)) == 0x73738c64u);
+    assert(asset_crc32(pacman_caracters,192u) == 0x0ce2d60fu);
+    assert(asset_crc32(pacman_fruits,32u) == 0x36bedb03u);
+    assert(asset_crc32(pacman_Music,140u) == 0x2fe77b41u);
+    Pacman_CoreBindBack(collision);
+    test_queued_turns();
     Pacman_CoreNewGame(&g, 1u);
     assert(g.phase == PACMAN_READY && g.lives == 3u && g.dots_left == 64u);
     assert(g.level_speed == 200u && g.level == 1u);

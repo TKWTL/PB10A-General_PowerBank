@@ -1,4 +1,5 @@
 #include "../game_invaders.h"
+#include "../game_shared.h"
 #include "buttons.h"
 #include <assert.h>
 #include <stdint.h>
@@ -20,6 +21,7 @@ int main(void) {
     now=100u;Game_InvadersRun(&ui);
     memcpy(title,pixels,sizeof(title));
     assert(frames==1u && delay==44u);
+    assert(GameBuffer_Owner()==GAME_OWNER_INVADERS);
     ui.action=UI_ACTION_ENTER;
     now+=44u;Game_InvadersRun(&ui);
     assert(ui.action==UI_ACTION_NONE && memcmp(pixels,title,1024u)!=0);
@@ -32,7 +34,13 @@ int main(void) {
     now+=44u;Game_InvadersRun(&ui);
     now+=120000u;Game_InvadersRun(&ui); /* No accelerated STOP1 catch-up. */
     ui.action=UI_ACTION_BACK;Game_InvadersRun(&ui);
-    Game_InvadersOnLeave(&ui);
+    {
+        uint8_t *cached = GameBuffer_Acquire(GAME_OWNER_INVADERS);
+        assert(cached != 0);
+        Game_InvadersOnLeave(&ui);
+        assert(GameBuffer_Owner() == GAME_OWNER_NONE);
+        for (unsigned i=0u;i<1024u;i++) assert(cached[i]==0u);
+    }
     now+=44u;ui.action=UI_ACTION_NONE;Game_InvadersRun(&ui);
     assert(memcmp(pixels,title,1024u)==0 && frames>=6u);
     puts("Tiny Invaders adapter: landscape, CONF pause, long BACK, STOP1/restart PASS");

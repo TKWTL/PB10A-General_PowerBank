@@ -868,6 +868,11 @@
               <FilePath>../APP/functions/games/pacman/pacman_assets.c</FilePath>
             </File>
             <File>
+              <FileName>game_shared.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/functions/games/game_shared.c</FilePath>
+            </File>
+            <File>
               <FileName>game_bomber.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/functions/games/bomber/game_bomber.c</FilePath>

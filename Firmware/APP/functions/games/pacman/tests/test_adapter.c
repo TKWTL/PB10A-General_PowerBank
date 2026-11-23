@@ -25,7 +25,13 @@ int main(void){
      * Other x=8+ columns keep the original inverted attract image. */
     assert((attract[7] & 0x02u) != 0u);
     assert(attract[0] == 0u);
-    assert(attract[8] == (uint8_t)~pacman_BackBlitz[8]);
+    {
+        uint8_t base[1024];
+        assert(RLE_Decode(pacman_BackBlitz_rle,sizeof(pacman_BackBlitz_rle),
+                          base,sizeof(base),RLE_WRITE)==RLE_OK);
+        assert(attract[8] == (uint8_t)~base[8]);
+    }
+    assert(GameBuffer_Owner() == GAME_OWNER_PACMAN);
     /* The glyphs and 90-degree hint remain strictly within x<8. */
     for (unsigned page=0u;page<8u;page++) {
         assert((attract[page*128u+0u] == 0u));
@@ -96,7 +102,13 @@ int main(void){
     ui.action=UI_ACTION_BACK;
     Game_PacmanRun(&ui);
     assert(s_game.queued_direction==PACMAN_NONE);
-    Game_PacmanOnLeave(&ui);
+    {
+        uint8_t *cache = GameBuffer_Acquire(GAME_OWNER_PACMAN);
+        assert(cache != 0);
+        Game_PacmanOnLeave(&ui);
+        assert(GameBuffer_Owner() == GAME_OWNER_NONE);
+        for (unsigned i=0;i<1024u;i++) assert(cache[i] == 0u);
+    }
     ui.action=UI_ACTION_NONE;
     now+=44u;
     Game_PacmanRun(&ui);

@@ -7,6 +7,10 @@
 #include "bomber_assets.h"
 #include <string.h>
 
+static const uint8_t *s_back_map;
+/* Caller owns and maintains one pre-decompressed fixed-wall bitmap. */
+void Bomber_CoreBindBack(const uint8_t *map) { s_back_map = map; }
+
 #define BOMBER_STOP 2u
 #define BOMBER_MAP_CELLS 105
 #define BOMBER_ENEMIES 4u
@@ -23,7 +27,7 @@ static uint32_t next_random(bomber_game_t *g) {
 
 static uint8_t back_byte(int16_t x, int16_t page) {
     if (x < 0 || x >= 128 || page < 0 || page >= 8) return 0u;
-    return bomber_back[(uint16_t)page * 128u + (uint16_t)x];
+    return s_back_map ? s_back_map[(uint16_t)page * 128u + (uint16_t)x] : 0u;
 }
 
 uint8_t Bomber_CoreBlockVisible(const bomber_game_t *g, int16_t index) {

@@ -2,6 +2,9 @@
  * PB10A native landscape MiaoUI adapter; never advances game in render(). */
 #include "game_invaders.h"
 #include "invaders_core.h"
+#include "invaders_assets.h"
+#include "../game_shared.h"
+#include "rle.h"
 #include "display/dispDriver.h"
 #include "core/ui.h"
 #include "buttons.h"
@@ -54,6 +57,20 @@ void Game_InvadersOnLeave(ui_t *ui) {
     (void)ui;
     s_active = 0u;
     s_accum = 0u;
+    Invaders_CoreBindBackground(0);
+    GameBuffer_Release(GAME_OWNER_INVADERS);
+}
+
+static uint8_t load_background(void) {
+    uint8_t *buffer = GameBuffer_Acquire(GAME_OWNER_INVADERS);
+    if (!buffer) return 0u;
+    if (RLE_Decode(invaders_back_rle, sizeof(invaders_back_rle),
+                   buffer, GAME_BUFFER_SIZE, RLE_WRITE) != RLE_OK) {
+        GameBuffer_Release(GAME_OWNER_INVADERS);
+        return 0u;
+    }
+    Invaders_CoreBindBackground(buffer);
+    return 1u;
 }
 
 void Game_InvadersRun(ui_t *ui) {
@@ -64,6 +81,11 @@ void Game_InvadersRun(ui_t *ui) {
     if (ui->action == UI_ACTION_BACK) return; /* MiaoUI long-CONF exit. */
     now = Millis();
     if (!s_active) {
+        if (!load_background()) {
+            ui->action = UI_ACTION_NONE;
+            UI_RequestNextFrame(ui, INVADERS_FRAME_MS);
+            return;
+        }
         Invaders_CoreInit(&s_game, now);
         s_active = 1u;
         s_accum = 0u;

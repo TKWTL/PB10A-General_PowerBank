@@ -35,6 +35,8 @@ typedef struct {
     uint32_t random_state;
 } invaders_game_t;
 
+/* Valid until page leave; original active-stage background is 1024 bytes. */
+void Invaders_CoreBindBackground(const uint8_t *background);
 void Invaders_CoreInit(invaders_game_t *g, uint32_t seed);
 void Invaders_CoreStart(invaders_game_t *g);
 void Invaders_CoreTick(invaders_game_t *g, invaders_move_t move, uint8_t shoot);
