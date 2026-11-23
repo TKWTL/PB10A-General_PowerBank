@@ -1,4 +1,5 @@
 #include "fifo.h"
+#include <string.h>
 
 /* On ARMv6-M (Cortex-M0+), the compiler's generic __atomic builtins can
  * call __atomic_load_4 / __atomic_store_4, adding a runtime dependency.
@@ -96,4 +97,43 @@ uint32_t FIFO_Read(fifo_t *fifo, uint8_t *dst, uint32_t length) {
     if (dst == 0) return 0u;
     for (i = 0u; i < length && FIFO_Pop(fifo, &dst[i]); ++i) {}
     return i;
+}
+
+/* Fixed-record transactions; only one SPSC producer or consumer may call
+ * its corresponding operation at a time. Byte copies precede publication. */
+uint8_t FIFO_WriteExact(fifo_t *fifo, const void *src, uint32_t size) {
+    uint32_t head, tail, offset, first;
+    if (!fifo || !fifo->storage || !fifo->capacity ||
+        (size && !src) || size > fifo->capacity) return 0u;
+    if (!size) return 1u;
+    head = FIFO_LOAD_RELAXED(&fifo->head);
+    tail = FIFO_LOAD_ACQUIRE(&fifo->tail);
+    if (head - tail > fifo->capacity ||
+        size > fifo->capacity - (head - tail)) return 0u;
+    offset = head & fifo->mask;
+    first = fifo->capacity - offset;
+    if (first > size) first = size;
+    memcpy(fifo->storage + offset, src, first);
+    if (first < size)
+        memcpy(fifo->storage, (const uint8_t *)src + first, size - first);
+    FIFO_STORE_RELEASE(&fifo->head, head + size);
+    return 1u;
+}
+
+uint8_t FIFO_ReadExact(fifo_t *fifo, void *dst, uint32_t size) {
+    uint32_t head, tail, offset, first;
+    if (!fifo || !fifo->storage || !fifo->capacity ||
+        (size && !dst) || size > fifo->capacity) return 0u;
+    if (!size) return 1u;
+    tail = FIFO_LOAD_RELAXED(&fifo->tail);
+    head = FIFO_LOAD_ACQUIRE(&fifo->head);
+    if (head - tail < size || head - tail > fifo->capacity) return 0u;
+    offset = tail & fifo->mask;
+    first = fifo->capacity - offset;
+    if (first > size) first = size;
+    memcpy(dst, fifo->storage + offset, first);
+    if (first < size)
+        memcpy((uint8_t *)dst + first, fifo->storage, size - first);
+    FIFO_STORE_RELEASE(&fifo->tail, tail + size);
+    return 1u;
 }

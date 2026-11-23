@@ -27,5 +27,10 @@ uint8_t FIFO_Push(fifo_t *fifo, uint8_t value); /* 0 if full */
 uint8_t FIFO_Pop(fifo_t *fifo, uint8_t *out);   /* 0 if empty */
 uint32_t FIFO_Write(fifo_t *fifo, const uint8_t *src, uint32_t length);
 uint32_t FIFO_Read(fifo_t *fifo, uint8_t *dst, uint32_t length);
+/* All-or-nothing byte record operations for SPSC fixed-size records.
+ * One release-store commits the full byte range; insufficient data or
+ * space leaves the FIFO unchanged. Source and storage must not overlap. */
+uint8_t FIFO_WriteExact(fifo_t *fifo, const void *src, uint32_t size);
+uint8_t FIFO_ReadExact(fifo_t *fifo, void *dst, uint32_t size);
 
 #endif

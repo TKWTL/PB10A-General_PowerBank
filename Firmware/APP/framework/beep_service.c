@@ -3,6 +3,7 @@
  */
 #include "beep_service.h"
 #include "tim.h"
+#include "fifo.h"
 
 /**************************** Hardware PWM ****************************/
 
@@ -59,15 +60,18 @@ static void beep_hw_set_frequency(uint16_t frequency_hz) {
 /************************* Cooperative playback ************************/
 
 static const uint16_t s_key_sound[] = {2700u, 100u, BEEP_END};
-static const uint16_t *s_queue[BEEP_QUEUE_CAPACITY];
+/* Pointer-sized records: no copying of the const note sequences. */
+static uint8_t s_queue_storage[BEEP_QUEUE_CAPACITY * sizeof(const uint16_t *)];
+static fifo_t s_queue;
 static const uint16_t *s_current;
 static uint32_t s_step_started;
 static uint16_t s_step_duration, s_word_position, s_tone_frequency, s_tone_duration;
-static uint8_t s_head, s_tail, s_count, s_note_index, s_key_enabled;
+static uint8_t s_note_index, s_key_enabled;
 static uint8_t s_tone_active, s_need_note;
 
 void beep_init(void) {
-    s_head = s_tail = s_count = s_note_index = 0u;
+    (void)FIFO_Init(&s_queue, s_queue_storage, sizeof(s_queue_storage));
+    s_note_index = 0u;
     s_current = 0;
     s_step_started = 0u;
     s_step_duration = s_word_position = s_tone_frequency = s_tone_duration = 0u;
@@ -80,16 +84,13 @@ void beep_init(void) {
 
 uint8_t beep_enqueue(const uint16_t *sequence) {
     if (s_volume == 0u || !sequence || sequence[0] == BEEP_END ||
-        sequence[0] == BEEP_REPEAT || s_count >= BEEP_QUEUE_CAPACITY)
-        return 0u;
-    s_queue[s_head] = sequence;
-    s_head = (uint8_t)((s_head + 1u) % BEEP_QUEUE_CAPACITY);
-    ++s_count;
-    return 1u;
+        sequence[0] == BEEP_REPEAT) return 0u;
+    return FIFO_WriteExact(&s_queue, &sequence, sizeof(sequence));
 }
 
 void beep_stop(void) {
-    s_head = s_tail = s_count = s_note_index = 0u;
+    FIFO_Clear(&s_queue);
+    s_note_index = 0u;
     s_current = 0;
     s_tone_active = s_need_note = 0u;
     s_word_position = s_step_duration = 0u;
@@ -142,11 +143,8 @@ void beep_poll(uint32_t now_ms) {
      */
     for (uint8_t attempt = 0u; attempt <= BEEP_QUEUE_CAPACITY + 2u; ++attempt) {
         if (!s_current) {
-            if (!s_count)
+            if (!FIFO_ReadExact(&s_queue, &s_current, sizeof(s_current)))
                 return;
-            s_current = s_queue[s_tail];
-            s_tail = (uint8_t)((s_tail + 1u) % BEEP_QUEUE_CAPACITY);
-            --s_count;
             s_word_position = 0u;
             s_note_index = 0u;
             s_need_note = 1u;
@@ -188,11 +186,12 @@ void beep_poll(uint32_t now_ms) {
 }
 
 uint8_t beep_busy(void) {
-    return (uint8_t)(s_current != 0 || s_tone_active || s_count != 0u);
+    return (uint8_t)(s_current != 0 || s_tone_active ||
+                     FIFO_Count(&s_queue) != 0u);
 }
 
 uint8_t beep_queue_count(void) {
-    return s_count;
+    return (uint8_t)(FIFO_Count(&s_queue) / sizeof(s_current));
 }
 
 uint8_t beep_note_index(void) {

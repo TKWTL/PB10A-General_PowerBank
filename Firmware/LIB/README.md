@@ -43,7 +43,9 @@ or interrupts-disabled critical section. Compatible with ArmClang/GCC.
   stale immediately if the other endpoint moves.
 - Does not manage DMA cache coherency, memory-mapped device buffers or
   multi-core arbitration. On Cortex-M0+ there is no data cache.
-- Existing Radio/Beep queues are not migrated automatically: verify RAM,
+- Beep Service now uses FIFO_WriteExact/FIFO_ReadExact for whole pointer records;
+  eight-sequence capacity, play/stop/tone behavior and no half-pointer reads
+  are preserved. Existing Radio queues are not migrated: verify RAM,
   timing and binary size benefit first.
 
 Run `bash Firmware/LIB/tests/run.sh` on a host with GCC and Clang installed.
