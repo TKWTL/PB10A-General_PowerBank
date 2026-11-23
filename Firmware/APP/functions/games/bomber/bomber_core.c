@@ -38,12 +38,16 @@ static void clear_block(bomber_game_t *g, int16_t index) {
         (uint8_t)~(0x80u >> ((uint16_t)index & 7u));
 }
 
-/* Original BlocDetect map uses FE at x=16 for index 1; FF is HUD. */
+/* Original CheckCollisionWithBlock SKIPS both FF and FE sentinels.
+ * At x=16, FE aliases column 1 for rendering only; the 6px-wide actor
+ * collision probe must not count the adjacent block. Otherwise the player
+ * at x=9 cannot traverse the empty leftmost lane on the first map.
+ * Keep FE->1 conversion ONLY in game_bomber.c's block_byte renderer. */
 static int16_t column_at(int16_t x) {
     uint8_t value;
     if (x < 0 || x >= 128) return -1;
     value = bomber_BlocDetect[x];
-    return value == 0xffu ? -1 : (value == 0xfeu ? 1 : (int16_t)value);
+    return (value == 0xffu || value == 0xfeu) ? -1 : (int16_t)value;
 }
 
 static uint8_t block_collision(const bomber_game_t *g, const bomber_actor_t *p) {

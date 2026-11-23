@@ -24,6 +24,11 @@ not included or required by PB10A.
   source's `RESTARTLEVEL` behavior, but fixes its extra-life off-by-one.
 - Original 6×7 actor/bitmap collision probes and bomb cross regions, with
   signed/bounded accesses for map edges and valid cell bits 0..104.
+  In collision probes, special `BlocDetect` values `0xFF` **and** `0xFE`
+  are ignored as in upstream; only block rendering maps `0xFE` to column 1.
+  This preserves the empty leftmost spawn corridor from y=56 to y=40 despite
+  the adjacent row-4 obstacle in column 1. The original 24×24 pixel cross
+  explosion art and damage rectangles remain unchanged.
 
 ## PB10A controls
 

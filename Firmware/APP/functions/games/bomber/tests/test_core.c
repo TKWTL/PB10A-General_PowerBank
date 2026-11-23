@@ -58,6 +58,31 @@ static void test_level_and_blocks(void) {
     }
 }
 
+/* Upstream ignores BlocDetect[16]==FE for collision but renders it as
+ * column 1. Without that exception, the adjacent row-4 column-1 block
+ * stops the spawn-lane player at y=48 although column 0 is empty. */
+static void test_spawn_lane_fe_sentinel(void) {
+    bomber_game_t g;
+    bomber_actor_t *p;
+    int16_t y;
+    Bomber_CoreNewGame(&g, 1u);
+    Bomber_CoreStart(&g);
+    assert(bomber_BlocDetect[16] == 0xfeu);
+    assert(!Bomber_CoreBlockVisible(&g, 4 * 15));
+    assert(Bomber_CoreBlockVisible(&g, 4 * 15 + 1));
+    p = &g.actors[0];
+    assert(p->x == 9 && p->page_y == 7 && p->offset_y == 0u);
+    p->dir_h = 0u; /* Up; test collision after each 1px step. */
+    p->dir_v = 2u;
+    for (y = 55; y >= 40; --y) {
+        p->page_y = (int8_t)(y / 8);
+        p->offset_y = (uint8_t)(y % 8);
+        assert(!Bomber_CoreCollisionBack(&g, 0u, 0u));
+    }
+    /* No obstacle has been destroyed to fake successful traversal. */
+    assert(Bomber_CoreBlockVisible(&g, 4 * 15 + 1));
+}
+
 static void test_bomb_explosion(void) {
     bomber_game_t g;
     Bomber_CoreNewGame(&g, 2u);
@@ -131,6 +156,7 @@ static void test_random_walk(void) {
 int main(void){
     test_resources();
     test_level_and_blocks();
+    test_spawn_lane_fe_sentinel();
     test_bomb_explosion();
     test_life_and_restart();
     test_random_walk();
