@@ -5,6 +5,14 @@ user-installed apps on an operating system. These modules may use system
 services and BSP interfaces, but the services and scheduler must not depend on
 them.
 
+- `games/invaders/`: GPL-3.0-or-later Tiny Invaders v3.1 by Daniel C.
+  Original horizontal 128x64 images, 4x6 formation, 10 layouts, shields,
+  UFO and one-projectile held-UP shooting. Nonblocking 33ms game logic,
+  original page rendering in existing OLED DMA buffer, normal auto STOP1.
+  LEFT/RIGHT move; hold UP to fire; CONF short release starts, hold pauses
+  and long hold exits. See [README](games/invaders/README.md) and
+  [host tests](games/invaders/tests/).
+
 - `games/bomber/`: GPL-3.0-or-later Tiny Bomber port by Daniel C.
   Original landscape 128x64 bitmaps, five characters, one bomb, fixed cross
   blast and three 14-byte destructible maps. Four random-wall-turn enemies,

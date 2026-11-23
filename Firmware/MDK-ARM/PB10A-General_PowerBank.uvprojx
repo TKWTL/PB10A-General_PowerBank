@@ -883,6 +883,21 @@
               <FilePath>../APP/functions/games/bomber/bomber_assets.c</FilePath>
             </File>
             <File>
+              <FileName>game_invaders.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/functions/games/invaders/game_invaders.c</FilePath>
+            </File>
+            <File>
+              <FileName>invaders_core.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/functions/games/invaders/invaders_core.c</FilePath>
+            </File>
+            <File>
+              <FileName>invaders_assets.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/functions/games/invaders/invaders_assets.c</FilePath>
+            </File>
+            <File>
               <FileName>power_algo.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/algorithm/power_algo.c</FilePath>
