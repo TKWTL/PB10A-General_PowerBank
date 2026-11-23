@@ -16,19 +16,23 @@ not included or required by PB10A.
 - Three maps cycle as 14-byte MSB-first bitmaps (15×7 = 105 valid cells);
   destruction does **not** modify the fixed collision `back[]` image.
 - Bomb fuse is advanced only at Frame 0/8/16, explosion at Frame % 4 == 0,
-  and blast damage and five destructible-block tests are applied once at
+  and expanded 40×40 cross-blast damage (9 destructible cells) is applied once at
   animation stage 1. Four enemies killed advances the level at Frame 12;
   after completing all three maps, enemies move every logic tick.
 - Starts with exactly three lives. Restarting after death keeps destroyed
   blocks and enemies already killed in the *same* level, matching the
   source's `RESTARTLEVEL` behavior, but fixes its extra-life off-by-one.
-- Original 6×7 actor/bitmap collision probes and bomb cross regions, with
+- Original 6×7 actor/bitmap collision probes; **PB10A custom 40×40 cross**
+  extends each arm to two obstacle cells in every direction. Rendering repeats
+  the original 8px arm pieces without any new bitmap arrays; damage and block
+  clearing use the same reach. Fixed walls still cannot be destroyed.
+  The original 24×24 cross is deliberately superseded by this change.
+- Original map bounds safety is retained, with
   signed/bounded accesses for map edges and valid cell bits 0..104.
   In collision probes, special `BlocDetect` values `0xFF` **and** `0xFE`
   are ignored as in upstream; only block rendering maps `0xFE` to column 1.
   This preserves the empty leftmost spawn corridor from y=56 to y=40 despite
-  the adjacent row-4 obstacle in column 1. The original 24×24 pixel cross
-  explosion art and damage rectangles remain unchanged.
+  the adjacent row-4 obstacle in column 1.
 
 ## PB10A controls
 

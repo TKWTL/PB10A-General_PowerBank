@@ -99,15 +99,45 @@ static void test_bomb_explosion(void) {
     memset(g.blocks, 0xff, sizeof(g.blocks));
     Bomber_CoreTick(&g, BOMBER_NONE, 0u); /* Frame 4: single damage event. */
     assert(g.bomb.anim == 2u);
+    /* All eight arm cells at radius two must be cleared too. */
+    assert(!Bomber_CoreBlockVisible(&g,5 + 1*15));
     assert(!Bomber_CoreBlockVisible(&g,5 + 2*15));
     assert(!Bomber_CoreBlockVisible(&g,5 + 3*15));
     assert(!Bomber_CoreBlockVisible(&g,5 + 4*15));
+    assert(!Bomber_CoreBlockVisible(&g,5 + 5*15));
+    assert(!Bomber_CoreBlockVisible(&g,3 + 3*15));
     assert(!Bomber_CoreBlockVisible(&g,4 + 3*15));
     assert(!Bomber_CoreBlockVisible(&g,6 + 3*15));
-    assert(Bomber_CoreBlockVisible(&g,7 + 3*15));
+    assert(!Bomber_CoreBlockVisible(&g,7 + 3*15));
+    assert(Bomber_CoreBlockVisible(&g,8 + 3*15));
+    assert(Bomber_CoreBlockVisible(&g,5 + 0*15));
+    assert(Bomber_CoreBlockVisible(&g,5 + 6*15));
     assert(g.phase == BOMBER_PLAYING);
     for (unsigned t = 0u; t < 4u; t++) Bomber_CoreTick(&g, BOMBER_NONE, 0u);
     assert(g.bomb.fuse == 0u);
+}
+
+static void test_blast_reaches_two_cells(void) {
+    bomber_game_t g;
+    Bomber_CoreNewGame(&g, 2u);
+    Bomber_CoreStart(&g);
+    g.bomb.x = 48;
+    g.bomb.page_y = 4;
+    g.bomb.fuse = 1u;
+    g.bomb.anim = 1u;
+    g.frame = 3u;
+    /* The four enemies are two full cells away, one in each arm. */
+    g.actors[1].x = 48;g.actors[1].page_y = 2;
+    g.actors[2].x = 48;g.actors[2].page_y = 6;
+    g.actors[3].x = 32;g.actors[3].page_y = 4;
+    g.actors[4].x = 64;g.actors[4].page_y = 4;
+    for (unsigned i = 1; i <= 4; ++i) {
+        g.actors[i].offset_y = 0u;
+        g.actors[i].dir_v = g.actors[i].dir_h = 2u;
+    }
+    Bomber_CoreTick(&g, BOMBER_NONE, 0u);
+    for (unsigned i = 1; i <= 4; ++i) assert(g.actors[i].dead);
+    assert(g.phase == BOMBER_PLAYING);
 }
 
 static void test_life_and_restart(void) {
@@ -158,6 +188,7 @@ int main(void){
     test_level_and_blocks();
     test_spawn_lane_fe_sentinel();
     test_bomb_explosion();
+    test_blast_reaches_two_cells();
     test_life_and_restart();
     test_random_walk();
     puts("bomber_core: original assets, bit map, levels, fuse, life PASS");

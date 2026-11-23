@@ -97,15 +97,25 @@ static uint8_t bomb_byte(uint8_t x, uint8_t page) {
     return bomber_bomb[(uint16_t)b->anim * 8u + (uint16_t)((int16_t)x - b->x)];
 }
 
+/* Extend the original three 24x24 fire frames to 40x40 without allocating
+ * new bitmap assets. Repeat each outer 8px arm segment once; preserve the
+ * original center and animation frames. Source layout is 3 pages x 3 frames
+ * x 24 columns (page-major, then frame, then column). */
 static uint8_t fire_byte(uint8_t x, uint8_t page) {
     const bomber_bomb_t *b = &s_game.bomb;
-    int16_t left = b->x - 8, top = b->page_y - 1;
+    int16_t left = b->x - 16, top = b->page_y - 2;
+    uint8_t dx, dy, sx, sy;
     uint16_t offset;
     if (b->fuse != 1u || b->anim > 2u || x <= 7u || page == 0u ||
-        (int16_t)x < left || (int16_t)x >= left + 24 ||
-        (int16_t)page < top || (int16_t)page > top + 2) return 0u;
-    offset = (uint16_t)((int16_t)x - left) +
-             (uint16_t)((int16_t)page - top) * 72u + (uint16_t)b->anim * 24u;
+        (int16_t)x < left || (int16_t)x >= left + 40 ||
+        (int16_t)page < top || (int16_t)page >= top + 5) return 0u;
+    dx = (uint8_t)((int16_t)x - left);
+    dy = (uint8_t)((int16_t)page - top);
+    sx = dx < 16u ? (uint8_t)(dx & 7u) :
+         (dx < 24u ? (uint8_t)(dx - 8u) :
+                      (uint8_t)(16u + (dx & 7u)));
+    sy = dy < 2u ? 0u : (dy == 2u ? 1u : 2u);
+    offset = (uint16_t)sy * 72u + (uint16_t)b->anim * 24u + sx;
     return offset < sizeof(bomber_fire) ? bomber_fire[offset] : 0u;
 }
 

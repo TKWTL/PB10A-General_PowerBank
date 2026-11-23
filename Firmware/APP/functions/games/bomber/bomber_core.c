@@ -250,28 +250,33 @@ static void move_actors(bomber_game_t *g) {
     }
 }
 
+/* 40x40 cross: center plus 2 full 8px cells per cardinal direction.
+ * No blast propagation or fixed-wall destruction; map bounds are clipped. */
 static void destroy_blocks(bomber_game_t *g) {
     int16_t col = (g->bomb.x - 8) / 8;
     int16_t row = g->bomb.page_y - 1;
+    int16_t delta;
     if (col < 0 || col >= 15 || row < 0 || row >= 7) return;
-    if (row > 0) clear_block(g, col + (row - 1) * 15);
-    clear_block(g, col + row * 15);
-    if (row < 6) clear_block(g, col + (row + 1) * 15);
-    if (col > 0) clear_block(g, col - 1 + row * 15);
-    if (col < 14) clear_block(g, col + 1 + row * 15);
+    for (delta = -2; delta <= 2; ++delta) {
+        if (row + delta >= 0 && row + delta < 7)
+            clear_block(g, col + (row + delta) * 15);
+        if (col + delta >= 0 && col + delta < 15)
+            clear_block(g, col + delta + row * 15);
+    }
 }
 
 static void blast_damage(bomber_game_t *g) {
     uint8_t i;
     int16_t bx = g->bomb.x, by = g->bomb.page_y * 8;
-    /* Original two rectangular tests reproduce the centered 24px cross.
-     * Inclusive edges and 7x7 actor hit box are preserved. */
+    /* Expanded to a 40x40 cross (two extra 8px arms per direction).
+     * Retain the original 7x7 actor hit boxes and inclusive edges.
+     * Visual fire_byte() uses the same 40x40 clipping envelope. */
     for (i = 0u; i < 5u; i++) {
         bomber_actor_t *p = &g->actors[i];
         int16_t py = (int16_t)p->page_y * 8 + p->offset_y;
         if (p->dead) continue;
-        if (overlaps(p->x, py, 7, 7, bx + 1, by - 6, 6, 21) ||
-            overlaps(p->x, py, 7, 7, bx - 6, by + 1, 21, 6)) {
+        if (overlaps(p->x, py, 7, 7, bx + 1, by - 14, 6, 37) ||
+            overlaps(p->x, py, 7, 7, bx - 14, by + 1, 37, 6)) {
             p->dead = 1u;
             p->page_y = 0;
             p->offset_y = 0u;
