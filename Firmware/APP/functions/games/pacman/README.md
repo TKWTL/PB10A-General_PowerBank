@@ -55,3 +55,12 @@ but is **not** played to avoid prolonged exclusive buzzer use.
 
 Host tests check array bounds, original asset hashes/sizes, collision and
 lifecycle. Keil compilation and STOP1 device validation remain to be done.
+
+## Game-index icon
+
+The user-provided `img_pacman[120]` XBM icon is defined in
+`pacman_assets.c` and declared in `pacman_assets.h`. It occupies
+120 bytes of Flash, is row-major/LSB-first (unlike the original
+SSD1306 page-packed sprites), and is used directly by
+`APP/MiaoUI/ui_conf.c`. The original gameplay artwork is
+unmodified. See [shared porting guide](../SKILL.md).

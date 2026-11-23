@@ -59,3 +59,12 @@ projectiles and movement do not run at accelerated speed after wake.
   STOP1 and MiaoUI state cleanup.
 
 Host tests are not substitutes for Keil/ARMClang and real PB10A testing.
+
+## Game-index icon
+
+The user-provided `img_invaders[120]` XBM icon is defined in
+`invaders_assets.c` and declared in `invaders_assets.h`. It occupies
+120 bytes of Flash, is row-major/LSB-first (unlike the original
+SSD1306 page-packed sprites), and is used directly by
+`APP/MiaoUI/ui_conf.c`. The original gameplay artwork is
+unmodified. See [shared porting guide](../SKILL.md).

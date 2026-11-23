@@ -10,4 +10,6 @@ extern const uint8_t invaders_monsters[168]; /* upstream Monsters */
 extern const uint8_t invaders_ship[26]; /* upstream vesso */
 extern const uint8_t invaders_back[1024]; /* upstream back */
 extern const uint8_t invaders_intro[1024]; /* upstream intro */
+/* Dedicated MiaoUI Game index icon: 30x30 XBM, 120 Flash bytes. */
+extern const uint8_t img_invaders[120];
 #endif

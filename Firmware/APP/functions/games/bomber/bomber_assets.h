@@ -11,4 +11,6 @@ extern const uint8_t bomber_BlocDetect[128];
 extern const uint8_t bomber_level[42];
 extern const uint8_t bomber_bomb[24];
 extern const uint8_t bomber_Music[42];
+/* Dedicated MiaoUI Game index icon: 30x30 XBM, 120 Flash bytes. */
+extern const uint8_t img_bomber[120];
 #endif

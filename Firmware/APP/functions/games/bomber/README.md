@@ -70,3 +70,12 @@ music and blocking note delays are not played.
   collision, life and frame handling, including ASan/UBSan runs.
 
 Device display and ARMClang integration still require physical verification.
+
+## Game-index icon
+
+The user-provided `img_bomber[120]` XBM icon is defined in
+`bomber_assets.c` and declared in `bomber_assets.h`. It occupies
+120 bytes of Flash, is row-major/LSB-first (unlike the original
+SSD1306 page-packed sprites), and is used directly by
+`APP/MiaoUI/ui_conf.c`. The original gameplay artwork is
+unmodified. See [shared porting guide](../SKILL.md).

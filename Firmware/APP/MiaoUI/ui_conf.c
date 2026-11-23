@@ -8,6 +8,9 @@
 #include "miaoui.h"
 #include "time_service.h"
 #include "apps.h"
+#include "games/pacman/pacman_assets.h"
+#include "games/bomber/bomber_assets.h"
+#include "games/invaders/invaders_assets.h"
 #include "algorithms.h"
 #include "pm_api.h"
 #include "main.h"
@@ -161,11 +164,11 @@ void Create_MenuTree(ui_t *ui) {
         add_return(&s_game,&s_home,&s_game_back,0);
         AddItem("-Breakout",UI_ITEM_WORD,img_games,&s_breakout,&s_game,0,Game_BreakoutRun);
         UI_SetLeaveHook(&s_breakout,Game_BreakoutOnLeave);
-        AddItem("-Pac-Man",UI_ITEM_WORD,img_games,&s_pacman,&s_game,0,Game_PacmanRun);
+        AddItem("-Pac-Man",UI_ITEM_WORD,img_pacman,&s_pacman,&s_game,0,Game_PacmanRun);
         UI_SetLeaveHook(&s_pacman,Game_PacmanOnLeave);
-        AddItem("-Bomber",UI_ITEM_WORD,img_games,&s_bomber,&s_game,0,Game_BomberRun);
+        AddItem("-Bomber",UI_ITEM_WORD,img_bomber,&s_bomber,&s_game,0,Game_BomberRun);
         UI_SetLeaveHook(&s_bomber,Game_BomberOnLeave);
-        AddItem("-Invaders",UI_ITEM_WORD,img_games,&s_invaders,&s_game,0,Game_InvadersRun);
+        AddItem("-Invaders",UI_ITEM_WORD,img_invaders,&s_invaders,&s_game,0,Game_InvadersRun);
         UI_SetLeaveHook(&s_invaders,Game_InvadersOnLeave);
         AddItem("-Dinosaur",UI_ITEM_WORD,img_dinosuar,&s_dino,&s_game,0,0);
 

@@ -10,4 +10,6 @@ extern const uint8_t pacman_dots[1024];
 extern const uint8_t pacman_caracters[192];
 extern const uint8_t pacman_fruits[32];
 extern const uint8_t pacman_Music[140];
+/* Dedicated MiaoUI Game index icon: 30x30 XBM, 120 Flash bytes. */
+extern const uint8_t img_pacman[120];
 #endif

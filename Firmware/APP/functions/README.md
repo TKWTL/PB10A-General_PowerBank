@@ -5,6 +5,11 @@ user-installed apps on an operating system. These modules may use system
 services and BSP interfaces, but the services and scheduler must not depend on
 them.
 
+- **Game porting guide:** [`games/SKILL.md`](games/SKILL.md) covers source/asset audits,
+  nonblocking state machines, OLED frame buffers, gameplay inputs, STOP1,
+  third-party licenses and regression tests. Game index icons are defined
+  by each game's `*_assets.c/.h`, not duplicated in MiaoUI's image library.
+
 - `games/invaders/`: GPL-3.0-or-later Tiny Invaders v3.1 by Daniel C.
   Original horizontal 128x64 images, 4x6 formation, 10 layouts, shields,
   UFO and one-projectile held-UP shooting. Nonblocking 33ms game logic,
