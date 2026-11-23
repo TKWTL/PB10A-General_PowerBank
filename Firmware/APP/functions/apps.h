@@ -4,6 +4,7 @@
 /* Application page entry points; for UI composition only. */
 #include "games/breakout/game_breakout.h"
 #include "games/pacman/game_pacman.h"
+#include "games/bomber/game_bomber.h"
 #include "i2c_scanner.h"
 #include "powerbank_app.h"
 #include "radio_app.h"

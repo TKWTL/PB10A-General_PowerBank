@@ -6,6 +6,7 @@
 
 | 组件 | 原作者 / 上游 | 本仓库位置 | 许可证及附带声明 |
 |---|---|---|---|
+| **Tiny Bomber** | Daniel C（2018–2021），<https://github.com/phoenixbozo/TinyJoypad>；原始文件为用户提供的 `tiny-bomber.ino`、`spritebank.h` | [`APP/functions/games/bomber/`](APP/functions/games/bomber/) | **GPL-3.0-or-later**；保留原版横屏像素素材、15×7 障碍位图、三关地图、四敌随机转向与原始爆炸规则，移植为非阻塞 C/MiaoUI；保留原作者声明及 [`LICENSE-GPL-3.0`](APP/functions/games/bomber/LICENSE-GPL-3.0)，不包含 AVR FastTinyDriver。 |
 | **TinyPacman** | Daniel C（2018–2021），Tinyjoypad/ATtiny85；原版图形与碰撞资源见上传的 `spritebank.h`，项目 <https://github.com/phoenixbozo/TinyJoypad> | [`APP/functions/games/pacman/`](APP/functions/games/pacman/) | **GPL-3.0-or-later**；沿用原版像素素材、迷宫、6×7 碰撞及四幽灵随机运动，移植为非阻塞 C/MiaoUI。完整许可证 [`LICENSE-GPL-3.0`](APP/functions/games/pacman/LICENSE-GPL-3.0)；本仓库顶层 AGPL-3.0-only 并不替代第三方 GPL 版权声明。 |
 | **BreakoutClone** | Mattias Jähnke (2016)，<https://github.com/mattiasjahnke/arduino-projects/tree/master/BreakoutClone> | [`APP/functions/games/breakout/game_breakout.c`](APP/functions/games/breakout/game_breakout.c) | **MIT License**；基于原版 7×5 砖块玩法移植，完整许可文本保留于 [`APP/functions/games/breakout/LICENSE-BREAKOUTCLONE`](APP/functions/games/breakout/LICENSE-BREAKOUTCLONE)，无需 Arduino/Arduboy 运行库。 |
 | **MiaoUI** | JFeng-Z，<https://github.com/JFeng-Z/MiaoUI> | [`APP/MiaoUI/`](APP/MiaoUI/) | **MIT License**；保留 [`APP/MiaoUI/LICENSE`](APP/MiaoUI/LICENSE) 与源文件版权头。项目中进行了 MiaoUI 菜单、交互、帧调度与显示驱动等定制。 |

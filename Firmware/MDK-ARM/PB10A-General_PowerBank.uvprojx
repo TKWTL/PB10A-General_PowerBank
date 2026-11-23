@@ -868,6 +868,21 @@
               <FilePath>../APP/functions/games/pacman/pacman_assets.c</FilePath>
             </File>
             <File>
+              <FileName>game_bomber.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/functions/games/bomber/game_bomber.c</FilePath>
+            </File>
+            <File>
+              <FileName>bomber_core.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/functions/games/bomber/bomber_core.c</FilePath>
+            </File>
+            <File>
+              <FileName>bomber_assets.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/functions/games/bomber/bomber_assets.c</FilePath>
+            </File>
+            <File>
               <FileName>power_algo.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/algorithm/power_algo.c</FilePath>

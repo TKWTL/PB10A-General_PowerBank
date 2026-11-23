@@ -5,6 +5,13 @@ user-installed apps on an operating system. These modules may use system
 services and BSP interfaces, but the services and scheduler must not depend on
 them.
 
+- `games/bomber/`: GPL-3.0-or-later Tiny Bomber port by Daniel C.
+  Original landscape 128x64 bitmaps, five characters, one bomb, fixed cross
+  blast and three 14-byte destructible maps. Four random-wall-turn enemies,
+  three lives and accelerated enemies after all three maps. Native OLED DMA,
+  CONF short-release bomb / hold-to-pause / long-hold exit, normal auto STOP1.
+  See [documentation](games/bomber/README.md) and [tests](games/bomber/tests/).
+
 - `games/pacman/`: GPL-3.0-or-later TinyPacman port based on Daniel C's
   Tinyjoypad source. Original page-packed 128x64 artwork, pixel collision
   and four random-turn ghosts; 22ms logic step, 44ms MiaoUI render request.
