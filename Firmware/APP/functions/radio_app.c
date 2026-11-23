@@ -92,7 +92,7 @@ void Radio_AppDraw(ui_t *ui) {
     Disp_DrawBox(0u,0u,UI_HOR_RES,UI_VER_RES);
     fg=(uint8_t)(ui->bgColor^1u);
     Disp_SetDrawColor(&fg);
-    Disp_SetFont(font_radio_h12w6);
+    Disp_SetFont(font_fusion_pixel_p12_zhcn);
     /* Collar-Radio radio.c: every top status widget uses y-slide. */
     Disp_DrawXBMP(1u,(uint16_t)(1-slide),7u,9u,s_signal_icon);
     (void)snprintf(buf,sizeof(buf),":%u",(unsigned)s_snapshot.rssi);
@@ -129,7 +129,7 @@ void Radio_AppDraw(ui_t *ui) {
         s_snapshot.state==RADIO_STATE_TUNE_WAIT)
     Disp_DrawStr(10u,37u,"Tuning...");
     else if(s_snapshot.state==RADIO_STATE_ERROR) {
-        Disp_SetFont(font_radio_h12w6);
+        Disp_SetFont(font_fusion_pixel_p12_zhcn);
         (void)snprintf(buf,sizeof(buf),"I2C ERROR %u",(unsigned)s_snapshot.error_code);
         Disp_DrawStr(21u,36u,buf);
     }
@@ -152,7 +152,7 @@ void Radio_AppDraw(ui_t *ui) {
         if(s_snapshot.frequency>=4000u)++align;
         if(s_snapshot.frequency&1u)++align;
         Disp_DrawStr((uint16_t)(61u-align*6u),38u,buf);
-        Disp_SetFont(font_radio_h12w6);
+        Disp_SetFont(font_fusion_pixel_p12_zhcn);
         Disp_DrawStr((uint16_t)(63u+align*6u),38u,"MHz");
     }
 
@@ -170,7 +170,7 @@ void Radio_AppDraw(ui_t *ui) {
     }
 
     /* The original date/time footer moves in from y=63+12. */
-    Disp_SetFont(font_radio_h12w6);
+    Disp_SetFont(font_fusion_pixel_p12_zhcn);
     (void)snprintf(buf,sizeof(buf),"%02d:%02d:%02d",
         sTime.Hours,sTime.Minutes,sTime.Seconds);
     Disp_DrawStr(1u,(uint16_t)(63+slide),buf);
@@ -201,7 +201,7 @@ static void radio_draw_menu(ui_t *ui) {
     Disp_DrawBox(0u,0u,UI_HOR_RES,UI_VER_RES);
     fg=(uint8_t)(ui->bgColor^1u);
     Disp_SetDrawColor(&fg);
-    Disp_SetFont(font_radio_h12w6);
+    Disp_SetFont(font_fusion_pixel_p12_zhcn);
     Disp_DrawLine(0u,6u,127u,6u);
     Disp_DrawStr(19u,10u,"-Radio Setting:-");
 

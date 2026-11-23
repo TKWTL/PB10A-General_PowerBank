@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_FULL_LL_DRIVER,USE_HAL_DRIVER,STM32G070xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G0xx/Include;../Drivers/CMSIS/Include;../APP;../Scheduler;../Scheduler/pt1.4;../APP/framework;../APP/algorithm;../APP/functions;../APP/MiaoUI;../BSP/Display;../BSP/Time;../BSP/u8g2;../BSP/SW6306;../BSP/SC7A20;../BSP/RDA5807;../BSP/BMP180;../BSP/MMC5603;../BSP/Buttons</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G0xx/Include;../Drivers/CMSIS/Include;../APP;../Scheduler;../Scheduler/pt1.4;../APP/framework;../APP/algorithm;../APP/functions;../APP/MiaoUI;../BSP/Display;../BSP/Time;../BSP/u8g2;../BSP/SW6306;../BSP/SC7A20;../BSP/RDA5807;../BSP/BMP180;../BSP/MMC5603;../BSP/Buttons;../LIB</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -992,10 +992,20 @@
               <FileType>1</FileType>
               <FilePath>../APP/MiaoUI/fonts/font_home_h6w4.c</FilePath>
             </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Application/LIB</GroupName>
+          <Files>
             <File>
-              <FileName>font_radio_h12w6.c</FileName>
+              <FileName>rle.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../APP/MiaoUI/fonts/font_radio_h12w6.c</FilePath>
+              <FilePath>../LIB/rle.c</FilePath>
+            </File>
+            <File>
+              <FileName>fifo.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../LIB/fifo.c</FilePath>
             </File>
           </Files>
         </Group>
