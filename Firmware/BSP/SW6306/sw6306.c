@@ -2,6 +2,12 @@
 #include <math.h>
 #include "millis.h"
 
+#if SW6306_SELECTIVE_NOINLINE
+#define SW6306_NOINLINE __attribute__((noinline))
+#else
+#define SW6306_NOINLINE
+#endif
+
 /* initialized 默认 0（零初始化，.bss）：MCU 复位后即视为未初始化，
  * SW6306_task 会对 SW6306 执行一次 ForceOff+Init（芯片复位后重置）。
  * 芯片独立复位（PowerLoad 读回失配）、ADCLoad 数据越界、MarkUninitialized
@@ -1424,7 +1430,7 @@ static uint16_t sw6306_power_current_ma(uint8_t watt, uint16_t voltage_mv, uint1
     return (uint16_t)current_ma;
 }
 
-static SW6306_RET SW6306_PDCurrentSet(SW6306_NOARG) {
+static SW6306_NOINLINE SW6306_RET SW6306_PDCurrentSet(SW6306_NOARG) {
     uint16_t i5   = sw6306_power_current_ma(s_pomax_target,  5000U, SW6306_PD_5V_FIX_CURR,  10U);
     uint16_t i9   = sw6306_power_current_ma(s_pomax_target,  9000U, SW6306_PD_9V_FIX_CURR,  10U);
     uint16_t i12  = sw6306_power_current_ma(s_pomax_target, 12000U, SW6306_PD_12V_FIX_CURR, 10U);
@@ -1476,7 +1482,7 @@ static SW6306_RET SW6306_PDSet(SW6306_NOARG) {
     SW6306_FUNC_END;
 }
 
-static SW6306_RET SW6306_UFCSCurrentSet(SW6306_NOARG) {
+static SW6306_NOINLINE SW6306_RET SW6306_UFCSCurrentSet(SW6306_NOARG) {
     uint16_t i5  = sw6306_power_current_ma(s_pomax_target,  5000U, SW6306_UFCS_5V_MAX_MA,  50U);
     uint16_t i10 = sw6306_power_current_ma(s_pomax_target, 10000U, SW6306_UFCS_10V_MAX_MA, 50U);
     uint16_t i21 = sw6306_power_current_ma(s_pomax_target, 21000U, SW6306_UFCS_20V_MAX_MA, 50U);
