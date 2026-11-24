@@ -32,8 +32,6 @@ extern "C" {
 
 /* USER CODE END Includes */
 
-extern I2C_HandleTypeDef hi2c1;
-
 /* USER CODE BEGIN Private defines */
 /* Application I2C API: HAL owns the I2C1 hardware state machine.
  * Sync APIs exist for legacy sensors; async APIs return immediately.
