@@ -26,6 +26,12 @@ extern "C" {
 #define SW6306_SELECTIVE_NOINLINE 1
 #endif
 
+#if defined(SW6306_USE_PROTOTHREAD) && SW6306_SELECTIVE_NOINLINE
+#define SW6306_NOINLINE __attribute__((noinline))
+#else
+#define SW6306_NOINLINE
+#endif
+
 /* 连续I²C失败保护：整组寄存器读取失败5次才重初始化；
  * 成功一次整组读取即清零。ADC单通道失败保留旧镜像。 */
 #ifndef SW6306_I2C_FAILURE_LIMIT
