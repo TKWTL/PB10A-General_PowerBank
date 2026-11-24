@@ -31,7 +31,7 @@
 #include "widget/parameter.h"
 #include "widget/text.h"
 #include "pm_api.h"
-#include "stdio.h"
+#include "mini_format.h"
 #include "stdlib.h"
 #include "string.h"
 
@@ -251,16 +251,16 @@ void UI_FmtScaled(char *buf, size_t size, int32_t value, uint8_t decimals) {
 
     switch(decimals) {
     case 1:
-        snprintf(buf, size, "%s%u.%01u", sign, (unsigned)(mag / 10u), (unsigned)(mag % 10u));
+        mini_snprintf(buf, size, "%s%u.%01u", sign, (unsigned)(mag / 10u), (unsigned)(mag % 10u));
         break;
     case 2:
-        snprintf(buf, size, "%s%u.%02u", sign, (unsigned)(mag / 100u), (unsigned)(mag % 100u));
+        mini_snprintf(buf, size, "%s%u.%02u", sign, (unsigned)(mag / 100u), (unsigned)(mag % 100u));
         break;
     case 3:
-        snprintf(buf, size, "%s%u.%03u", sign, (unsigned)(mag / 1000u), (unsigned)(mag % 1000u));
+        mini_snprintf(buf, size, "%s%u.%03u", sign, (unsigned)(mag / 1000u), (unsigned)(mag % 1000u));
         break;
 default:
-        snprintf(buf, size, "%s%u", sign, (unsigned)mag);
+        mini_snprintf(buf, size, "%s%u", sign, (unsigned)mag);
         break;
     }
 }
@@ -379,7 +379,7 @@ uint8_t Notifications(ui_t *ui, int16_t x,int16_t y,int16_t targrtW,int16_t targ
     if ((ui->dialog.nowWide == targrtW) && (ui->dialog.nowHigh == targrtH)) {
         ui->dialog.times = 0;
         char value[20] = {0};
-        snprintf(value, sizeof(value), "%s OK!", (ui->nowItem->itemName));
+        mini_snprintf(value, sizeof(value), "%s OK!", (ui->nowItem->itemName));
         Disp_DrawStr(x + 5, y + targrtH/2, value);
         Change_UIState(ui, UI_ITEM_RUNING);
         return true;
@@ -749,7 +749,7 @@ static void Draw_TextPage(ui_t *ui, ui_page_t *Page, ui_item_t *now_Item, ui_ite
 
                 switch (temp_item->element->data->dataType) {
                 case UI_DATA_INT:
-                    snprintf(Data, sizeof(Data), "%d", *(int *)(temp_item->element->data->ptr));
+                    mini_snprintf(Data, sizeof(Data), "%d", *(int *)(temp_item->element->data->ptr));
                     break;
 
                 case UI_DATA_FLOAT:

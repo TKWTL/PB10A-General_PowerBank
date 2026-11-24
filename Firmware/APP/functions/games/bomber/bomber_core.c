@@ -115,6 +115,8 @@ static void reset_bomb(bomber_game_t *g) {
     g->bomb.page_y = -10;
     g->bomb.fuse = 0u;
     g->bomb.anim = 0u;
+    memset(g->blast_reach, 0, sizeof(g->blast_reach));
+    g->blast_ready = 0u;
 }
 
 static void reset_positions(bomber_game_t *g) {
@@ -254,33 +256,85 @@ static void move_actors(bomber_game_t *g) {
     }
 }
 
-/* 40x40 cross: center plus 2 full 8px cells per cardinal direction.
- * No blast propagation or fixed-wall destruction; map bounds are clipped. */
+/* A fixed wall occupies the center of an 8x8 maze cell.
+ * The original collision bitmap has decorative 0x80 border lines on
+ * otherwise empty cells. Ignore bit7 and sample an interior column;
+ * testing any nonzero pixel would incorrectly treat EVERY cell as a wall. */
+static uint8_t fixed_wall_cell(int16_t col, int16_t row) {
+    int16_t x = (int16_t)(8 + col * 8 + 3);
+    if (col < 0 || col >= 15 || row < 0 || row >= 7) return 1u;
+    return (uint8_t)((back_byte(x, row + 1) & 0x7fu) != 0u);
+}
+
+/* Snapshot flame visibility before destructible blocks are removed. The
+ * nearest destructible block is burned but absorbs the rest of that arm;
+ * an indestructible wall terminates the arm BEFORE its own cell. */
+static void update_blast_reach(bomber_game_t *g) {
+    static const int8_t dx[4] = {0, 0, -1, 1};
+    static const int8_t dy[4] = {-1, 1, 0, 0};
+    int16_t col = (g->bomb.x - 8) / 8, row = g->bomb.page_y - 1;
+    uint8_t dir;
+    memset(g->blast_reach, 0, sizeof(g->blast_reach));
+    for (dir = 0u; dir < 4u; ++dir) {
+        uint8_t n;
+        for (n = 1u; n <= BOMBER_FIRE_RADIUS_CELLS; ++n) {
+            int16_t cx = col + dx[dir] * n;
+            int16_t cy = row + dy[dir] * n;
+            if (fixed_wall_cell(cx, cy)) break;
+            g->blast_reach[dir] = n;
+            if (Bomber_CoreBlockVisible(g, cx + cy * 15)) break;
+        }
+    }
+    g->blast_ready = 1u;
+}
+
+uint8_t Bomber_CoreFireCell(const bomber_game_t *g, int8_t dx, int8_t dy) {
+    if (!g || !g->blast_ready || g->bomb.fuse != 1u) return 0u;
+    if (!dx && !dy) return 1u;
+    if (dx && dy) return 0u;
+    if (dx < 0 && dy == 0) return (uint8_t)(-dx <= g->blast_reach[2]);
+    if (dx > 0 && dy == 0) return (uint8_t)(dx <= g->blast_reach[3]);
+    if (dy < 0 && dx == 0) return (uint8_t)(-dy <= g->blast_reach[0]);
+    return (uint8_t)(dy <= g->blast_reach[1]);
+}
+
 static void destroy_blocks(bomber_game_t *g) {
-    int16_t col = (g->bomb.x - 8) / 8;
-    int16_t row = g->bomb.page_y - 1;
-    int16_t delta;
-    if (col < 0 || col >= 15 || row < 0 || row >= 7) return;
-    for (delta = -2; delta <= 2; ++delta) {
-        if (row + delta >= 0 && row + delta < 7)
-            clear_block(g, col + (row + delta) * 15);
-        if (col + delta >= 0 && col + delta < 15)
-            clear_block(g, col + delta + row * 15);
+    static const int8_t dx[4] = {0, 0, -1, 1};
+    static const int8_t dy[4] = {-1, 1, 0, 0};
+    int16_t col = (g->bomb.x - 8) / 8, row = g->bomb.page_y - 1;
+    uint8_t dir;
+    clear_block(g, col + row * 15);
+    for (dir = 0u; dir < 4u; ++dir) {
+        uint8_t n;
+        for (n = 1u; n <= g->blast_reach[dir]; ++n)
+            clear_block(g, col + dx[dir] * n +
+                         (row + dy[dir] * n) * 15);
     }
 }
 
 static void blast_damage(bomber_game_t *g) {
-    uint8_t i;
+    static const int8_t dx[4] = {0, 0, -1, 1};
+    static const int8_t dy[4] = {-1, 1, 0, 0};
     int16_t bx = g->bomb.x, by = g->bomb.page_y * 8;
-    /* Expanded to a 40x40 cross (two extra 8px arms per direction).
-     * Retain the original 7x7 actor hit boxes and inclusive edges.
-     * Visual fire_byte() uses the same 40x40 clipping envelope. */
-    for (i = 0u; i < 5u; i++) {
+    uint8_t i;
+    for (i = 0u; i < 5u; ++i) {
         bomber_actor_t *p = &g->actors[i];
         int16_t py = (int16_t)p->page_y * 8 + p->offset_y;
+        uint8_t hit, dir;
         if (p->dead) continue;
-        if (overlaps(p->x, py, 7, 7, bx + 1, by - 14, 6, 37) ||
-            overlaps(p->x, py, 7, 7, bx - 14, by + 1, 37, 6)) {
+        hit = overlaps(p->x, py, 7, 7, bx, by, 7, 7);
+        for (dir = 0u; dir < 4u && !hit; ++dir) {
+            uint8_t n;
+            for (n = 1u; n <= g->blast_reach[dir]; ++n) {
+                if (overlaps(p->x, py, 7, 7,
+                             bx + dx[dir] * n * 8,
+                             by + dy[dir] * n * 8, 7, 7)) {
+                    hit = 1u;
+                    break;
+                }
+            }
+        }
+        if (hit) {
             p->dead = 1u;
             p->page_y = 0;
             p->offset_y = 0u;
@@ -342,6 +396,8 @@ void Bomber_CoreTick(bomber_game_t *g, bomber_direction_t input, uint8_t place) 
         if (g->bomb.anim < 2u) ++g->bomb.anim;
         else {g->bomb.anim = 0u; --g->bomb.fuse;}
     }
+    if (g->bomb.fuse == 1u && !g->blast_ready)
+        update_blast_reach(g);
     if (g->frame % 4u == 0u && g->bomb.fuse == 1u) {
         if (g->bomb.anim < 2u) {
             if (g->bomb.anim == 1u) blast_damage(g);

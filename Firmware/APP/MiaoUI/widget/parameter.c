@@ -25,7 +25,7 @@
  * Created on: 2025-02-08
  */
 #include "widget/parameter.h"
-#include "stdio.h"
+#include "mini_format.h"
 #include "core/ui.h"
 #include "display/dispDriver.h"
 
@@ -62,7 +62,7 @@ void ParameterSetting_Widget(ui_t *ui) {
 
         switch (ui->nowItem->element->data->dataType) {
         case UI_DATA_INT:
-            snprintf(value, sizeof(value), "%s:%d ", (ui->nowItem->element->data->name), *(int *)(ui->nowItem->element->data->ptr));
+            mini_snprintf(value, sizeof(value), "%s:%d ", (ui->nowItem->element->data->name), *(int *)(ui->nowItem->element->data->ptr));
             break;
         case UI_DATA_FLOAT:
             {
@@ -70,7 +70,7 @@ void ParameterSetting_Widget(ui_t *ui) {
                 char num[16];
                 UI_FmtScaled(num, sizeof(num), *(int *)(ui->nowItem->element->data->ptr),
                     ui->nowItem->element->data->decimals);
-                snprintf(value, sizeof(value), "%s:%s ", (ui->nowItem->element->data->name), num);
+                mini_snprintf(value, sizeof(value), "%s:%s ", (ui->nowItem->element->data->name), num);
                 break;
             }
     default:

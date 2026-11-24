@@ -43,13 +43,30 @@ or interrupts-disabled critical section. Compatible with ArmClang/GCC.
   stale immediately if the other endpoint moves.
 - Does not manage DMA cache coherency, memory-mapped device buffers or
   multi-core arbitration. On Cortex-M0+ there is no data cache.
-- Beep Service now uses FIFO_WriteExact/FIFO_ReadExact for whole pointer records;
-  eight-sequence capacity, play/stop/tone behavior and no half-pointer reads
-  are preserved. Existing Radio queues are not migrated: verify RAM,
-  timing and binary size benefit first.
+- Public element APIs are `FIFO_Push1/Pop1`, `Push2/Pop2`, and
+  `Push4/Pop4`, taking 1, 2 or 4 bytes per call with all-or-nothing
+  commit. Multi-byte values use little-endian byte order and may wrap
+  across the end of the caller-owned buffer. `FIFO_Write/Read` remain
+  byte-stream helpers for UART-like transfers (may transfer only a prefix).
+- Beep Service now enqueues a single 32-bit sequence pointer via
+  `FIFO_Push4` and reads it via `FIFO_Pop4`. PB10A Cortex-M0+ pointers
+  are 4 bytes; eight-entry capacity and play/stop/tone behavior remain.
+  `Push1/Pop1` are suitable for IH01A-style USART software byte rings,
+  although IRQ-DMA UART integration itself belongs in its hardware driver.
+- Existing Radio queues are not migrated automatically.
 
 Run `bash Firmware/LIB/tests/run.sh` on a host with GCC and Clang installed.
  
+## Small integer/string formatter
+
+`mini_format.c/.h` is reused from IH01A's BSP/Console formatter.
+`mini_snprintf`, `mini_vsnprintf` and `mini_vformat` support only
+`%% %c %s %d %i %u %x %X`, flags `-`/`0`, field width and a
+single `l` length modifier. The parser intentionally does **not**
+support `%f`, `%zu` or `%.Ns`. PB10A's protocol label is copied
+directly with destination-size truncation rather than parsing `%.15s`.
+No `mini_stdio.c` and no override of libc's `printf`.
+
 ## Game resource cache integration
 
 `Firmware/APP/functions/games/game_shared.c/.h` provides an independent

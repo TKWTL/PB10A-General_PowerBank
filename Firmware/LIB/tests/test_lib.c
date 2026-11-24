@@ -58,20 +58,20 @@ static void test_fifo(void) {
     assert(FIFO_Read(&f,out,8)==8);
     assert(memcmp(out,in+3,5)==0 && memcmp(out+5,in,3)==0);
     assert(FIFO_Count(&f)==0);
-    assert(!FIFO_Pop(&f,&v));
-    assert(FIFO_Push(&f,99));
-    assert(FIFO_Pop(&f,&v)&&v==99);
-    assert(FIFO_Push(&f,42));
+    assert(!FIFO_Pop1(&f,&v));
+    assert(FIFO_Push1(&f,99));
+    assert(FIFO_Pop1(&f,&v)&&v==99);
+    assert(FIFO_Push1(&f,42));
     FIFO_Clear(&f);
     assert(FIFO_Count(&f)==0);
     assert(FIFO_Init(&f,storage,8));
     /* Exercise head/tail wraparound without doing 2^32 operations. */
     __atomic_store_n(&f.head,0xfffffffeu,__ATOMIC_RELAXED);
     __atomic_store_n(&f.tail,0xfffffffeu,__ATOMIC_RELAXED);
-    assert(FIFO_Push(&f,7) && FIFO_Push(&f,8) && FIFO_Push(&f,9));
-    assert(FIFO_Pop(&f,&v)&&v==7);
-    assert(FIFO_Pop(&f,&v)&&v==8);
-    assert(FIFO_Pop(&f,&v)&&v==9);
+    assert(FIFO_Push1(&f,7) && FIFO_Push1(&f,8) && FIFO_Push1(&f,9));
+    assert(FIFO_Pop1(&f,&v)&&v==7);
+    assert(FIFO_Pop1(&f,&v)&&v==8);
+    assert(FIFO_Pop1(&f,&v)&&v==9);
     assert(FIFO_Count(&f)==0);
 }
 

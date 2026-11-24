@@ -12,7 +12,7 @@
 #include "pm_api.h"
 #include "millis.h"
 #include <math.h>
-#include <stdio.h>
+#include "mini_format.h"
 #include <string.h>
 
 #define MOTION_APP_PM_BLOCK 0x20u
@@ -189,7 +189,7 @@ static void level_angle_footer(float angle) {
     if(angle<0.0f)angle=-angle;
     if(angle>99.99f)angle=99.99f;
     value=(uint16_t)(angle*100.0f+0.5f);
-    (void)snprintf(text,sizeof(text),"%2u.%02u",
+    (void)mini_snprintf(text,sizeof(text),"%2u.%02u",
                    (unsigned)(value/100u),(unsigned)(value%100u));
     Disp_SetFont(UI_FONT); /* preserve PB10A default font */
     w=Disp_GetUTF8Width(text);
@@ -363,18 +363,18 @@ static void cal_draw(void) {
         Disp_DrawStr(12u,44u,"Check orientation");
     }
     else {
-        (void)snprintf(info,sizeof(info),"CAL %u/6",(unsigned)count);
+        (void)mini_snprintf(info,sizeof(info),"CAL %u/6",(unsigned)count);
         Disp_DrawStr(3u,10u,info);
         if(s_cal_candidate!=CAL_FACE_NONE)
-            (void)snprintf(info,sizeof(info),"%2u/10",
+            (void)mini_snprintf(info,sizeof(info),"%2u/10",
                            (unsigned)s_cal_intervals);
-        else (void)snprintf(info,sizeof(info),"Hold 2s");
+        else (void)mini_snprintf(info,sizeof(info),"Hold 2s");
         Disp_DrawStr(77u,10u,info);
         Disp_DrawStr(54u,22u,s_cal_done[4]?"OK":"UP");
         Disp_DrawStr(48u,61u,s_cal_done[5]?"OK":"DOWN");
         Disp_DrawStr(1u,36u,s_cal_done[1]?"OK":"LEFT");
         Disp_DrawStr(94u,36u,s_cal_done[0]?"OK":"RIGHT");
-        (void)snprintf(info,sizeof(info),"ZU:%s ZD:%s",
+        (void)mini_snprintf(info,sizeof(info),"ZU:%s ZD:%s",
                        s_cal_done[2]?"OK":"--",
                        s_cal_done[3]?"OK":"--");
         Disp_DrawStr(26u,47u,info);

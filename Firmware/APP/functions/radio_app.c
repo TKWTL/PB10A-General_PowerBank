@@ -11,7 +11,7 @@
 #include "display/dispDriver.h"
 #include "time_service.h"
 #include "millis.h"
-#include <stdio.h>
+#include "mini_format.h"
 
 #define RADIO_MENU_COUNT 5u
 static uint8_t s_menu_open,s_menu_index,s_view_entered;
@@ -95,12 +95,12 @@ void Radio_AppDraw(ui_t *ui) {
     Disp_SetFont(font_fusion_pixel_p12_zhcn);
     /* Collar-Radio radio.c: every top status widget uses y-slide. */
     Disp_DrawXBMP(1u,(uint16_t)(1-slide),7u,9u,s_signal_icon);
-    (void)snprintf(buf,sizeof(buf),":%u",(unsigned)s_snapshot.rssi);
+    (void)mini_snprintf(buf,sizeof(buf),":%u",(unsigned)s_snapshot.rssi);
     Disp_DrawStr(8u,(uint16_t)(10-slide),buf);
     Disp_DrawStr(48u,(uint16_t)(10-slide),
         LL_GPIO_IsInputPinSet(MIC_INDET_GPIO_Port,MIC_INDET_Pin)?"OFF":"ON");
     Disp_DrawXBMP(69u,(uint16_t)(1-slide),6u,9u,s_speaker_icon);
-    (void)snprintf(buf,sizeof(buf),":%u%%",
+    (void)mini_snprintf(buf,sizeof(buf),":%u%%",
         (unsigned)(((uint16_t)s_snapshot.volume+1u)*100u/16u));
     Disp_DrawStr(75u,(uint16_t)(10-slide),buf);
     /* Collar-Radio battery icon driven by the SW6306 cache. When pack
@@ -130,7 +130,7 @@ void Radio_AppDraw(ui_t *ui) {
     Disp_DrawStr(10u,37u,"Tuning...");
     else if(s_snapshot.state==RADIO_STATE_ERROR) {
         Disp_SetFont(font_fusion_pixel_p12_zhcn);
-        (void)snprintf(buf,sizeof(buf),"I2C ERROR %u",(unsigned)s_snapshot.error_code);
+        (void)mini_snprintf(buf,sizeof(buf),"I2C ERROR %u",(unsigned)s_snapshot.error_code);
         Disp_DrawStr(21u,36u,buf);
     }
     else {
@@ -141,11 +141,11 @@ void Radio_AppDraw(ui_t *ui) {
          * still shown above only while a search is really in progress. */
         fraction=(uint16_t)((s_snapshot.frequency%40u)*25u);
         if((fraction%10u)==0u)
-            (void)snprintf(buf,sizeof(buf),"%u.%02u",
+            (void)mini_snprintf(buf,sizeof(buf),"%u.%02u",
             (unsigned)(s_snapshot.frequency/40u),
             (unsigned)(fraction/10u));
         else
-            (void)snprintf(buf,sizeof(buf),"%u.%03u",
+            (void)mini_snprintf(buf,sizeof(buf),"%u.%03u",
             (unsigned)(s_snapshot.frequency/40u),(unsigned)fraction);
         /* Collar-Radio's width-dependent big-frequency/MHz alignment. */
         align=5u;
@@ -171,10 +171,10 @@ void Radio_AppDraw(ui_t *ui) {
 
     /* The original date/time footer moves in from y=63+12. */
     Disp_SetFont(font_fusion_pixel_p12_zhcn);
-    (void)snprintf(buf,sizeof(buf),"%02d:%02d:%02d",
+    (void)mini_snprintf(buf,sizeof(buf),"%02d:%02d:%02d",
         sTime.Hours,sTime.Minutes,sTime.Seconds);
     Disp_DrawStr(1u,(uint16_t)(63+slide),buf);
-    (void)snprintf(buf,sizeof(buf),"20%02d/%02d/%02d",
+    (void)mini_snprintf(buf,sizeof(buf),"20%02d/%02d/%02d",
         sTime.Year,sTime.Month,sTime.Date);
     Disp_DrawStr(68u,(uint16_t)(63+slide),buf);
     Disp_SendBuffer();
@@ -212,9 +212,9 @@ static void radio_draw_menu(ui_t *ui) {
         else if(i==2u)Disp_DrawStr(74u,y,mode);
         else if(i==3u) {
             if(s_snapshot.mode==RADIO_MODE_PRESET)
-                (void)snprintf(option,sizeof(option),"-All Clear and Seek-");
+                (void)mini_snprintf(option,sizeof(option),"-All Clear and Seek-");
             else
-                (void)snprintf(option,sizeof(option),"%s",
+                (void)mini_snprintf(option,sizeof(option),"%s",
                 radio_has_station_view(s_snapshot.frequency)?
                 "-Remove from List-":"-Add to station List-");
             Disp_DrawStr(1u,y,option);

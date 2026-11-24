@@ -60,8 +60,11 @@ static void beep_hw_set_frequency(uint16_t frequency_hz) {
 /************************* Cooperative playback ************************/
 
 static const uint16_t s_key_sound[] = {2700u, 100u, BEEP_END};
-/* Pointer-sized records: no copying of the const note sequences. */
-static uint8_t s_queue_storage[BEEP_QUEUE_CAPACITY * sizeof(const uint16_t *)];
+/* PB10A is 32-bit. Queue stores one 4-byte pointer value per entry. */
+#if defined(__arm__) || defined(__thumb__)
+typedef char beep_pointer_must_be_32bit[(sizeof(const uint16_t *) == 4u) ? 1 : -1];
+#endif
+static uint8_t s_queue_storage[BEEP_QUEUE_CAPACITY * 4u];
 static fifo_t s_queue;
 static const uint16_t *s_current;
 static uint32_t s_step_started;
@@ -85,7 +88,7 @@ void beep_init(void) {
 uint8_t beep_enqueue(const uint16_t *sequence) {
     if (s_volume == 0u || !sequence || sequence[0] == BEEP_END ||
         sequence[0] == BEEP_REPEAT) return 0u;
-    return FIFO_WriteExact(&s_queue, &sequence, sizeof(sequence));
+    return FIFO_Push4(&s_queue, (uint32_t)(uintptr_t)sequence);
 }
 
 void beep_stop(void) {
@@ -143,8 +146,9 @@ void beep_poll(uint32_t now_ms) {
      */
     for (uint8_t attempt = 0u; attempt <= BEEP_QUEUE_CAPACITY + 2u; ++attempt) {
         if (!s_current) {
-            if (!FIFO_ReadExact(&s_queue, &s_current, sizeof(s_current)))
-                return;
+            uint32_t address;
+            if (!FIFO_Pop4(&s_queue, &address)) return;
+            s_current = (const uint16_t *)(uintptr_t)address;
             s_word_position = 0u;
             s_note_index = 0u;
             s_need_note = 1u;
@@ -191,7 +195,7 @@ uint8_t beep_busy(void) {
 }
 
 uint8_t beep_queue_count(void) {
-    return (uint8_t)(FIFO_Count(&s_queue) / sizeof(s_current));
+    return (uint8_t)(FIFO_Count(&s_queue) / 4u);
 }
 
 uint8_t beep_note_index(void) {

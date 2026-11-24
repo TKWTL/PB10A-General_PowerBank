@@ -1012,6 +1012,11 @@
               <FileType>1</FileType>
               <FilePath>../LIB/fifo.c</FilePath>
             </File>
+            <File>
+              <FileName>mini_format.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../LIB/mini_format.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

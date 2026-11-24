@@ -161,7 +161,12 @@ is not part of the 30px UI and may be dropped; all visible data stays intact.
   at game entry, bind it to the core; decompress 257-byte backdrop
   directly into display buffer each frame. Destructible block bits
   remain distinct from fixed walls; preserve 0xFE collision sentinel
-  semantics and the intentional 40x40 blast changes.
+  semantics and the 40x40 blast. For flame propagation, compute
+  `blast_reach[4]` **once before destructible block removal**, checking
+  the fixed wall bitmap at cell interiors with bit7 masked out. Flame
+  stops before fixed walls and on the first destructible block; collision,
+  destruction and render must all consult the same saved reach so cleared
+  blocks do not expose cells behind them during later animation frames.
 - **Invaders:** decompress 420-byte scrolling backdrop to GameBuffer
   at entry, allowing unmodified random X+offset access during play.
   Decode the 557-byte title raster directly to OLED buffer for READY

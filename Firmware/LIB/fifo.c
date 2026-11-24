@@ -1,5 +1,4 @@
 #include "fifo.h"
-#include <string.h>
 
 /* On ARMv6-M (Cortex-M0+), the compiler's generic __atomic builtins can
  * call __atomic_load_4 / __atomic_store_4, adding a runtime dependency.
@@ -62,78 +61,69 @@ uint32_t FIFO_Free(const fifo_t *fifo) {
     return fifo->capacity - FIFO_Count(fifo);
 }
 
-uint8_t FIFO_Push(fifo_t *fifo, uint8_t value) {
-    uint32_t head, tail;
-    if (fifo == 0 || fifo->storage == 0 || fifo->capacity == 0u) return 0u;
-    head = FIFO_LOAD_RELAXED(&fifo->head);
-    tail = FIFO_LOAD_ACQUIRE(&fifo->tail);
-    if (head - tail >= fifo->capacity) return 0u;
-    fifo->storage[head & fifo->mask] = value;
-    FIFO_STORE_RELEASE(&fifo->head, head + 1u);
-    return 1u;
-}
-
-uint8_t FIFO_Pop(fifo_t *fifo, uint8_t *out) {
-    uint32_t head, tail;
-    if (fifo == 0 || out == 0 || fifo->storage == 0 || fifo->capacity == 0u)
+/* One publication per 1/2/4-byte element, including wrapped elements.
+ * Encoding is little-endian, independent of alignment of backing storage. */
+static uint8_t fifo_push_word(fifo_t *fifo, uint32_t value, uint32_t width) {
+    uint32_t head, tail, i;
+    if (!fifo || !fifo->storage || !fifo->capacity || width > fifo->capacity)
         return 0u;
-    tail = FIFO_LOAD_RELAXED(&fifo->tail);
-    head = FIFO_LOAD_ACQUIRE(&fifo->head);
-    if (head == tail) return 0u;
-    *out = fifo->storage[tail & fifo->mask];
-    FIFO_STORE_RELEASE(&fifo->tail, tail + 1u);
-    return 1u;
-}
-
-uint32_t FIFO_Write(fifo_t *fifo, const uint8_t *src, uint32_t length) {
-    uint32_t i;
-    if (src == 0) return 0u;
-    for (i = 0u; i < length && FIFO_Push(fifo, src[i]); ++i) {}
-    return i;
-}
-
-uint32_t FIFO_Read(fifo_t *fifo, uint8_t *dst, uint32_t length) {
-    uint32_t i;
-    if (dst == 0) return 0u;
-    for (i = 0u; i < length && FIFO_Pop(fifo, &dst[i]); ++i) {}
-    return i;
-}
-
-/* Fixed-record transactions; only one SPSC producer or consumer may call
- * its corresponding operation at a time. Byte copies precede publication. */
-uint8_t FIFO_WriteExact(fifo_t *fifo, const void *src, uint32_t size) {
-    uint32_t head, tail, offset, first;
-    if (!fifo || !fifo->storage || !fifo->capacity ||
-        (size && !src) || size > fifo->capacity) return 0u;
-    if (!size) return 1u;
     head = FIFO_LOAD_RELAXED(&fifo->head);
     tail = FIFO_LOAD_ACQUIRE(&fifo->tail);
     if (head - tail > fifo->capacity ||
-        size > fifo->capacity - (head - tail)) return 0u;
-    offset = head & fifo->mask;
-    first = fifo->capacity - offset;
-    if (first > size) first = size;
-    memcpy(fifo->storage + offset, src, first);
-    if (first < size)
-        memcpy(fifo->storage, (const uint8_t *)src + first, size - first);
-    FIFO_STORE_RELEASE(&fifo->head, head + size);
+        width > fifo->capacity - (head - tail)) return 0u;
+    for (i = 0u; i < width; ++i)
+        fifo->storage[(head + i) & fifo->mask] = (uint8_t)(value >> (8u * i));
+    FIFO_STORE_RELEASE(&fifo->head, head + width);
     return 1u;
 }
 
-uint8_t FIFO_ReadExact(fifo_t *fifo, void *dst, uint32_t size) {
-    uint32_t head, tail, offset, first;
-    if (!fifo || !fifo->storage || !fifo->capacity ||
-        (size && !dst) || size > fifo->capacity) return 0u;
-    if (!size) return 1u;
+static uint8_t fifo_pop_word(fifo_t *fifo, uint32_t *out, uint32_t width) {
+    uint32_t head, tail, i, value = 0u;
+    if (!fifo || !out || !fifo->storage || !fifo->capacity ||
+        width > fifo->capacity) return 0u;
     tail = FIFO_LOAD_RELAXED(&fifo->tail);
     head = FIFO_LOAD_ACQUIRE(&fifo->head);
-    if (head - tail < size || head - tail > fifo->capacity) return 0u;
-    offset = tail & fifo->mask;
-    first = fifo->capacity - offset;
-    if (first > size) first = size;
-    memcpy(dst, fifo->storage + offset, first);
-    if (first < size)
-        memcpy((uint8_t *)dst + first, fifo->storage, size - first);
-    FIFO_STORE_RELEASE(&fifo->tail, tail + size);
+    if (head - tail > fifo->capacity || head - tail < width) return 0u;
+    for (i = 0u; i < width; ++i)
+        value |= (uint32_t)fifo->storage[(tail + i) & fifo->mask] << (8u * i);
+    *out = value;
+    FIFO_STORE_RELEASE(&fifo->tail, tail + width);
     return 1u;
+}
+
+uint8_t FIFO_Push1(fifo_t *fifo, uint8_t value) {
+    return fifo_push_word(fifo, value, 1u);
+}
+uint8_t FIFO_Pop1(fifo_t *fifo, uint8_t *out) {
+    uint32_t v;
+    if (!out || !fifo_pop_word(fifo, &v, 1u)) return 0u;
+    *out = (uint8_t)v;
+    return 1u;
+}
+uint8_t FIFO_Push2(fifo_t *fifo, uint16_t value) {
+    return fifo_push_word(fifo, value, 2u);
+}
+uint8_t FIFO_Pop2(fifo_t *fifo, uint16_t *out) {
+    uint32_t v;
+    if (!out || !fifo_pop_word(fifo, &v, 2u)) return 0u;
+    *out = (uint16_t)v;
+    return 1u;
+}
+uint8_t FIFO_Push4(fifo_t *fifo, uint32_t value) {
+    return fifo_push_word(fifo, value, 4u);
+}
+uint8_t FIFO_Pop4(fifo_t *fifo, uint32_t *out) {
+    return fifo_pop_word(fifo, out, 4u);
+}
+uint32_t FIFO_Write(fifo_t *fifo, const uint8_t *src, uint32_t length) {
+    uint32_t i;
+    if (!src) return 0u;
+    for (i = 0u; i < length && FIFO_Push1(fifo, src[i]); ++i) {}
+    return i;
+}
+uint32_t FIFO_Read(fifo_t *fifo, uint8_t *dst, uint32_t length) {
+    uint32_t i;
+    if (!dst) return 0u;
+    for (i = 0u; i < length && FIFO_Pop1(fifo, &dst[i]); ++i) {}
+    return i;
 }

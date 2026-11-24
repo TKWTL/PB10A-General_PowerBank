@@ -6,7 +6,7 @@
 #include "power_algo.h"
 #include "display/dispDriver.h"
 #include "fonts/fonts.h"
-#include <stdio.h>
+#include "mini_format.h"
 void Powerbank_AppRun(ui_t *ui) {
     power_monitor_t m;
     uint8_t fg;
@@ -32,22 +32,30 @@ void Powerbank_AppRun(ui_t *ui) {
         Disp_DrawStr(3u,30u,"Data not fresh");
     }
     else {
-        (void)snprintf(line,sizeof(line),"C1:%u A1:%u %s",
+        (void)mini_snprintf(line,sizeof(line),"C1:%u A1:%u %s",
             (unsigned)m.c1_on,(unsigned)m.a1_on,
             m.charging?"CHG":m.discharging?"DIS":"IDLE");
         Disp_DrawStr(0u,11u,line);
-        (void)snprintf(line,sizeof(line),"BUS %5umV %4umA",
+        (void)mini_snprintf(line,sizeof(line),"BUS %5umV %4umA",
             (unsigned)m.vbus_mv,(unsigned)m.ibus_ma);
         Disp_DrawStr(0u,23u,line);
-        (void)snprintf(line,sizeof(line),"BAT %5umV %4umA",
+        (void)mini_snprintf(line,sizeof(line),"BAT %5umV %4umA",
             (unsigned)m.vbat_mv,(unsigned)m.ibat_ma);
         Disp_DrawStr(0u,35u,line);
         if(m.capacity_valid)
-            (void)snprintf(line,sizeof(line),"CAP %3u%%", (unsigned)m.capacity_pct);
-        else (void)snprintf(line,sizeof(line),"CAP --%%");
+            (void)mini_snprintf(line,sizeof(line),"CAP %3u%%", (unsigned)m.capacity_pct);
+        else (void)mini_snprintf(line,sizeof(line),"CAP --%%");
         Disp_DrawStr(0u,47u,line);
-        (void)snprintf(line,sizeof(line),"PROTO: %.15s",
-            m.protocol?m.protocol:"--");
+        {
+            const char *protocol = m.protocol ? m.protocol : "--";
+            const char *prefix = "PROTO: ";
+            uint8_t n = 0u;
+            while (*prefix && n < sizeof(line) - 1u)
+                line[n++] = *prefix++;
+            while (*protocol && n < sizeof(line) - 1u)
+                line[n++] = *protocol++;
+            line[n] = '\0';
+        }
         Disp_DrawStr(0u,59u,line);
     }
     Disp_SendBuffer();

@@ -11,7 +11,7 @@
 #include "rtc.h"
 #include "core/ui.h"
 #include "images/image.h"
-#include <stdio.h>
+#include "mini_format.h"
 
 static uint32_t s_boot_seconds;
 static uint8_t s_boot_valid;
@@ -99,7 +99,7 @@ void Time_FormatDuration(uint32_t seconds, char *out, size_t size) {
     Time_Duration d;
     if(out == 0 || size == 0u) return;
     Time_SplitDuration(seconds, &d);
-    (void)snprintf(out, size, "%ud %02u:%02u:%02u",
+    (void)mini_snprintf(out, size, "%ud %02u:%02u:%02u",
         (unsigned)d.days, (unsigned)d.hours,
         (unsigned)d.minutes, (unsigned)d.seconds);
 }

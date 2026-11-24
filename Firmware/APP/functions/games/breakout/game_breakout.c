@@ -14,7 +14,7 @@
 #include "fonts/fonts.h"
 #include "buttons.h"
 #include "millis.h"
-#include <stdio.h>
+#include "mini_format.h"
 
 #define BREAKOUT_COLS 8u
 #define BREAKOUT_ROWS 5u
@@ -286,7 +286,7 @@ static void breakout_draw(void) {
     Disp_ClearBuffer();
     Disp_SetDrawColor(&color);
     Disp_SetFont(font_home_h6w4);
-    (void)snprintf(stats, sizeof(stats), "SCORE:%u HI:%u",
+    (void)mini_snprintf(stats, sizeof(stats), "SCORE:%u HI:%u",
                    (unsigned)s_game.score, (unsigned)s_best_score);
     Disp_DrawStr(1u, 7u, stats);
     /* Remaining lives are drawn as small balls at the upper-right. */
@@ -310,7 +310,7 @@ static void breakout_draw(void) {
         Disp_DrawDisc((uint16_t)x, (uint16_t)y, BREAKOUT_BALL_R, U8G2_DRAW_ALL);
 
     if (s_game.state == BREAKOUT_READY) {
-        (void)snprintf(level_text, sizeof(level_text),
+        (void)mini_snprintf(level_text, sizeof(level_text),
                        s_game.level <= BREAKOUT_PRESET_LEVELS ?
                        "LEVEL %u" : "RANDOM %u", (unsigned)s_game.level);
         state_text = level_text;

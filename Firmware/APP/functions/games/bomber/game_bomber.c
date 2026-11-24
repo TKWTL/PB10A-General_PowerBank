@@ -99,24 +99,28 @@ static uint8_t bomb_byte(uint8_t x, uint8_t page) {
     return bomber_bomb[(uint16_t)b->anim * 8u + (uint16_t)((int16_t)x - b->x)];
 }
 
-/* Extend the original three 24x24 fire frames to 40x40 without allocating
- * new bitmap assets. Repeat each outer 8px arm segment once; preserve the
- * original center and animation frames. Source layout is 3 pages x 3 frames
- * x 24 columns (page-major, then frame, then column). */
+/* Existing 24x24 fire art, repeated to a 40x40 cross. Clamp every
+ * drawn cell to the SAME wall-aware reach mask as CoreTick's damage. */
 static uint8_t fire_byte(uint8_t x, uint8_t page) {
     const bomber_bomb_t *b = &s_game.bomb;
-    int16_t left = b->x - 16, top = b->page_y - 2;
-    uint8_t dx, dy, sx, sy;
+    int16_t left = b->x - (int16_t)BOMBER_FIRE_RADIUS_CELLS * 8;
+    int16_t top = b->page_y - (int16_t)BOMBER_FIRE_RADIUS_CELLS;
+    int16_t col = (int16_t)x - left, row = (int16_t)page - top;
+    uint8_t sx, sy;
     uint16_t offset;
     if (b->fuse != 1u || b->anim > 2u || x <= 7u || page == 0u ||
-        (int16_t)x < left || (int16_t)x >= left + 40 ||
-        (int16_t)page < top || (int16_t)page >= top + 5) return 0u;
-    dx = (uint8_t)((int16_t)x - left);
-    dy = (uint8_t)((int16_t)page - top);
-    sx = dx < 16u ? (uint8_t)(dx & 7u) :
-         (dx < 24u ? (uint8_t)(dx - 8u) :
-                      (uint8_t)(16u + (dx & 7u)));
-    sy = dy < 2u ? 0u : (dy == 2u ? 1u : 2u);
+        col < 0 || row < 0 ||
+        col >= (int16_t)(2u * BOMBER_FIRE_RADIUS_CELLS + 1u) * 8 ||
+        row >= (int16_t)(2u * BOMBER_FIRE_RADIUS_CELLS + 1u))
+        return 0u;
+    if (!Bomber_CoreFireCell(&s_game,
+          (int8_t)(col / 8 - (int16_t)BOMBER_FIRE_RADIUS_CELLS),
+          (int8_t)(row - (int16_t)BOMBER_FIRE_RADIUS_CELLS))) return 0u;
+    sx = (uint8_t)(col / 8 < (int16_t)BOMBER_FIRE_RADIUS_CELLS ? 0u :
+         (col / 8 == (int16_t)BOMBER_FIRE_RADIUS_CELLS ? 8u : 16u));
+    sx = (uint8_t)(sx + (col & 7));
+    sy = row < (int16_t)BOMBER_FIRE_RADIUS_CELLS ? 0u :
+         (row == (int16_t)BOMBER_FIRE_RADIUS_CELLS ? 1u : 2u);
     offset = (uint16_t)sy * 72u + (uint16_t)b->anim * 24u + sx;
     return offset < sizeof(bomber_fire) ? bomber_fire[offset] : 0u;
 }

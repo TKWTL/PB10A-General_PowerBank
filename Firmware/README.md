@@ -65,7 +65,10 @@ ADC 保持每 **500 ms** 发布一组数据，但组内由原来的 4 次扩展�
 Hardware-independent RLE decompression (four control modes, WRITE/XOR) and
 32-bit power-of-two SPSC FIFO are in [LIB](LIB/) and included in the Keil
 project. RLE now stores Pac-Man/Bomber/Invaders page images losslessly,
-and FIFO now manages Beep Service pointer records. Measure real linked
+and FIFO now manages Beep Service 32-bit pointer records. Its 1/2/4-byte
+APIs also support byte-oriented UART rings. IH01A's integer-only
+`mini_format.c/.h` replaces PB10A application `snprintf` calls; protocol
+labels use bounded direct copying instead of `%.15s`. Measure real linked
 size after Keil compilation rather than assuming theoretical gains. This byte RLE is
 unrelated to u8g2 font RLE. See [LIB/README.md](LIB/README.md).
 

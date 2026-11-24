@@ -16,7 +16,7 @@
 #include "display/dispDriver.h"
 #include "fonts/fonts.h"
 #include "pm_api.h"
-#include <stdio.h>
+#include "mini_format.h"
 #define SCANNER_SPLASH_MS 1500u
 #define SCANNER_RESCAN_MS 5000u
 #define SCANNER_FIRST 0x08u
@@ -119,7 +119,7 @@ void i2c_Scanner(ui_t *ui) {
         /* Unscanned cells remain blank; -- appears progressively
          * as each position has been processed, Collar-Radio style. */
         for(addr=0u;addr<s_next;addr++) {
-            if(s_ack[addr]) (void)snprintf(buf,sizeof(buf),"%02x",(unsigned)addr);
+            if(s_ack[addr]) (void)mini_snprintf(buf,sizeof(buf),"%02x",(unsigned)addr);
             else {buf[0]='-';buf[1]='-';buf[2]='\0';}
             Disp_DrawStr((uint16_t)(8u*(addr%16u)),
                 (uint16_t)(8u*(addr/16u+1u)),buf);

@@ -16,7 +16,7 @@ not included or required by PB10A.
 - Three maps cycle as 14-byte MSB-first bitmaps (15×7 = 105 valid cells);
   destruction does **not** modify the fixed collision `back[]` image.
 - Bomb fuse is advanced only at Frame 0/8/16, explosion at Frame % 4 == 0,
-  and expanded 40×40 cross-blast damage (9 destructible cells) is applied once at
+  and expanded 40×40 cross-blast damage is applied once at
   animation stage 1. Four enemies killed advances the level at Frame 12;
   after completing all three maps, enemies move every logic tick.
 - Starts with exactly three lives. Restarting after death keeps destroyed
@@ -88,6 +88,28 @@ entry `bomber_back_rle[125]` reconstructs the original fixed-wall
 collision mask into shared 1024-byte GameBuffer; the core binds to that
 SRAM image for random collision tests. The separate 14-byte destructible
 map remains in `bomber_game_t`. The `0xFE` drawing/collision sentinel
-and PB10A's 40x40 cross explosion are unchanged. On UI leave, the core
+and PB10A's 40x40 cross size remain unchanged, with wall-aware propagation. On UI leave, the core
 unbinds and the owner-checked resource cache is zeroed; STOP1 does not
 release it. Original resource CRC32s are asserted in host tests.
+ 
+## Fixed-wall / destructible-wall blast occlusion
+
+The 40x40 cross still uses the original three-frame 24x24 sprites with
+their outer 8px arm segment repeated. The fuse creates a **single**
+four-direction `blast_reach[4]` snapshot while the 14-byte mutable
+block map is intact. For each 8px step (radius two), the ray:
+
+1. Stops **before** a fixed maze wall cell; fixed walls cannot burn.
+2. Hits and destroys the first destructible block, then stops.
+3. Travels through empty cells to its configured reach.
+
+Damage, destructible-block removal and fire rendering use this **same**
+snapshot. This is necessary because block removal takes place before
+later explosion animation frames; recalculating rays from the cleared
+map would make the flames incorrectly pass through the vanished block.
+
+The fixed wall image contains an `0x80` decorative horizontal border
+on otherwise empty cells. An occupied cell is detected by sampling
+an interior column with mask `0x7F`, rather than treating any nonzero
+pixel in the 8x8 tile as a wall. Cell edges and the original FE rendering
+sentinel remain unchanged. The logic uses no additional tile bitmap.
