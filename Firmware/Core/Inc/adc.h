@@ -39,7 +39,19 @@ extern "C" {
 void MX_ADC1_Init(void);
 
 /* USER CODE BEGIN Prototypes */
+typedef enum {
+    ADC1_SCAN_IDLE = 0,
+    ADC1_SCAN_BUSY,
+    ADC1_SCAN_DONE,
+    ADC1_SCAN_ERROR
+} ADC1_ScanStatus;
 
+uint8_t ADC1_Calibrate(void);
+/* The four halfwords must remain writable until completion or stop. */
+uint8_t ADC1_ScanStart(uint16_t samples[4]);
+ADC1_ScanStatus ADC1_ScanState(void);
+uint8_t ADC1_ScanStop(void);
+void ADC1_DmaIRQ(void);
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus

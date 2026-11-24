@@ -176,7 +176,6 @@ void PowerAlgo_BackgroundAbort(void) {
 static uint16_t s_dma[4] __attribute__((aligned(4)));
 static uint32_t s_adc_accumulator[4]; /* 16 * 4095 per rank fits uint32_t */
 static uint8_t s_adc_sample_count;
-static volatile uint8_t s_transfer_result; /* 0 pending, 1 done, 2 error */
 static uint8_t s_active,s_suspended,s_adc_initialized;
 static uint8_t s_aux_inserted,s_aux_enabled,s_system_adc_valid;
 static int s_aux_voltage_mv,s_aux_current_ma;
@@ -186,17 +185,10 @@ static ui_data_t s_aux_data[2];
 static ui_element_t s_aux_elements[2];
 
 static pm_hook_result_t power_adc_suspend(void *ctx) {
-    HAL_StatusTypeDef result;
     (void)ctx;
-    s_suspended=1u;
-    if(s_active) {
-        result=HAL_ADC_Stop_DMA(&hadc1);
-        s_active=0u;
-        s_transfer_result=0u;
-    }
-    else
-        result=HAL_ADC_Stop(&hadc1);
-    if(result!=HAL_OK)return PM_HOOK_ERROR;
+    s_suspended = 1u;
+    s_active = 0u;
+    if (!ADC1_ScanStop()) return PM_HOOK_ERROR;
     LL_GPIO_ResetOutputPin(SUB_EN_GPIO_Port,SUB_EN_Pin);
     s_aux_enabled=0u;
     s_system_adc_valid=0u;
@@ -220,13 +212,14 @@ static const pm_device_node_t s_power_adc_pm={
 /* Invoked once by ADC_RTC_AuxAThread before its for(;;). */
 void PowerAlgo_AdcInit(void) {
     LL_GPIO_SetOutputPin(SUB_EN_GPIO_Port,SUB_EN_Pin);
-    s_active=0u;s_suspended=0u;s_transfer_result=0u;
+    s_active = 0u;
+    s_suspended = 0u;
     s_aux_enabled=1u;s_aux_inserted=0u;
     s_aux_voltage_mv=0;s_aux_current_ma=0;
     s_vdda_mv=0;s_die_temp_c10=0;s_system_adc_valid=0u;
     s_adc_sample_count=0u;
     memset(s_adc_accumulator,0,sizeof(s_adc_accumulator));
-    s_adc_initialized=(uint8_t)(HAL_ADCEx_Calibration_Start(&hadc1)==HAL_OK);
+    s_adc_initialized = ADC1_Calibrate();
 }
 
 uint8_t PowerAlgo_AdcIsSuspended(void){return s_suspended;}
@@ -240,17 +233,15 @@ void PowerAlgo_AdcBatchBegin(void) {
 }
 
 uint8_t PowerAlgo_AdcBeginScan(void) {
-    if(s_suspended || !s_adc_initialized || s_active)return 0u;
-    s_transfer_result=0u;
-    s_active=1u; /* Set before HAL start: IRQ completion can be immediate. */
-    if(HAL_ADC_Start_DMA(&hadc1,(uint32_t *)(void *)s_dma,4u)!=HAL_OK) {
-        s_active=0u;
-        s_adc_sample_count=0u;
-        memset(s_adc_accumulator,0,sizeof(s_adc_accumulator));
-        s_system_adc_valid=0u;
-        (void)HAL_ADC_Stop_DMA(&hadc1);
+    if (s_suspended || !s_adc_initialized || s_active) return 0u;
+    if (!ADC1_ScanStart(s_dma)) {
+        s_adc_sample_count = 0u;
+        memset(s_adc_accumulator, 0, sizeof(s_adc_accumulator));
+        s_system_adc_valid = 0u;
+        (void)ADC1_ScanStop();
         return 0u;
     }
+    s_active = 1u;
     return 1u;
 }
 
@@ -261,13 +252,13 @@ uint8_t PowerAlgo_AdcScanSettled(void) {
     uint32_t pin_voltage_mv,pin_current_mv;
     uint16_t avg[4];
     int32_t cal_span,scaled_temp10;
-    uint8_t i,result;
+    uint8_t i;
     if(s_suspended || !s_active)return 1u;
-    result=s_transfer_result;
-    if(result==0u)return 0u;
-    s_active=0u;
-    if(result!=1u || s_dma[3]==0u) {
-        (void)HAL_ADC_Stop_DMA(&hadc1);
+    ADC1_ScanStatus result = ADC1_ScanState();
+    if (result == ADC1_SCAN_BUSY) return 0u;
+    s_active = 0u;
+    if (result != ADC1_SCAN_DONE || s_dma[3] == 0u) {
+        (void)ADC1_ScanStop();
         s_adc_sample_count=0u;
         memset(s_adc_accumulator,0,sizeof(s_adc_accumulator));
         s_system_adc_valid=0u;
@@ -287,7 +278,7 @@ uint8_t PowerAlgo_AdcScanSettled(void) {
         s_system_adc_valid=0u;
         return 1u;
     }
-    s_vdda_mv=(int)__HAL_ADC_CALC_VREFANALOG_VOLTAGE(avg[3],ADC_RESOLUTION_12B);
+    s_vdda_mv = (int)__LL_ADC_CALC_VREFANALOG_VOLTAGE(avg[3], LL_ADC_RESOLUTION_12B);
     pin_current_mv=((uint32_t)avg[0]*(uint32_t)s_vdda_mv+2047u)/4095u;
     pin_voltage_mv=((uint32_t)avg[1]*(uint32_t)s_vdda_mv+2047u)/4095u;
     /* PA0: 0.5 V/A (500 mV/A). PA5: 680 k / 220 k divider. */
@@ -295,8 +286,7 @@ uint8_t PowerAlgo_AdcScanSettled(void) {
     s_aux_voltage_mv=(int)((pin_voltage_mv*
         (AUX_A_VDIV_HIGH+AUX_A_VDIV_LOW)+AUX_A_VDIV_LOW/2u)/AUX_A_VDIV_LOW);
 
-    /* Retain tenths of a degree using the factory TS_CAL1/TS_CAL2
-     * values rather than the HAL's integer-degrees-only helper. */
+    /* Retain tenths of a degree using the factory TS_CAL1/TS_CAL2 values. */
     cal_span=(int32_t)*TEMPSENSOR_CAL2_ADDR-(int32_t)*TEMPSENSOR_CAL1_ADDR;
     if(cal_span!=0) {
         scaled_temp10=(int32_t)(((uint32_t)avg[2]*(uint32_t)s_vdda_mv*10u+
@@ -308,16 +298,6 @@ uint8_t PowerAlgo_AdcScanSettled(void) {
     }
     else s_system_adc_valid=0u;
     return 1u;
-}
-
-void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
-    if(hadc && hadc->Instance==ADC1 && s_active)
-        s_transfer_result=1u;
-}
-
-void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc) {
-    if(hadc && hadc->Instance==ADC1 && s_active)
-        s_transfer_result=2u;
 }
 
 /* PA7 is pulled up: low indicates an inserted auxiliary-A load.
