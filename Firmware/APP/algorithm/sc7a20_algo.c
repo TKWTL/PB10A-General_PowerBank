@@ -2,6 +2,7 @@
 #include "sc7a20_algo.h"
 #include "sc7a20.h"
 #include "sensor_common.h"
+#include "pt.h"
 #include "main.h"
 #include "pm_api.h"
 #include <string.h>
@@ -32,6 +33,7 @@ static uint8_t s_pickup_wake,s_motion_wake;
 static uint8_t s_orientation,s_candidate,s_confirm;
 static uint32_t s_pm_deadline;
 static uint8_t s_buffer[6];
+static struct pt s_transfer_pt;
 static volatile uint8_t s_flag,s_pm_flag;
 static uint32_t s_last_sample,s_retry_at;
 static int s_axes[3];
@@ -56,16 +58,9 @@ static ui_item_t s_items[3],s_wake_items[2];
 static ui_data_t s_data[3],s_wake_data[2];
 static ui_element_t s_elements[3],s_wake_elements[2];
 
-static uint8_t sc_transfer(uint8_t read,uint8_t reg,uint8_t count) {
-    if(!s_waiting) {
-        if(!(read?SC7A20_AsyncRead(reg,s_buffer,count,(uint8_t *)&s_flag):
-            SC7A20_AsyncWrite(reg,s_buffer,count,(uint8_t *)&s_flag)))return 0u;
-        s_waiting=1u;
-        return 0u;
-    }
-    if(s_flag==I2C_ASYNC_PENDING)return 0u;
-    s_waiting=0u;
-    return s_flag==I2C_ASYNC_DONE?1u:2u;
+static uint8_t sc_transfer(uint8_t read, uint8_t reg, uint8_t count) {
+    s_waiting = (uint8_t)PT_SCHEDULE(SC7A20_TransferPT(&s_transfer_pt, read, reg, s_buffer, count, &s_flag));
+    return s_waiting ? 0u : s_flag;
 }
 
 static void sc_offline(void) {
@@ -435,6 +430,7 @@ void SC7A20Algo_Init(void) {
     s_retry_at=Millis();
     sc_calibration_load();
     SC7A20_AsyncSetReady(0u);
+    PT_INIT(&s_transfer_pt);
     (void)pm_device_register(&s_node);
 }
 

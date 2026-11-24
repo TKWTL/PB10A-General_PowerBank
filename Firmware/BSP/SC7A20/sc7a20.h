@@ -16,6 +16,9 @@ extern "C" {
 // 定义 SC7A20_USE_PROTOTHREAD 以启用协作式挂起（protothread + coroOS）。
 //  - 未定义：阻塞式 API（返回类型为 void）。
 //  - 已定义：协作式 API（返回类型为 char，并额外带 struct pt *pt 参数）。
+/* In PT mode, one foreground owner drives the SC7A20 command APIs.
+ * Keep arguments and buffers live until the PT ends. The bus arbitrates
+ * individual transfers; finish a multi-step command before another starts. */
 //#define SC7A20_USE_PROTOTHREAD
 
 /* Keep legacy floating-point APIs available to other projects by default.
@@ -57,6 +60,7 @@ do { SC7A20_Status.initialized = 0; SC7A20_Status.last_error = SC7A20_ERR_NOT_ON
 /******************************用户设置区结束**********************************/
 //操作语法宏，方便添加freeRTOS之类的支持
 #ifdef SC7A20_USE_PROTOTHREAD
+#include "coroOS.h"
 #define SC7A20_RET          char
 #define SC7A20_NOARG        struct pt *pt
 #define SC7A20_ARGS(...)    struct pt *pt, __VA_ARGS__
@@ -68,8 +72,6 @@ THRD_SPAWN_NOARG(func)
 THRD_SPAWN_ARGS(func, __VA_ARGS__)              //调用子线程/函数语句
 #define SC7A20_FUNC_BEGIN   THRD_BEGIN
 #define SC7A20_FUNC_END     THRD_END
-#define SC7A20_MUTEX_TAKE   PT_SEM_WAIT(pt, &i2c_mutex)
-#define SC7A20_MUTEX_GIVE   PT_SEM_SIGNAL(pt, &i2c_mutex)   
 #else
 #define SC7A20_RET          void
 #define SC7A20_NOARG        void
@@ -82,8 +84,6 @@ func()
 func(__VA_ARGS__)
 #define SC7A20_FUNC_BEGIN   {}
 #define SC7A20_FUNC_END     {}
-#define SC7A20_MUTEX_TAKE   ((void)I2C_TransactionBegin()) /* whole operation */
-#define SC7A20_MUTEX_GIVE   I2C_TransactionEnd()
 #endif    
 
 /******************************对外数据类型*************************************/
@@ -145,7 +145,7 @@ typedef struct {
 
 struct SC7A20_StatusTypedef {
     uint8_t initialized;            //SC7A20已初始化（WHO_AM_I 校验通过并完成配置）；通信失败时清 0 触发重新初始化
-    uint8_t flag;                                                               //标识传输完成与传输状态用变量
+    volatile uint8_t flag;                                                               //标识传输完成与传输状态用变量
     uint8_t sendbuf[8];                                                         //传输缓冲用变量
 
     /***************************寄存器内存镜像声明*********************************/
@@ -494,6 +494,10 @@ SC7A20_RET SC7A20_RegisterDump(SC7A20_NOARG);   //读取并通过USART_Printf打
 /* Cached conversion result for the asynchronous APP service. */
 /* IRQ-driven I2C register operations for the cooperative service actor.
  * No blocking waits inside the SC7A20 algorithm or PM callbacks. */
+/* Caller owns pt, data and flag until completion. */
+struct pt;
+char SC7A20_TransferPT(struct pt *pt, uint8_t read, uint8_t reg, uint8_t *data,
+                       uint16_t count, volatile uint8_t *flag);
 uint8_t SC7A20_AsyncRead(uint8_t reg,uint8_t *buffer,uint16_t count,uint8_t *flag);
 uint8_t SC7A20_AsyncWrite(uint8_t reg,uint8_t *buffer,uint16_t count,uint8_t *flag);
 void SC7A20_AsyncSetReady(uint8_t ready);

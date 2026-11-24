@@ -2,11 +2,14 @@
 #include "mmc5603_algo.h"
 #include "mmc5603.h"
 #include "sensor_common.h"
+#include "pt.h"
 #define MMC_SAMPLE_MS 250u
 #define MMC_RETRY_MS 2000u
 #define MMC_CONVERT_MS 10u
+#define MMC_CONVERT_TIMEOUT_MS 30u
 
 static uint8_t s_stage,s_waiting,s_paused,s_buffer[9];
+static struct pt s_transfer_pt;
 static volatile uint8_t s_flag;
 static uint32_t s_due_at,s_conversion_at;
 static int s_mg[3];
@@ -14,16 +17,9 @@ static ui_item_t s_items[3];
 static ui_data_t s_data[3];
 static ui_element_t s_elements[3];
 
-static uint8_t mmc_transfer(uint8_t read,uint8_t reg,uint8_t count) {
-    if(!s_waiting) {
-        if(!(read?MMC5603_AsyncRead(reg,s_buffer,count,(uint8_t *)&s_flag):
-            MMC5603_AsyncWrite(reg,s_buffer,count,(uint8_t *)&s_flag)))return 0u;
-        s_waiting=1u;
-        return 0u;
-    }
-    if(s_flag==I2C_ASYNC_PENDING)return 0u;
-    s_waiting=0u;
-    return s_flag==I2C_ASYNC_DONE?1u:2u;
+static uint8_t mmc_transfer(uint8_t read, uint8_t reg, uint8_t count) {
+    s_waiting = (uint8_t)PT_SCHEDULE(MMC5603_TransferPT(&s_transfer_pt, read, reg, s_buffer, count, &s_flag));
+    return s_waiting ? 0u : s_flag;
 }
 
 static void mmc_offline(void) {
@@ -55,7 +51,10 @@ void MMC5603Algo_Poll(void) {
         result=mmc_transfer(1u,MMC5603_REG_STATUS1,1u);
         if(!result)return;
         if(result!=1u){mmc_offline();return;}
-        if(!(s_buffer[0]&MMC5603_STATUS_M_DONE))return;
+        if (!(s_buffer[0] & MMC5603_STATUS_M_DONE)) {
+            if ((uint32_t)(Millis() - s_conversion_at) >= MMC_CONVERT_TIMEOUT_MS) mmc_offline();
+            return;
+        }
         s_stage=4u;break;
     case 4u:
         result=mmc_transfer(1u,MMC5603_REG_XOUT0,9u);
@@ -85,6 +84,7 @@ static const pm_device_node_t s_node={
 void MMC5603Algo_Init(void) {
     s_stage=0u;s_waiting=0u;s_paused=0u;
     s_due_at=Millis();
+    PT_INIT(&s_transfer_pt);
     (void)pm_device_register(&s_node);
 }
 

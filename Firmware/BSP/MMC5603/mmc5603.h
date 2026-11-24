@@ -39,6 +39,10 @@ uint8_t MMC5603_EnterLowPower(void);
 uint8_t MMC5603_StartSingleMeasurement(void);
 
 /* IRQ-completed register transactions; buffers live in the service. */
+/* Caller owns pt, data and flag until completion. */
+struct pt;
+char MMC5603_TransferPT(struct pt *pt, uint8_t read, uint8_t reg, uint8_t *data,
+                       uint16_t count, volatile uint8_t *flag);
 uint8_t MMC5603_AsyncRead(uint8_t reg,uint8_t *data,uint16_t count,uint8_t *flag);
 uint8_t MMC5603_AsyncWrite(uint8_t reg,uint8_t *data,uint16_t count,uint8_t *flag);
 void MMC5603_ParseAxes(const uint8_t *data,int *x_mg,int *y_mg,int *z_mg);

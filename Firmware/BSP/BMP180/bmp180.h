@@ -23,6 +23,7 @@ extern float BMP180_AirPressure_kPa;
 extern float BMP180_Altitude;
 #endif
 uint8_t BMP180_IsInitialized(void);
+void BMP180_Invalidate(void);
 void BMP180_Init(void);
 void BMP180_StartConv(uint8_t code);
 void BMP180_GetTemprature(void); /* requires 5 ms after start */
@@ -35,6 +36,10 @@ void BMP180_CalcAltitude(void);
 uint8_t BMP180_ReadSample(void);
 
 /* Async APP service uses these conversion-only BSP functions. */
+/* Caller owns pt, data and flag until completion. */
+struct pt;
+char BMP180_TransferPT(struct pt *pt, uint8_t read, uint8_t reg, uint8_t *data,
+                       uint16_t count, volatile uint8_t *flag);
 uint8_t BMP180_AsyncRead(uint8_t reg,uint8_t *data,uint16_t count,uint8_t *flag);
 uint8_t BMP180_AsyncWrite(uint8_t reg,uint8_t *data,uint16_t count,uint8_t *flag);
 uint8_t BMP180_LoadCalibration(const uint8_t *data);

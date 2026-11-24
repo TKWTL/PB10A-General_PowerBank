@@ -39,6 +39,11 @@ uint8_t MMC5603_StartSingleMeasurement(void) {
     return MMC5603_WriteReg(MMC5603_REG_CTRL0,MMC5603_CTRL0_TM_M);
 }
 
+char MMC5603_TransferPT(struct pt *pt, uint8_t read, uint8_t reg, uint8_t *data,
+                       uint16_t count, volatile uint8_t *flag) {
+    return I2C_RegTransferPT(pt, MMC5603_I2C_ADDR, read, reg, data, count, flag);
+}
+
 uint8_t MMC5603_AsyncRead(uint8_t reg,uint8_t *data,uint16_t count,uint8_t *flag) {
     return ASYNC_I2C_Receive(MMC5603_I2C_ADDR,reg,data,count,0u,flag);
 }

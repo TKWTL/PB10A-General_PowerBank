@@ -22,6 +22,7 @@
 
 /* USER CODE BEGIN 0 */
 #include "millis.h"
+#include "pt.h"
 /* USER CODE END 0 */
 
 /* I2C1 init function */
@@ -302,6 +303,19 @@ uint8_t ASYNC_I2C_Transmit(uint16_t a, uint8_t reg, uint8_t *data, uint16_t n, u
 uint8_t ASYNC_I2C_Receive(uint16_t a, uint8_t reg, uint8_t *data, uint16_t n, uint8_t priority, uint8_t *flag) {
     (void)priority;
     return i2c_submit(I2C_MEM_READ, a, reg, data, n, flag);
+}
+
+char I2C_RegTransferPT(struct pt *pt, uint16_t address, uint8_t read, uint8_t reg,
+                       uint8_t *data, uint16_t count, volatile uint8_t *flag) {
+    PT_BEGIN(pt);
+    if (!flag) PT_EXIT(pt);
+    if (!data || !count) {
+        *flag = I2C_ASYNC_ERROR;
+        PT_EXIT(pt);
+    }
+    PT_WAIT_UNTIL(pt, i2c_submit(read ? I2C_MEM_READ : I2C_MEM_WRITE, address, reg, data, count, flag));
+    PT_WAIT_UNTIL(pt, *flag != I2C_ASYNC_PENDING);
+    PT_END(pt);
 }
 
 uint8_t I2C_AsyncProbe(uint16_t a, volatile uint8_t *flag) {

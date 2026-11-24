@@ -100,14 +100,13 @@ static uint8_t *sc7a20_owner_slot(uint8_t line) {
     return (line == 2U) ? &SC7A20_Status.int2_owner : &SC7A20_Status.int1_owner;
 }
 
-/* 尝试占用中断线；被其他功能占用时返回0并置ERR_INT_BUSY */
-static uint8_t sc7a20_int_claim(uint8_t line, uint8_t owner) {
+/* 检查中断线可用性；成功写完寄存器后再记录占用者。 */
+static uint8_t sc7a20_int_available(uint8_t line, uint8_t owner) {
     uint8_t *slot = sc7a20_owner_slot(line);
     if(*slot != SC7A20_INT_OWNER_NONE && *slot != owner) {
         SC7A20_Status.last_error = SC7A20_ERR_INT_BUSY;
         return 0;
     }
-    *slot = owner;
     SC7A20_Status.last_error = SC7A20_ERR_NONE;
     return 1;
 }
@@ -119,26 +118,67 @@ static void sc7a20_int_release(uint8_t line, uint8_t owner) {
     *slot = SC7A20_INT_OWNER_NONE;
 }
 
+#if defined(SC7A20_USE_PROTOTHREAD)
+#define SC7A20_PERSISTENT static
+#define SC7A20_ABORT() PT_EXIT(pt)
+#define SC7A20_MUTEX_TAKE ((void)0)
+#define SC7A20_MUTEX_GIVE ((void)0)
+#define SC7A20_TRANSFER(read, reg, data, count) \
+    SC7A20_SPAWN_ARGS(SC7A20_TransferPT, read, reg, data, count, &SC7A20_Status.flag)
+#else
+#define SC7A20_PERSISTENT
+#define SC7A20_ABORT() return
+#define SC7A20_MUTEX_TAKE                         \
+    do {                                          \
+        if (I2C_TransactionBegin() != I2C_OK) {   \
+            SC7A20_Status.flag = I2C_ASYNC_ERROR; \
+            SC7A20_MARK_OFFLINE_ON_I2C_FAIL();    \
+            SC7A20_ABORT();                       \
+        }                                         \
+    } while (0)
+#define SC7A20_MUTEX_GIVE I2C_TransactionEnd()
+#define SC7A20_TRANSFER(read, reg, data, count)                                               \
+    SC7A20_Status.flag = ((read) ? I2C_RegRead(SC7A20_I2C_ADDR, reg, data, count)             \
+                                 : I2C_RegWrite(SC7A20_I2C_ADDR, reg, data, count)) == I2C_OK \
+                           ? I2C_ASYNC_DONE : I2C_ASYNC_ERROR
+#endif
+
+#define SC7A20_IO_LOCKED(func, ...)                 \
+    do {                                            \
+        SC7A20_SPAWN_ARGS(func, __VA_ARGS__);       \
+        if (SC7A20_Status.flag != I2C_ASYNC_DONE) { \
+            SC7A20_MUTEX_GIVE;                      \
+            SC7A20_ABORT();                         \
+        }                                           \
+    } while (0)
+
 /*******************************基本操作区*************************************/
 SC7A20_RET SC7A20_ByteWrite(SC7A20_ARGS(uint8_t reg, uint8_t data)) {
     SC7A20_FUNC_BEGIN;
     SC7A20_Status.sendbuf[0] = data;
-    SC7A20_EXEC(SC7A20_I2C_Transmit(SC7A20_I2C_ADDR, reg, (uint8_t*)SC7A20_Status.sendbuf, 1, (uint8_t*)&SC7A20_Status.flag));
-    SC7A20_UNTIL(SC7A20_Status.flag);
+    SC7A20_TRANSFER(0u, reg, SC7A20_Status.sendbuf, 1u);
+    if (SC7A20_Status.flag != I2C_ASYNC_DONE) SC7A20_MARK_OFFLINE_ON_I2C_FAIL();
     SC7A20_FUNC_END;
 }
 
 SC7A20_RET SC7A20_ByteRead(SC7A20_ARGS(uint8_t reg, volatile uint8_t *data)) {
+    SC7A20_PERSISTENT uint8_t value;
     SC7A20_FUNC_BEGIN;
-    SC7A20_EXEC(SC7A20_I2C_Receive(SC7A20_I2C_ADDR, reg, (uint8_t*)data, 1, (uint8_t*)&SC7A20_Status.flag));
-    SC7A20_UNTIL(SC7A20_Status.flag);
+    if (!data) {
+        SC7A20_Status.flag = I2C_ASYNC_ERROR;
+        SC7A20_Status.last_error = SC7A20_ERR_BAD_PARAM;
+        SC7A20_ABORT();
+    }
+    SC7A20_TRANSFER(1u, reg, &value, 1u);
+    if (SC7A20_Status.flag == I2C_ASYNC_DONE) *data = value;
+    else SC7A20_MARK_OFFLINE_ON_I2C_FAIL();
     SC7A20_FUNC_END;
 }
 
 SC7A20_RET SC7A20_BytesRead(SC7A20_ARGS(uint8_t reg, uint8_t *pdata, uint16_t len)) {
     SC7A20_FUNC_BEGIN;
-    SC7A20_EXEC(SC7A20_I2C_Receive(SC7A20_I2C_ADDR, reg, pdata, len, (uint8_t*)&SC7A20_Status.flag));
-    SC7A20_UNTIL(SC7A20_Status.flag);
+    SC7A20_TRANSFER(1u, reg, pdata, len);
+    if (SC7A20_Status.flag != I2C_ASYNC_DONE) SC7A20_MARK_OFFLINE_ON_I2C_FAIL();
     SC7A20_FUNC_END;
 }
 
@@ -148,9 +188,11 @@ SC7A20_RET SC7A20_BytesRead(SC7A20_ARGS(uint8_t reg, uint8_t *pdata, uint16_t le
  */
 SC7A20_RET SC7A20_ByteModify(SC7A20_ARGS(uint8_t reg, uint8_t mask, uint8_t data)) {
     SC7A20_FUNC_BEGIN;
-    SC7A20_SPAWN_ARGS(SC7A20_ByteRead, reg, SC7A20_Status.sendbuf);
+    SC7A20_MUTEX_TAKE;
+    SC7A20_IO_LOCKED(SC7A20_ByteRead, reg, SC7A20_Status.sendbuf);
     SC7A20_Status.sendbuf[0] = (SC7A20_Status.sendbuf[0] & (~mask)) | (data & mask);
-    SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, reg, SC7A20_Status.sendbuf[0]);
+    SC7A20_IO_LOCKED(SC7A20_ByteWrite, reg, SC7A20_Status.sendbuf[0]);
+    SC7A20_MUTEX_GIVE;
     SC7A20_FUNC_END;
 }
 
@@ -160,21 +202,15 @@ SC7A20_RET SC7A20_ByteModify(SC7A20_ARGS(uint8_t reg, uint8_t mask, uint8_t data
  /数据为2的补码，HR模式12bit有效（左对齐）
  */
 SC7A20_RET SC7A20_AccelLoad(SC7A20_NOARG) {
-    uint8_t t[6];                    /* 读缓冲：失败时镜像保持上一次有效值（不写入半帧数据） */
+    SC7A20_PERSISTENT uint8_t t[6];                    /* 读缓冲：失败时镜像保持上一次有效值（不写入半帧数据） */
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
     /* 一次连读 0x28~0x2D（X_L,X_H,Y_L,Y_H,Z_L,Z_H），小端序，2的补码。
      * 注意：起始地址必须置 MSB=1（SC7A20_STRG_OUT_AUTO=0xA8）才能触发
      *       芯片地址自动递增的连续读；若用 0x28（MSB=0），每字节都返回
      *       同一寄存器值 → 三轴数据被复制成相同值（实测坑，勿改回）。 */
-    if(SC7A20_I2C_Receive(SC7A20_I2C_ADDR, SC7A20_STRG_OUT_AUTO, t, 6, (uint8_t*)&SC7A20_Status.flag) != I2C_OK) {
-        SC7A20_MARK_OFFLINE_ON_I2C_FAIL();   /* 通信失败：清 initialized → 下轮 load_task 重新初始化 */
-        SC7A20_MUTEX_GIVE;
-        SC7A20_FUNC_END;
-    }
-    SC7A20_Status.x = (int16_t)(((uint16_t)t[1] << 8) | t[0]);
-    SC7A20_Status.y = (int16_t)(((uint16_t)t[3] << 8) | t[2]);
-    SC7A20_Status.z = (int16_t)(((uint16_t)t[5] << 8) | t[4]);
+    SC7A20_IO_LOCKED(SC7A20_BytesRead, SC7A20_STRG_OUT_AUTO, t, 6u);
+    SC7A20_AsyncSetAxes(t);
     SC7A20_MUTEX_GIVE;
     SC7A20_FUNC_END;
 }
@@ -294,14 +330,10 @@ void SC7A20_ReadCalibratedMg(int16_t mg[3]) {
  /注意：需要先通过TEMP_CFG寄存器使能内部温度ADC（胚胎阶段暂未在Init中使能）
  */
 SC7A20_RET SC7A20_TempLoad(SC7A20_NOARG) {
-    uint8_t t[2];                    /* 读缓冲：失败时不改动镜像 */
+    SC7A20_PERSISTENT uint8_t t[2];                    /* 读缓冲：失败时不改动镜像 */
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
-    if(SC7A20_I2C_Receive(SC7A20_I2C_ADDR, SC7A20_STRG_OUT_TEMP_L | 0x80U, t, 2, (uint8_t*)&SC7A20_Status.flag) != I2C_OK) {
-        SC7A20_MARK_OFFLINE_ON_I2C_FAIL();   /* 通信失败：清 initialized → 下轮 load_task 重新初始化 */
-        SC7A20_MUTEX_GIVE;
-        SC7A20_FUNC_END;
-    }
+    SC7A20_IO_LOCKED(SC7A20_BytesRead, SC7A20_STRG_OUT_TEMP_L | 0x80U, t, 2u);
     SC7A20_Status.temp = (int16_t)(((uint16_t)t[1] << 8) | t[0]);
     SC7A20_MUTEX_GIVE;
     SC7A20_FUNC_END;
@@ -327,14 +359,10 @@ float SC7A20_ReadTemp(void) {
 /******************************状态操作区**************************************/
 SC7A20_RET SC7A20_StatusLoad(SC7A20_NOARG)//读取状态寄存器镜像（0x27）
 {
-    uint8_t st = 0U;                 /* 读缓冲：失败时不改动镜像 */
+    SC7A20_PERSISTENT uint8_t st;                 /* 读缓冲：失败时不改动镜像 */
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
-    if(SC7A20_I2C_Receive(SC7A20_I2C_ADDR, SC7A20_STRG_STATUS, &st, 1, (uint8_t*)&SC7A20_Status.flag) != I2C_OK) {
-        SC7A20_MARK_OFFLINE_ON_I2C_FAIL();   /* 通信失败：清 initialized → 下轮 load_task 重新初始化 */
-        SC7A20_MUTEX_GIVE;
-        SC7A20_FUNC_END;
-    }
+    SC7A20_IO_LOCKED(SC7A20_ByteRead, SC7A20_STRG_STATUS, &st);
     SC7A20_Status.status = st;
     SC7A20_MUTEX_GIVE;
     SC7A20_FUNC_END;
@@ -360,7 +388,7 @@ SC7A20_RET SC7A20_SetODR(SC7A20_ARGS(uint8_t odr))//设置输出数据率
 {
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
-    SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL1, SC7A20_CTRL1_ODR_MSK, odr & SC7A20_CTRL1_ODR_MSK);
+    SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL1, SC7A20_CTRL1_ODR_MSK, odr & SC7A20_CTRL1_ODR_MSK);
     SC7A20_Status.ctrl1 = (SC7A20_Status.ctrl1 & ~SC7A20_CTRL1_ODR_MSK) | (odr & SC7A20_CTRL1_ODR_MSK);
     SC7A20_MUTEX_GIVE;
     SC7A20_FUNC_END;
@@ -370,7 +398,7 @@ SC7A20_RET SC7A20_SetFullScale(SC7A20_ARGS(uint8_t fs))//设置量程
 {
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
-    SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL4, SC7A20_CTRL4_FS_MSK, fs & SC7A20_CTRL4_FS_MSK);
+    SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL4, SC7A20_CTRL4_FS_MSK, fs & SC7A20_CTRL4_FS_MSK);
     SC7A20_Status.ctrl4 = (SC7A20_Status.ctrl4 & ~SC7A20_CTRL4_FS_MSK) | (fs & SC7A20_CTRL4_FS_MSK);
     SC7A20_MUTEX_GIVE;
     SC7A20_FUNC_END;
@@ -380,7 +408,7 @@ SC7A20_RET SC7A20_SetPowerMode(SC7A20_ARGS(uint8_t lpen))//设置低功耗模式
 {
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
-    SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL1, SC7A20_CTRL1_LPEN, lpen ? SC7A20_CTRL1_LPEN : 0x00U);
+    SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL1, SC7A20_CTRL1_LPEN, lpen ? SC7A20_CTRL1_LPEN : 0x00U);
     SC7A20_Status.ctrl1 = (SC7A20_Status.ctrl1 & ~SC7A20_CTRL1_LPEN) | (lpen ? SC7A20_CTRL1_LPEN : 0x00U);
     SC7A20_MUTEX_GIVE;
     SC7A20_FUNC_END;
@@ -390,7 +418,7 @@ SC7A20_RET SC7A20_EnableAxis(SC7A20_ARGS(uint8_t axis))//设置轴使能
 {
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
-    SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL1, SC7A20_CTRL1_ZEN|SC7A20_CTRL1_YEN|SC7A20_CTRL1_XEN, axis & (SC7A20_CTRL1_ZEN|SC7A20_CTRL1_YEN|SC7A20_CTRL1_XEN));
+    SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL1, SC7A20_CTRL1_ZEN|SC7A20_CTRL1_YEN|SC7A20_CTRL1_XEN, axis & (SC7A20_CTRL1_ZEN|SC7A20_CTRL1_YEN|SC7A20_CTRL1_XEN));
     SC7A20_Status.ctrl1 = (SC7A20_Status.ctrl1 & ~(SC7A20_CTRL1_ZEN|SC7A20_CTRL1_YEN|SC7A20_CTRL1_XEN)) | (axis & (SC7A20_CTRL1_ZEN|SC7A20_CTRL1_YEN|SC7A20_CTRL1_XEN));
     SC7A20_MUTEX_GIVE;
     SC7A20_FUNC_END;
@@ -400,7 +428,7 @@ SC7A20_RET SC7A20_BDUSet(SC7A20_ARGS(uint8_t enable))//块数据更新使能
 {
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
-    SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL4, SC7A20_CTRL4_BDU, enable ? SC7A20_CTRL4_BDU : 0x00U);
+    SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL4, SC7A20_CTRL4_BDU, enable ? SC7A20_CTRL4_BDU : 0x00U);
     SC7A20_Status.ctrl4 = (SC7A20_Status.ctrl4 & ~SC7A20_CTRL4_BDU) | (enable ? SC7A20_CTRL4_BDU : 0x00U);
     SC7A20_MUTEX_GIVE;
     SC7A20_FUNC_END;
@@ -410,7 +438,7 @@ SC7A20_RET SC7A20_HighResSet(SC7A20_ARGS(uint8_t enable))//高精度输出使能
 {
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
-    SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL4, SC7A20_CTRL4_HR, enable ? SC7A20_CTRL4_HR : 0x00U);
+    SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL4, SC7A20_CTRL4_HR, enable ? SC7A20_CTRL4_HR : 0x00U);
     SC7A20_Status.ctrl4 = (SC7A20_Status.ctrl4 & ~SC7A20_CTRL4_HR) | (enable ? SC7A20_CTRL4_HR : 0x00U);
     SC7A20_MUTEX_GIVE;
     SC7A20_FUNC_END;
@@ -421,7 +449,7 @@ SC7A20_RET SC7A20_Int1Config(SC7A20_ARGS(uint8_t cfg))//配置中断1
 {
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
-    SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, SC7A20_CTRG_INT1_CFG, cfg);
+    SC7A20_IO_LOCKED(SC7A20_ByteWrite, SC7A20_CTRG_INT1_CFG, cfg);
     SC7A20_Status.int1_cfg = cfg;
     SC7A20_MUTEX_GIVE;
     SC7A20_FUNC_END;
@@ -431,7 +459,7 @@ SC7A20_RET SC7A20_Int1ThresholdSet(SC7A20_ARGS(uint8_t ths))//设置中断1阈�
 {
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
-    SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, SC7A20_CTRG_INT1_THS, ths & SC7A20_INT_THS_MSK);
+    SC7A20_IO_LOCKED(SC7A20_ByteWrite, SC7A20_CTRG_INT1_THS, ths & SC7A20_INT_THS_MSK);
     SC7A20_MUTEX_GIVE;
     SC7A20_FUNC_END;
 }
@@ -440,7 +468,7 @@ SC7A20_RET SC7A20_Int1DurationSet(SC7A20_ARGS(uint8_t dur))//设置中断1持续
 {
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
-    SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, SC7A20_CTRG_INT1_DURATION, dur & SC7A20_INT_DUR_MSK);
+    SC7A20_IO_LOCKED(SC7A20_ByteWrite, SC7A20_CTRG_INT1_DURATION, dur & SC7A20_INT_DUR_MSK);
     SC7A20_MUTEX_GIVE;
     SC7A20_FUNC_END;
 }
@@ -449,7 +477,7 @@ SC7A20_RET SC7A20_ReadInt1Source(SC7A20_NOARG)//读取中断1状态镜像（读�
 {
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
-    SC7A20_SPAWN_ARGS(SC7A20_ByteRead, SC7A20_STRG_INT1_SOURCE, &SC7A20_Status.int1_source);
+    SC7A20_IO_LOCKED(SC7A20_ByteRead, SC7A20_STRG_INT1_SOURCE, &SC7A20_Status.int1_source);
     SC7A20_MUTEX_GIVE;
     SC7A20_FUNC_END;
 }
@@ -463,7 +491,7 @@ SC7A20_RET SC7A20_Int2Config(SC7A20_ARGS(uint8_t cfg))//配置中断2
 {
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
-    SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, SC7A20_CTRG_INT2_CFG, cfg);
+    SC7A20_IO_LOCKED(SC7A20_ByteWrite, SC7A20_CTRG_INT2_CFG, cfg);
     SC7A20_Status.int2_cfg = cfg;
     SC7A20_MUTEX_GIVE;
     SC7A20_FUNC_END;
@@ -473,7 +501,7 @@ SC7A20_RET SC7A20_Int2ThresholdSet(SC7A20_ARGS(uint8_t ths))//设置中断2阈�
 {
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
-    SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, SC7A20_CTRG_INT2_THS, ths & SC7A20_INT_THS_MSK);
+    SC7A20_IO_LOCKED(SC7A20_ByteWrite, SC7A20_CTRG_INT2_THS, ths & SC7A20_INT_THS_MSK);
     SC7A20_MUTEX_GIVE;
     SC7A20_FUNC_END;
 }
@@ -482,7 +510,7 @@ SC7A20_RET SC7A20_Int2DurationSet(SC7A20_ARGS(uint8_t dur))//设置中断2持续
 {
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
-    SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, SC7A20_CTRG_INT2_DURATION, dur & SC7A20_INT_DUR_MSK);
+    SC7A20_IO_LOCKED(SC7A20_ByteWrite, SC7A20_CTRG_INT2_DURATION, dur & SC7A20_INT_DUR_MSK);
     SC7A20_MUTEX_GIVE;
     SC7A20_FUNC_END;
 }
@@ -491,7 +519,7 @@ SC7A20_RET SC7A20_ReadInt2Source(SC7A20_NOARG)//读取中断2状态镜像
 {
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
-    SC7A20_SPAWN_ARGS(SC7A20_ByteRead, SC7A20_STRG_INT2_SOURCE, &SC7A20_Status.int2_source);
+    SC7A20_IO_LOCKED(SC7A20_ByteRead, SC7A20_STRG_INT2_SOURCE, &SC7A20_Status.int2_source);
     SC7A20_MUTEX_GIVE;
     SC7A20_FUNC_END;
 }
@@ -507,8 +535,8 @@ uint8_t SC7A20_IsInt2Active(void)//中断2激活（IA）
 SC7A20_RET SC7A20_IntRouteSet(SC7A20_ARGS(uint8_t ctrl3, uint8_t ctrl6)) {
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
-    SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, SC7A20_CTRG_CTRL3, ctrl3);
-    SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, SC7A20_CTRG_CTRL6, ctrl6);
+    SC7A20_IO_LOCKED(SC7A20_ByteWrite, SC7A20_CTRG_CTRL3, ctrl3);
+    SC7A20_IO_LOCKED(SC7A20_ByteWrite, SC7A20_CTRG_CTRL6, ctrl6);
     SC7A20_Status.ctrl3 = ctrl3;
     SC7A20_Status.ctrl6 = ctrl6;
     SC7A20_MUTEX_GIVE;
@@ -520,7 +548,7 @@ SC7A20_RET SC7A20_SelfTest(SC7A20_ARGS(uint8_t st))//设置自测试模式
 {
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
-    SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL4, SC7A20_CTRL4_ST_MSK, st & SC7A20_CTRL4_ST_MSK);
+    SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL4, SC7A20_CTRL4_ST_MSK, st & SC7A20_CTRL4_ST_MSK);
     SC7A20_Status.ctrl4 = (SC7A20_Status.ctrl4 & ~SC7A20_CTRL4_ST_MSK) | (st & SC7A20_CTRL4_ST_MSK);
     SC7A20_MUTEX_GIVE;
     SC7A20_FUNC_END;
@@ -543,9 +571,9 @@ SC7A20_RET SC7A20_LowPowerSet(SC7A20_NOARG) {
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
     //① 修正INT极性：H_LACTIVE=1（低有效），无事件时INT1输出高电平
-    SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL6, SC7A20_CTRL6_H_LACTIVE, SC7A20_CTRL6_H_LACTIVE);
+    SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL6, SC7A20_CTRL6_H_LACTIVE, SC7A20_CTRL6_H_LACTIVE);
     //② 进入Power-down模式：ODR=0000（CTRL_REG1=0x00）
-    SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, SC7A20_CTRG_CTRL1, 0x00U);
+    SC7A20_IO_LOCKED(SC7A20_ByteWrite, SC7A20_CTRG_CTRL1, 0x00U);
     SC7A20_Status.ctrl6 = SC7A20_CTRL6_H_LACTIVE;
     SC7A20_Status.ctrl1 = 0x00U;
     SC7A20_MUTEX_GIVE;
@@ -556,28 +584,29 @@ SC7A20_RET SC7A20_LowPowerSet(SC7A20_NOARG) {
 SC7A20_RET SC7A20_Init(SC7A20_NOARG) {
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
+    SC7A20_Status.initialized = 0u;
     //读取WHO_AM_I校验芯片在线（应为0x11）
-    SC7A20_SPAWN_ARGS(SC7A20_ByteRead, SC7A20_STRG_WHO_AM_I, SC7A20_Status.sendbuf);
+    SC7A20_IO_LOCKED(SC7A20_ByteRead, SC7A20_STRG_WHO_AM_I, SC7A20_Status.sendbuf);
     if(SC7A20_Status.sendbuf[0] == SC7A20_WHO_AM_I_VALUE) {
         //① PB10A: configure INT output active-low for PB5 input.
         //   PB10A INT (PB5) is NOT the PB02B shared SW6306/SC7A20 PB8.
         //   Keep PB02B 25Hz/2g/BDU/HR default register initialization.
-        SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL6, SC7A20_CTRL6_H_LACTIVE, SC7A20_CTRL6_H_LACTIVE);
-        SC7A20_Status.ctrl6 = SC7A20_CTRL6_H_LACTIVE;
+        SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL6, SC7A20_CTRL6_H_LACTIVE, SC7A20_CTRL6_H_LACTIVE);
         //控制寄存器4：BDU + 量程 + 高精度（其余位保持默认）
-        SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, SC7A20_CTRG_CTRL4,
+        SC7A20_IO_LOCKED(SC7A20_ByteWrite, SC7A20_CTRG_CTRL4,
             (SC7A20_DEFAULT_BDU ? SC7A20_CTRL4_BDU : 0x00U) |
             (SC7A20_DEFAULT_FULLSCALE & SC7A20_CTRL4_FS_MSK) |
             (SC7A20_DEFAULT_HIGHRES ? SC7A20_CTRL4_HR : 0x00U));
         /* Experimental temperature ADC enable. This register is listed in
          * SC7A20 v0.4 but bit7/6 assignment is not documented there;
          * 0xC0 is LIS2DH-compatible and MUST be verified on this board. */
-        SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, SC7A20_CTRG_TEMP_CFG, 0xC0U);
+        SC7A20_IO_LOCKED(SC7A20_ByteWrite, SC7A20_CTRG_TEMP_CFG, 0xC0U);
         //控制寄存器1：ODR（默认25Hz，应用层5Hz读取姿态）+ 轴使能
-        SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, SC7A20_CTRG_CTRL1,
+        SC7A20_IO_LOCKED(SC7A20_ByteWrite, SC7A20_CTRG_CTRL1,
             (SC7A20_DEFAULT_ODR & SC7A20_CTRL1_ODR_MSK) |
             (SC7A20_DEFAULT_AXIS_EN & (SC7A20_CTRL1_ZEN|SC7A20_CTRL1_YEN|SC7A20_CTRL1_XEN)));
         //保存设置存档
+        SC7A20_Status.ctrl6 = SC7A20_CTRL6_H_LACTIVE;
         SC7A20_Status.ctrl4 = (SC7A20_DEFAULT_BDU ? SC7A20_CTRL4_BDU : 0x00U) | (SC7A20_DEFAULT_FULLSCALE & SC7A20_CTRL4_FS_MSK) | (SC7A20_DEFAULT_HIGHRES ? SC7A20_CTRL4_HR : 0x00U);
         SC7A20_Status.ctrl1 = (SC7A20_DEFAULT_ODR & SC7A20_CTRL1_ODR_MSK) | (SC7A20_DEFAULT_AXIS_EN & (SC7A20_CTRL1_ZEN|SC7A20_CTRL1_YEN|SC7A20_CTRL1_XEN));
 #if SC7A20_USE_FLOAT_API
@@ -585,6 +614,9 @@ SC7A20_RET SC7A20_Init(SC7A20_NOARG) {
 #endif
         SC7A20_Status.motion_state = SC7A20_MOTION_STATE_UNKNOWN;
         SC7A20_Status.initialized = 1;
+        SC7A20_Status.last_error = SC7A20_ERR_NONE;
+    } else {
+        SC7A20_Status.last_error = SC7A20_ERR_NOT_ONLINE;
     }
     SC7A20_MUTEX_GIVE;
     SC7A20_FUNC_END;
@@ -607,26 +639,26 @@ uint8_t SC7A20_GetLastError(void)//读取最近一次配置/使能操作错误�
  * 阈值与时长在配置时写入THS/DUR寄存器，事件逻辑在Enable时写入。
  */
 SC7A20_RET SC7A20_FreefallConfig(SC7A20_ARGS(const sc7a20_freefall_config_t *cfg)) {
-    uint8_t line;
+    SC7A20_PERSISTENT uint8_t line;
     SC7A20_FUNC_BEGIN;
     if(cfg == 0 || (cfg->int_line != 1U && cfg->int_line != 2U)) {
         SC7A20_Status.last_error = SC7A20_ERR_BAD_PARAM;
     }
     else {
         line = cfg->int_line;
-        SC7A20_Status.freefall_cfg = *cfg;   //存档（后续Enable/GetStatus使用）
         SC7A20_MUTEX_TAKE;
         /* 阈值：mg → THS（按当前量程LSB，SC7A20_VERIFIED） */
-        SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, (line == 2U) ? SC7A20_CTRG_INT2_THS : SC7A20_CTRG_INT1_THS,
+        SC7A20_IO_LOCKED(SC7A20_ByteWrite, (line == 2U) ? SC7A20_CTRG_INT2_THS : SC7A20_CTRG_INT1_THS,
             sc7a20_ths_from_mg(cfg->threshold_mg));
         /* 时长：ms → DURATION（以当前ODR为时钟，SC7A20_VERIFIED） */
-        SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, (line == 2U) ? SC7A20_CTRG_INT2_DURATION : SC7A20_CTRG_INT1_DURATION,
+        SC7A20_IO_LOCKED(SC7A20_ByteWrite, (line == 2U) ? SC7A20_CTRG_INT2_DURATION : SC7A20_CTRG_INT1_DURATION,
             sc7a20_duration_from_ms(cfg->duration_ms));
         /* 锁存：CTRL5.LIR_INT1/2（SC7A20_VERIFIED位定义） */
-        SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL5,
+        SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL5,
             (line == 2U) ? SC7A20_CTRL5_LIR_INT2 : SC7A20_CTRL5_LIR_INT1,
             (cfg->latch) ? ((line == 2U) ? SC7A20_CTRL5_LIR_INT2 : SC7A20_CTRL5_LIR_INT1) : 0x00U);
         SC7A20_MUTEX_GIVE;
+        SC7A20_Status.freefall_cfg = *cfg;   //存档（后续Enable/GetStatus使用）
         SC7A20_Status.last_error = SC7A20_ERR_NONE;
     }
     SC7A20_FUNC_END;
@@ -638,7 +670,7 @@ SC7A20_RET SC7A20_FreefallConfig(SC7A20_ARGS(const sc7a20_freefall_config_t *cfg
  * 若目标INT线已被其他功能占用（owner机制），返回ERR_INT_BUSY且不写入。
  */
 SC7A20_RET SC7A20_FreefallEnable(SC7A20_NOARG) {
-    uint8_t line;
+    SC7A20_PERSISTENT uint8_t line;
     SC7A20_FUNC_BEGIN;
     line = SC7A20_Status.freefall_cfg.int_line;
     if(SC7A20_Status.initialized == 0) {
@@ -647,22 +679,23 @@ SC7A20_RET SC7A20_FreefallEnable(SC7A20_NOARG) {
     else if(line == 0U) {
         SC7A20_Status.last_error = SC7A20_ERR_BAD_PARAM;   //未先FreefallConfig
     }
-    else if(sc7a20_int_claim(line, SC7A20_INT_OWNER_FREEFALL) == 0) {
+    else if(sc7a20_int_available(line, SC7A20_INT_OWNER_FREEFALL) == 0) {
         /* 占用失败，错误码已设置 */
     }
     else {
         SC7A20_MUTEX_TAKE;
-        SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, (line == 2U) ? SC7A20_CTRG_INT2_CFG : SC7A20_CTRG_INT1_CFG,
+        SC7A20_IO_LOCKED(SC7A20_ByteWrite, (line == 2U) ? SC7A20_CTRG_INT2_CFG : SC7A20_CTRG_INT1_CFG,
             SC7A20_INTMODE_AND | SC7A20_INT_CFG_ZLIE | SC7A20_INT_CFG_YLIE | SC7A20_INT_CFG_XLIE);
         /* 路由：AOI1 → INT1（CTRL3.I1_AOI1）或 INT2（CTRL6.I2_INT1，COMPAT_INFERRED） */
         if(line == 2U)
-            SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL6, SC7A20_CTRL6_I2_INT1, SC7A20_CTRL6_I2_INT1);
+            SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL6, SC7A20_CTRL6_I2_INT1, SC7A20_CTRL6_I2_INT1);
         else
-            SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL3, SC7A20_CTRL3_I1_AOI1, SC7A20_CTRL3_I1_AOI1);
+            SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL3, SC7A20_CTRL3_I1_AOI1, SC7A20_CTRL3_I1_AOI1);
         /* 读取INT_SRC清除可能残留事件（初始化时序：配置后清理） */
-        SC7A20_SPAWN_ARGS(SC7A20_ByteRead, (line == 2U) ? SC7A20_STRG_INT2_SOURCE : SC7A20_STRG_INT1_SOURCE,
+        SC7A20_IO_LOCKED(SC7A20_ByteRead, (line == 2U) ? SC7A20_STRG_INT2_SOURCE : SC7A20_STRG_INT1_SOURCE,
             (line == 2U) ? (volatile uint8_t *)&SC7A20_Status.int2_source : (volatile uint8_t *)&SC7A20_Status.int1_source);
         SC7A20_MUTEX_GIVE;
+        *sc7a20_owner_slot(line) = SC7A20_INT_OWNER_FREEFALL;
         SC7A20_Status.ff_enabled = 1;
         SC7A20_Status.last_error = SC7A20_ERR_NONE;
     }
@@ -671,16 +704,16 @@ SC7A20_RET SC7A20_FreefallEnable(SC7A20_NOARG) {
 
 /*禁止自由跌落检测（清事件源、断开路由、释放INT占用） */
 SC7A20_RET SC7A20_FreefallDisable(SC7A20_NOARG) {
-    uint8_t line;
+    SC7A20_PERSISTENT uint8_t line;
     SC7A20_FUNC_BEGIN;
     line = SC7A20_Status.freefall_cfg.int_line;
     if(line != 0U) {
         SC7A20_MUTEX_TAKE;
-        SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, (line == 2U) ? SC7A20_CTRG_INT2_CFG : SC7A20_CTRG_INT1_CFG, 0x00U);
+        SC7A20_IO_LOCKED(SC7A20_ByteWrite, (line == 2U) ? SC7A20_CTRG_INT2_CFG : SC7A20_CTRG_INT1_CFG, 0x00U);
         if(line == 2U)
-            SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL6, SC7A20_CTRL6_I2_INT1, 0x00U);
+            SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL6, SC7A20_CTRL6_I2_INT1, 0x00U);
         else
-            SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL3, SC7A20_CTRL3_I1_AOI1, 0x00U);
+            SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL3, SC7A20_CTRL3_I1_AOI1, 0x00U);
         SC7A20_MUTEX_GIVE;
         sc7a20_int_release(line, SC7A20_INT_OWNER_FREEFALL);
     }
@@ -690,20 +723,20 @@ SC7A20_RET SC7A20_FreefallDisable(SC7A20_NOARG) {
 
 /*读取自由跌落事件状态（同步读INT_SRC；锁存模式读后自动清除） */
 SC7A20_RET SC7A20_FreefallGetStatus(SC7A20_ARGS(uint8_t *active)) {
-    uint8_t line;
-    uint8_t *src;
+    SC7A20_PERSISTENT uint8_t line;
+    SC7A20_PERSISTENT uint8_t *src;
     SC7A20_FUNC_BEGIN;
     line = SC7A20_Status.freefall_cfg.int_line;
     src  = (line == 2U) ? &SC7A20_Status.int2_source : &SC7A20_Status.int1_source;
     if(line != 0U) {
         SC7A20_MUTEX_TAKE;
-        SC7A20_SPAWN_ARGS(SC7A20_ByteRead, (line == 2U) ? SC7A20_STRG_INT2_SOURCE : SC7A20_STRG_INT1_SOURCE,
+        SC7A20_IO_LOCKED(SC7A20_ByteRead, (line == 2U) ? SC7A20_STRG_INT2_SOURCE : SC7A20_STRG_INT1_SOURCE,
             (volatile uint8_t *)src);
         SC7A20_MUTEX_GIVE;
     }
     if(active != 0)
     *active = (uint8_t)((*src & SC7A20_INT_SRC_IA) ? 1U : 0U);
-        SC7A20_FUNC_END;
+    SC7A20_FUNC_END;
 }
 
 /******************************运动/静止检测区*********************************/
@@ -740,13 +773,14 @@ SC7A20_RET SC7A20_MotionEnable(SC7A20_NOARG) {
     }
     else {
         SC7A20_MUTEX_TAKE;
-        SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, SC7A20_CTRG_ACT_THS,
+        SC7A20_IO_LOCKED(SC7A20_ByteWrite, SC7A20_CTRG_ACT_THS,
             sc7a20_ths_from_mg(SC7A20_Status.motion_cfg.motion_threshold_mg) & SC7A20_ACT_THS_MSK);
-        SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, SC7A20_CTRG_ACT_DURATION,
+        SC7A20_IO_LOCKED(SC7A20_ByteWrite, SC7A20_CTRG_ACT_DURATION,
             sc7a20_duration_from_ms((uint16_t)SC7A20_Status.motion_cfg.stillness_time_ms) & SC7A20_ACT_DUR_MSK);
         if(SC7A20_Status.motion_cfg.route_to_int2) {
-            if(sc7a20_int_claim(2U, SC7A20_INT_OWNER_MOTION) != 0) {
-                SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL6, SC7A20_CTRL6_I2_INT2, SC7A20_CTRL6_I2_INT2);
+            if(sc7a20_int_available(2U, SC7A20_INT_OWNER_MOTION) != 0) {
+                SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL6, SC7A20_CTRL6_I2_INT2, SC7A20_CTRL6_I2_INT2);
+                *sc7a20_owner_slot(2U) = SC7A20_INT_OWNER_MOTION;
             }
         }
         SC7A20_MUTEX_GIVE;
@@ -764,9 +798,9 @@ SC7A20_RET SC7A20_MotionDisable(SC7A20_NOARG) {
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
     /* ACT_THS/ACT_DUR写0关闭（COMPAT_INFERRED: LIS2DH12语义） */
-    SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, SC7A20_CTRG_ACT_THS, 0x00U);
-    SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, SC7A20_CTRG_ACT_DURATION, 0x00U);
-    SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL6, SC7A20_CTRL6_I2_INT2, 0x00U);
+    SC7A20_IO_LOCKED(SC7A20_ByteWrite, SC7A20_CTRG_ACT_THS, 0x00U);
+    SC7A20_IO_LOCKED(SC7A20_ByteWrite, SC7A20_CTRG_ACT_DURATION, 0x00U);
+    SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL6, SC7A20_CTRL6_I2_INT2, 0x00U);
     SC7A20_MUTEX_GIVE;
     sc7a20_int_release(2U, SC7A20_INT_OWNER_MOTION);
     SC7A20_Status.motion_enabled = 0;
@@ -815,23 +849,23 @@ uint8_t SC7A20_MotionGetState(void) {
  * 阈值/时长/锁存/输出线在配置时写入THS/DUR/LIR寄存器，事件逻辑在Enable时写入。
  */
 SC7A20_RET SC7A20_VibrationEventConfig(SC7A20_ARGS(const sc7a20_vibration_event_config_t *cfg)) {
-    uint8_t line;
+    SC7A20_PERSISTENT uint8_t line;
     SC7A20_FUNC_BEGIN;
     if(cfg == 0 || (cfg->int_line != 1U && cfg->int_line != 2U) || cfg->axis_mask == 0U) {
         SC7A20_Status.last_error = SC7A20_ERR_BAD_PARAM;
     }
     else {
         line = cfg->int_line;
-        SC7A20_Status.vibration_cfg = *cfg;
         SC7A20_MUTEX_TAKE;
-        SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, (line == 2U) ? SC7A20_CTRG_INT2_THS : SC7A20_CTRG_INT1_THS,
+        SC7A20_IO_LOCKED(SC7A20_ByteWrite, (line == 2U) ? SC7A20_CTRG_INT2_THS : SC7A20_CTRG_INT1_THS,
             sc7a20_ths_from_mg(cfg->threshold_mg));
-        SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, (line == 2U) ? SC7A20_CTRG_INT2_DURATION : SC7A20_CTRG_INT1_DURATION,
+        SC7A20_IO_LOCKED(SC7A20_ByteWrite, (line == 2U) ? SC7A20_CTRG_INT2_DURATION : SC7A20_CTRG_INT1_DURATION,
             sc7a20_duration_from_ms(cfg->duration_ms));
-        SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL5,
+        SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL5,
             (line == 2U) ? SC7A20_CTRL5_LIR_INT2 : SC7A20_CTRL5_LIR_INT1,
             (cfg->latch) ? ((line == 2U) ? SC7A20_CTRL5_LIR_INT2 : SC7A20_CTRL5_LIR_INT1) : 0x00U);
         SC7A20_MUTEX_GIVE;
+        SC7A20_Status.vibration_cfg = *cfg;
         SC7A20_Status.last_error = SC7A20_ERR_NONE;
     }
     SC7A20_FUNC_END;
@@ -844,7 +878,8 @@ SC7A20_RET SC7A20_VibrationEventConfig(SC7A20_ARGS(const sc7a20_vibration_event_
  *  - bring-up参数建议：threshold 200~300mg、duration=0、XYZ OR，需实测调整
  */
 SC7A20_RET SC7A20_VibrationEventEnable(SC7A20_NOARG) {
-    uint8_t line, cfg, axis;
+    SC7A20_PERSISTENT uint8_t line;
+    uint8_t cfg, axis;
     SC7A20_FUNC_BEGIN;
     line = SC7A20_Status.vibration_cfg.int_line;
     if(SC7A20_Status.initialized == 0) {
@@ -853,12 +888,12 @@ SC7A20_RET SC7A20_VibrationEventEnable(SC7A20_NOARG) {
     else if(line == 0U || SC7A20_Status.vibration_cfg.axis_mask == 0U) {
         SC7A20_Status.last_error = SC7A20_ERR_BAD_PARAM;   //未先VibrationEventConfig
     }
-    else if(sc7a20_int_claim(line, SC7A20_INT_OWNER_VIBRATION) == 0) {
+    else if(sc7a20_int_available(line, SC7A20_INT_OWNER_VIBRATION) == 0) {
         /* 占用失败，错误码已设置 */
     }
     else {
         SC7A20_MUTEX_TAKE;
-        SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL2,
+        SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL2,
             (line == 2U) ? SC7A20_CTRL2_HPIS2 : SC7A20_CTRL2_HPIS1,
             (line == 2U) ? SC7A20_CTRL2_HPIS2 : SC7A20_CTRL2_HPIS1);
         /* INT_CFG：OR模式 + 各轴高事件 */
@@ -867,16 +902,17 @@ SC7A20_RET SC7A20_VibrationEventEnable(SC7A20_NOARG) {
         if(axis & SC7A20_AXIS_X) cfg |= SC7A20_INT_CFG_XHIE;
         if(axis & SC7A20_AXIS_Y) cfg |= SC7A20_INT_CFG_YHIE;
         if(axis & SC7A20_AXIS_Z) cfg |= SC7A20_INT_CFG_ZHIE;
-        SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, (line == 2U) ? SC7A20_CTRG_INT2_CFG : SC7A20_CTRG_INT1_CFG, cfg);
+        SC7A20_IO_LOCKED(SC7A20_ByteWrite, (line == 2U) ? SC7A20_CTRG_INT2_CFG : SC7A20_CTRG_INT1_CFG, cfg);
         /* 路由：AOI1 → INT1/INT2（与自由跌落共用AOI1路由位，owner机制防冲突） */
         if(line == 2U)
-            SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL6, SC7A20_CTRL6_I2_INT1, SC7A20_CTRL6_I2_INT1);
+            SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL6, SC7A20_CTRL6_I2_INT1, SC7A20_CTRL6_I2_INT1);
         else
-            SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL3, SC7A20_CTRL3_I1_AOI1, SC7A20_CTRL3_I1_AOI1);
+            SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL3, SC7A20_CTRL3_I1_AOI1, SC7A20_CTRL3_I1_AOI1);
         /* 清残留事件 */
-        SC7A20_SPAWN_ARGS(SC7A20_ByteRead, (line == 2U) ? SC7A20_STRG_INT2_SOURCE : SC7A20_STRG_INT1_SOURCE,
+        SC7A20_IO_LOCKED(SC7A20_ByteRead, (line == 2U) ? SC7A20_STRG_INT2_SOURCE : SC7A20_STRG_INT1_SOURCE,
             (line == 2U) ? (volatile uint8_t *)&SC7A20_Status.int2_source : (volatile uint8_t *)&SC7A20_Status.int1_source);
         SC7A20_MUTEX_GIVE;
+        *sc7a20_owner_slot(line) = SC7A20_INT_OWNER_VIBRATION;
         SC7A20_Status.vib_evt_enabled = 1;
         SC7A20_Status.last_error = SC7A20_ERR_NONE;
     }
@@ -885,18 +921,18 @@ SC7A20_RET SC7A20_VibrationEventEnable(SC7A20_NOARG) {
 
 /*禁止硬件振动事件（关HPF、清事件源、断开路由、释放占用） */
 SC7A20_RET SC7A20_VibrationEventDisable(SC7A20_NOARG) {
-    uint8_t line;
+    SC7A20_PERSISTENT uint8_t line;
     SC7A20_FUNC_BEGIN;
     line = SC7A20_Status.vibration_cfg.int_line;
     if(line != 0U) {
         SC7A20_MUTEX_TAKE;
-        SC7A20_SPAWN_ARGS(SC7A20_ByteWrite, (line == 2U) ? SC7A20_CTRG_INT2_CFG : SC7A20_CTRG_INT1_CFG, 0x00U);
-        SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL2,
+        SC7A20_IO_LOCKED(SC7A20_ByteWrite, (line == 2U) ? SC7A20_CTRG_INT2_CFG : SC7A20_CTRG_INT1_CFG, 0x00U);
+        SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL2,
             (line == 2U) ? SC7A20_CTRL2_HPIS2 : SC7A20_CTRL2_HPIS1, 0x00U);
         if(line == 2U)
-            SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL6, SC7A20_CTRL6_I2_INT1, 0x00U);
+            SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL6, SC7A20_CTRL6_I2_INT1, 0x00U);
         else
-            SC7A20_SPAWN_ARGS(SC7A20_ByteModify, SC7A20_CTRG_CTRL3, SC7A20_CTRL3_I1_AOI1, 0x00U);
+            SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL3, SC7A20_CTRL3_I1_AOI1, 0x00U);
         SC7A20_MUTEX_GIVE;
         sc7a20_int_release(line, SC7A20_INT_OWNER_VIBRATION);
     }
@@ -906,20 +942,20 @@ SC7A20_RET SC7A20_VibrationEventDisable(SC7A20_NOARG) {
 
 /*读取硬件振动事件状态（同步读INT_SRC；锁存模式读后自动清除） */
 SC7A20_RET SC7A20_VibrationEventGetStatus(SC7A20_ARGS(uint8_t *active)) {
-    uint8_t line;
-    uint8_t *src;
+    SC7A20_PERSISTENT uint8_t line;
+    SC7A20_PERSISTENT uint8_t *src;
     SC7A20_FUNC_BEGIN;
     line = SC7A20_Status.vibration_cfg.int_line;
     src  = (line == 2U) ? &SC7A20_Status.int2_source : &SC7A20_Status.int1_source;
     if(line != 0U) {
         SC7A20_MUTEX_TAKE;
-        SC7A20_SPAWN_ARGS(SC7A20_ByteRead, (line == 2U) ? SC7A20_STRG_INT2_SOURCE : SC7A20_STRG_INT1_SOURCE,
+        SC7A20_IO_LOCKED(SC7A20_ByteRead, (line == 2U) ? SC7A20_STRG_INT2_SOURCE : SC7A20_STRG_INT1_SOURCE,
             (volatile uint8_t *)src);
         SC7A20_MUTEX_GIVE;
     }
     if(active != 0)
     *active = (uint8_t)((*src & SC7A20_INT_SRC_IA) ? 1U : 0U);
-        SC7A20_FUNC_END;
+    SC7A20_FUNC_END;
 }
 
 #if SC7A20_USE_FLOAT_API
@@ -985,9 +1021,9 @@ SC7A20_RET SC7A20_RegisterDumpRead(SC7A20_ARGS(uint8_t *out, uint16_t len)) {
     SC7A20_FUNC_BEGIN;
     SC7A20_MUTEX_TAKE;
     if(out != 0 && len >= 33U) {
-        SC7A20_SPAWN_ARGS(SC7A20_ByteRead, SC7A20_STRG_WHO_AM_I, out);            //0x0F
+        SC7A20_IO_LOCKED(SC7A20_ByteRead, SC7A20_STRG_WHO_AM_I, out);            //0x0F
         /* 0x20|0x80=0xA0：MSB=1 触发连续读 0x20~0x3F */
-        SC7A20_SPAWN_ARGS(SC7A20_BytesRead, SC7A20_CTRG_CTRL1 | 0x80U, out + 1, 32);       //0x20~0x3F
+        SC7A20_IO_LOCKED(SC7A20_BytesRead, SC7A20_CTRG_CTRL1 | 0x80U, out + 1, 32);       //0x20~0x3F
     }
     SC7A20_MUTEX_GIVE;
     SC7A20_FUNC_END;
@@ -1019,6 +1055,11 @@ SC7A20_RET SC7A20_RegisterDump(SC7A20_NOARG) {
 
 /* Algorithm/PM actor owns the I2C completion flag and data buffer;
  * BSP only starts an IRQ transaction. Both return 0 if bus busy. */
+char SC7A20_TransferPT(struct pt *pt, uint8_t read, uint8_t reg, uint8_t *data,
+                       uint16_t count, volatile uint8_t *flag) {
+    return I2C_RegTransferPT(pt, SC7A20_I2C_ADDR, read, reg, data, count, flag);
+}
+
 uint8_t SC7A20_AsyncRead(uint8_t reg,uint8_t *buffer,uint16_t count,uint8_t *flag) {
     return ASYNC_I2C_Receive(SC7A20_I2C_ADDR,reg,buffer,count,0u,flag);
 }

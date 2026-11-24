@@ -2,10 +2,12 @@
 #include "bmp180_algo.h"
 #include "bmp180.h"
 #include "sensor_common.h"
+#include "pt.h"
 #define BMP_SAMPLE_MS 500u
 #define BMP_RETRY_MS 2000u
 
 static uint8_t s_stage,s_waiting,s_paused,s_buffer[22];
+static struct pt s_transfer_pt;
 static volatile uint8_t s_flag;
 static uint32_t s_due_at,s_conversion_at;
 static int s_temp10,s_pressure_hpa10;
@@ -13,19 +15,13 @@ static ui_item_t s_items[2];
 static ui_data_t s_data[2];
 static ui_element_t s_elements[2];
 
-static uint8_t bmp_transfer(uint8_t read,uint8_t reg,uint8_t count) {
-    if(!s_waiting) {
-        if(!(read?BMP180_AsyncRead(reg,s_buffer,count,(uint8_t *)&s_flag):
-            BMP180_AsyncWrite(reg,s_buffer,count,(uint8_t *)&s_flag)))return 0u;
-        s_waiting=1u;
-        return 0u;
-    }
-    if(s_flag==I2C_ASYNC_PENDING)return 0u;
-    s_waiting=0u;
-    return s_flag==I2C_ASYNC_DONE?1u:2u;
+static uint8_t bmp_transfer(uint8_t read, uint8_t reg, uint8_t count) {
+    s_waiting = (uint8_t)PT_SCHEDULE(BMP180_TransferPT(&s_transfer_pt, read, reg, s_buffer, count, &s_flag));
+    return s_waiting ? 0u : s_flag;
 }
 
 static void bmp_offline(void) {
+    BMP180_Invalidate();
     s_stage=0u;
     s_due_at=Millis()+BMP_RETRY_MS;
 }
@@ -94,6 +90,7 @@ static const pm_device_node_t s_node={
 };
 void BMP180Algo_Init(void) {
     s_stage=0u;s_waiting=0u;s_paused=0u;s_due_at=Millis();
+    PT_INIT(&s_transfer_pt);
     (void)pm_device_register(&s_node);
 }
 void BMP180Algo_AddStatisticsItems(ui_page_t *page) {
