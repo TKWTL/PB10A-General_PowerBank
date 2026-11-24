@@ -5,15 +5,19 @@
 #include "bmp180.h"
 #include "i2c.h"
 #include "millis.h"
+#if BMP180_USE_FLOAT_API
 #include <math.h>
+#endif
 static uint8_t s_ok,s_oss=3u,s_result;
 static int16_t ac1,ac2,ac3,b1,b2,mb,mc,md;
 static uint16_t ac4,ac5,ac6;
 static int32_t b5;
-float BMP180_AirTemprature;
 int32_t BMP180_AirPressure;
+#if BMP180_USE_FLOAT_API
+float BMP180_AirTemprature;
 float BMP180_AirPressure_kPa;
 float BMP180_Altitude;
+#endif
 static uint16_t be16(const uint8_t *p)
 { return (uint16_t)(((uint16_t)p[0]<<8)|p[1]); }
 static int16_t s16(const uint8_t *p){return (int16_t)be16(p);}
@@ -50,7 +54,9 @@ void BMP180_GetTemprature(void) {
     if(den==0){s_result=I2C_ERROR;return;}
     x2=((int32_t)mc*2048)/den;
     b5=x1+x2;
+#if BMP180_USE_FLOAT_API
     BMP180_AirTemprature=(float)((b5+8)>>4)*0.1f;
+#endif
 }
 
 void BMP180_GetPressure(void) {
@@ -79,12 +85,14 @@ void BMP180_GetPressure(void) {
     BMP180_AirPressure=p+((x1+x2+3791)>>4);
 }
 
+#if BMP180_USE_FLOAT_API
 void BMP180_CalcAltitude(void) {
     const float p=(float)BMP180_AirPressure;
     if(p<=0.0f)return;
     BMP180_AirPressure_kPa=p*0.001f;
     BMP180_Altitude=44330.0f*(1.0f-powf(p/101325.0f,0.1903f));
 }
+#endif
 
 uint8_t BMP180_ReadSample(void) {
     if(!s_ok || I2C_TransactionBegin()!=I2C_OK)return I2C_ERROR;
@@ -130,7 +138,9 @@ uint8_t BMP180_ApplyTemperature(const uint8_t *d,int *temp10) {
     x2=((int32_t)mc*2048)/den;
     b5=x1+x2;
     if(temp10)*temp10=(int)((b5+8)>>4);
+#if BMP180_USE_FLOAT_API
     BMP180_AirTemprature=(float)((b5+8)>>4)*0.1f;
+#endif
     return 1u;
 }
 uint8_t BMP180_ApplyPressure(const uint8_t *d,int *pressure_hpa10) {
@@ -154,7 +164,9 @@ uint8_t BMP180_ApplyPressure(const uint8_t *d,int *pressure_hpa10) {
     x1=(x1*3038)>>16;
     x2=(-7357*p)>>16;
     BMP180_AirPressure=p+((x1+x2+3791)>>4);
+#if BMP180_USE_FLOAT_API
     BMP180_AirPressure_kPa=(float)BMP180_AirPressure*0.001f;
+#endif
     if(pressure_hpa10)*pressure_hpa10=(int)(BMP180_AirPressure/10);
     return 1u;
 }

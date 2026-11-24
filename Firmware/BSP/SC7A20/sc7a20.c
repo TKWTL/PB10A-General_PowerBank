@@ -1,6 +1,8 @@
 #include "sc7a20.h"
 #include "i2c.h"
+#if SC7A20_USE_FLOAT_API
 #include <math.h>
+#endif
 
 /* 寄存器Dump打印依赖工程日志接口（仅SC7A20_RegisterDump使用） */
 #define USART_Printf(...) ((void)0) /* PB10A has no UART logger yet */
@@ -8,11 +10,13 @@
 /* ========================================================================== */
 /* 内部可调参数                                                               */
 /* ========================================================================== */
+#if SC7A20_USE_FLOAT_API
 #ifndef SC7A20_VIB_WINDOW_MS
 #define SC7A20_VIB_WINDOW_MS          1000U          //软件振动RMS窗口长度（ms），按当前ODR换算样本数
 #endif
 #ifndef SC7A20_VIB_ALPHA
 #define SC7A20_VIB_ALPHA              0.05f          //低频/DC分量估计的EMA系数（越大跟随越快）
+#endif
 #endif
 
 /* ========================================================================== */
@@ -26,6 +30,7 @@ static struct SC7A20_StatusTypedef SC7A20_Status;//SC7A20状态全局变量
 static int16_t s_x_zero_raw = 0;
 static int16_t s_y_zero_raw = 0;
 static int16_t s_z_zero_raw = 0;
+#if SC7A20_USE_FLOAT_API
 static float s_x_slope_mg_per_lsb = 1.0f;
 static float s_y_slope_mg_per_lsb = 1.0f;
 static float s_z_slope_mg_per_lsb = 1.0f;
@@ -35,6 +40,11 @@ static float s_z_slope_mg_per_lsb = 1.0f;
  * 普通(10bit) 模式：COMPAT_INFERRED（取自LIS2DH12：4/8/16/48），SC7A20资料未给出，TODO_HW_VERIFY */
 static const float sc7a20_sens_hr_mg[4]      = {1.0f, 2.0f, 4.0f, 8.0f};
 static const float sc7a20_sens_normal_mg[4]  = {4.0f, 8.0f, 16.0f, 48.0f};
+#else
+static uint16_t s_x_slope_q14 = SC7A20_CAL_Q14_ONE;
+static uint16_t s_y_slope_q14 = SC7A20_CAL_Q14_ONE;
+static uint16_t s_z_slope_q14 = SC7A20_CAL_Q14_ONE;
+#endif
 
 /* 当前量程对应的阈值LSB（单位：mg/LSB，用于THS换算）
  * SC7A20_VERIFIED（数据手册：INT1_THS 1LSB=16mg@2G / 32@4G / 64@8G / 128@16G） */
@@ -58,6 +68,7 @@ static int16_t sc7a20_raw_to_axis(int16_t raw, uint8_t hr) {
     return (hr != 0) ? (int16_t)(raw >> 4) : (int16_t)(raw >> 6);
 }
 
+#if SC7A20_USE_FLOAT_API
 /* 当前量程与HR模式对应的灵敏度（mg/digit） */
 static float sc7a20_sensitivity_mg(void) {
     uint8_t fs = (uint8_t)((SC7A20_Status.ctrl4 & SC7A20_CTRL4_FS_MSK) >> 4) & 0x03U;
@@ -65,6 +76,7 @@ static float sc7a20_sensitivity_mg(void) {
         return sc7a20_sens_hr_mg[fs];                 //SC7A20_VERIFIED
     return sc7a20_sens_normal_mg[fs];                 //COMPAT_INFERRED
 }
+#endif
 
 /* mg → THS寄存器值（按当前量程LSB换算，限幅0~127） */
 static uint8_t sc7a20_ths_from_mg(uint16_t mg) {
@@ -190,6 +202,7 @@ void SC7A20_ReadRawCode(int16_t *x, int16_t *y, int16_t *z) {
     if (z) *z = sc7a20_raw_to_axis(SC7A20_Status.z, hr);
 }
 
+#if SC7A20_USE_FLOAT_API
 /*读取X轴加速度（单位：mg）
  /原始数据左对齐补码 → 右对齐到有效位 → int16零点修正 → float斜率
  */
@@ -233,6 +246,47 @@ void SC7A20_SetZCalibration(int16_t zero_raw, float slope_mg_per_lsb) {
         s_z_slope_mg_per_lsb = slope_mg_per_lsb;
     }
 }
+#endif
+
+void SC7A20_SetCalibrationQ14(const int16_t zero[3], const uint16_t slope[3]) {
+#if SC7A20_USE_FLOAT_API
+    SC7A20_SetXCalibration(zero[0], (float)slope[0] / SC7A20_CAL_Q14_ONE);
+    SC7A20_SetYCalibration(zero[1], (float)slope[1] / SC7A20_CAL_Q14_ONE);
+    SC7A20_SetZCalibration(zero[2], (float)slope[2] / SC7A20_CAL_Q14_ONE);
+#else
+    s_x_zero_raw = zero[0];
+    s_y_zero_raw = zero[1];
+    s_z_zero_raw = zero[2];
+    s_x_slope_q14 = slope[0];
+    s_y_slope_q14 = slope[1];
+    s_z_slope_q14 = slope[2];
+#endif
+}
+
+#if !SC7A20_USE_FLOAT_API
+static int16_t sc7a20_calibrated_mg(int16_t raw, int16_t zero, uint16_t slope) {
+    int32_t delta = (int32_t)raw - zero;
+    /* A 12-bit raw code minus any int16_t offset fits this unsigned product.
+     * Divide the magnitude first to truncate negative samples toward zero. */
+    uint32_t magnitude = (uint32_t)(delta < 0 ? -delta : delta);
+    int32_t mg = (int32_t)(magnitude * slope / SC7A20_CAL_Q14_ONE);
+    return (int16_t)(delta < 0 ? -mg : mg);
+}
+#endif
+
+void SC7A20_ReadCalibratedMg(int16_t mg[3]) {
+#if SC7A20_USE_FLOAT_API
+    mg[0] = (int16_t)SC7A20_ReadX_mg();
+    mg[1] = (int16_t)SC7A20_ReadY_mg();
+    mg[2] = (int16_t)SC7A20_ReadZ_mg();
+#else
+    int16_t x, y, z;
+    SC7A20_ReadRawCode(&x, &y, &z);
+    mg[0] = sc7a20_calibrated_mg(x, s_x_zero_raw, s_x_slope_q14);
+    mg[1] = sc7a20_calibrated_mg(y, s_y_zero_raw, s_y_slope_q14);
+    mg[2] = sc7a20_calibrated_mg(z, s_z_zero_raw, s_z_slope_q14);
+#endif
+}
 
 /******************************温度操作区**************************************/
 /*读取温度原始数据
@@ -259,6 +313,7 @@ int16_t SC7A20_ReadTempRaw(void) {
     return SC7A20_Status.temp;
 }
 
+#if SC7A20_USE_FLOAT_API
 float SC7A20_ReadTemp(void) {
     /* LIS2DH12-compatible slope: signed 8-bit temperature /256 raw/°C.
      * SC7A20 measured 0x1820..0x1940 at 27°C. The LIS2DH12 +25°C
@@ -267,6 +322,7 @@ float SC7A20_ReadTemp(void) {
     return 27.0f + (float)((int32_t)SC7A20_ReadTempRaw() - 0x18B0L) *
     (1.0f / 256.0f);
 }
+#endif
 
 /******************************状态操作区**************************************/
 SC7A20_RET SC7A20_StatusLoad(SC7A20_NOARG)//读取状态寄存器镜像（0x27）
@@ -524,8 +580,9 @@ SC7A20_RET SC7A20_Init(SC7A20_NOARG) {
         //保存设置存档
         SC7A20_Status.ctrl4 = (SC7A20_DEFAULT_BDU ? SC7A20_CTRL4_BDU : 0x00U) | (SC7A20_DEFAULT_FULLSCALE & SC7A20_CTRL4_FS_MSK) | (SC7A20_DEFAULT_HIGHRES ? SC7A20_CTRL4_HR : 0x00U);
         SC7A20_Status.ctrl1 = (SC7A20_DEFAULT_ODR & SC7A20_CTRL1_ODR_MSK) | (SC7A20_DEFAULT_AXIS_EN & (SC7A20_CTRL1_ZEN|SC7A20_CTRL1_YEN|SC7A20_CTRL1_XEN));
-        /* 初始化软件振动窗口（按当前ODR换算）与运动状态 */
+#if SC7A20_USE_FLOAT_API
         SC7A20_SPAWN_NOARG(SC7A20_VibrationReset);
+#endif
         SC7A20_Status.motion_state = SC7A20_MOTION_STATE_UNKNOWN;
         SC7A20_Status.initialized = 1;
     }
@@ -717,6 +774,7 @@ SC7A20_RET SC7A20_MotionDisable(SC7A20_NOARG) {
     SC7A20_FUNC_END;
 }
 
+#if SC7A20_USE_FLOAT_API
 /*用最近一次加速度样本更新运动状态（软件判定，按ODR周期调用）
  * 判据：总幅值偏离1g的绝对值（|sqrt(x²+y²+z²) - 1000|mg）超过阈值 → 运动；
  *       持续低于阈值达到stillness_time_ms → 静止。
@@ -745,6 +803,7 @@ SC7A20_RET SC7A20_MotionUpdate(SC7A20_NOARG) {
     }
     SC7A20_FUNC_END;
 }
+#endif
 
 /*查询运动状态（sc7a20_motion_state_t，由MotionUpdate维护） */
 uint8_t SC7A20_MotionGetState(void) {
@@ -863,6 +922,7 @@ SC7A20_RET SC7A20_VibrationEventGetStatus(SC7A20_ARGS(uint8_t *active)) {
         SC7A20_FUNC_END;
 }
 
+#if SC7A20_USE_FLOAT_API
 /******************************软件振动强度区**********************************/
 /*用最近一次加速度样本累计振动窗口（按ODR周期调用）
  * 算法：EMA低通估计低频/DC分量（重力/慢变姿态）→ 去除后得动态分量 →
@@ -915,6 +975,7 @@ SC7A20_RET SC7A20_VibrationReset(SC7A20_NOARG) {
 const sc7a20_vibration_result_t *SC7A20_VibrationGetResult(void) {
     return &SC7A20_Status.vibration_rms;
 }
+#endif
 
 /******************************寄存器Dump区************************************/
 /*读取关键寄存器到out：out[0]=WHO_AM_I(0x0F)，out[1..32]=0x20~0x3F（共33字节）

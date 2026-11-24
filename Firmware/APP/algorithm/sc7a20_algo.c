@@ -8,7 +8,6 @@
 #define SC_SAMPLE_MS 200u
 #define SC_LEVEL_SAMPLE_MS 40u
 #define SC_CAL_RECORD_TAG 0xA720u
-#define SC_CAL_Q14 (16384.0f)
 #define SC_RETRY_MS 2000u
 #define SC_ORIENT_ENTER_MG 650
 #define SC_ORIENT_CONFIRM 10u /* 10 stable updates at 5 Hz ~2 seconds */
@@ -156,25 +155,21 @@ static void sc_calibration_load(void) {
     xq=(uint16_t)(b>>16);yq=(uint16_t)c;zq=(uint16_t)(c>>16);
     if(xq<4096u||yq<4096u||zq<4096u ||
        xq>49152u||yq>49152u||zq>49152u)return;
-    SC7A20_SetXCalibration((int16_t)(uint16_t)a,(float)xq/SC_CAL_Q14);
-    SC7A20_SetYCalibration((int16_t)(uint16_t)(a>>16),(float)yq/SC_CAL_Q14);
-    SC7A20_SetZCalibration((int16_t)(uint16_t)b,(float)zq/SC_CAL_Q14);
+    const int16_t zero[3] = {(int16_t)(uint16_t)a, (int16_t)(uint16_t)(a >> 16), (int16_t)(uint16_t)b};
+    const uint16_t slope[3] = {xq, yq, zq};
+    SC7A20_SetCalibrationQ14(zero, slope);
 }
 uint8_t SC7A20Algo_ApplySixFace(const int16_t face_raw[6][3]) {
-    int32_t spans[3],zero[3];
-    float slope[3];
+    int16_t zero[3];
     uint16_t q[3];
     uint32_t a,b,c;
     uint8_t i;
     if(!face_raw)return 0u;
     for(i=0u;i<3u;i++) {
-        spans[i]=(int32_t)face_raw[2u*i+1u][i]-
-                 (int32_t)face_raw[2u*i][i];
-        if(spans[i]<1000 || spans[i]>4000)return 0u;
-        zero[i]=((int32_t)face_raw[2u*i+1u][i]+
-                 (int32_t)face_raw[2u*i][i])/2;
-        slope[i]=2000.0f/(float)spans[i];
-        q[i]=(uint16_t)(slope[i]*SC_CAL_Q14+0.5f);
+        int32_t span = (int32_t)face_raw[2u * i + 1u][i] - face_raw[2u * i][i];
+        if (span < 1000 || span > 4000) return 0u;
+        zero[i] = (int16_t)(((int32_t)face_raw[2u * i + 1u][i] + face_raw[2u * i][i]) / 2);
+        q[i] = (uint16_t)((2000u * SC7A20_CAL_Q14_ONE + (uint32_t)span / 2u) / (uint32_t)span);
         if(q[i]<4096u||q[i]>49152u)return 0u;
     }
     /* Invalidate the old record before replacing any field; the tag is
@@ -191,9 +186,7 @@ uint8_t SC7A20Algo_ApplySixFace(const int16_t face_raw[6][3]) {
     s_calibration_noinit.tag=
         ((uint32_t)SC_CAL_RECORD_TAG<<16)|sc_record_crc(a,b,c);
     __DSB();
-    SC7A20_SetXCalibration((int16_t)zero[0],(float)q[0]/SC_CAL_Q14);
-    SC7A20_SetYCalibration((int16_t)zero[1],(float)q[1]/SC_CAL_Q14);
-    SC7A20_SetZCalibration((int16_t)zero[2],(float)q[2]/SC_CAL_Q14);
+    SC7A20_SetCalibrationQ14(zero, q);
     s_orientation=SC7A20_ORIENT_UNKNOWN;
     s_candidate=SC7A20_ORIENT_UNKNOWN;
     s_confirm=0u;
@@ -272,9 +265,7 @@ __attribute__((noinline)) void SC7A20Algo_Poll(void) {
             SC7A20_ReadRawCode(&x,&y,&z);
             s_axes[0]=(int)x;s_axes[1]=(int)y;s_axes[2]=(int)z;
             s_sample.raw[0]=x;s_sample.raw[1]=y;s_sample.raw[2]=z;
-            s_sample.mg[0]=(int16_t)SC7A20_ReadX_mg();
-            s_sample.mg[1]=(int16_t)SC7A20_ReadY_mg();
-            s_sample.mg[2]=(int16_t)SC7A20_ReadZ_mg();
+            SC7A20_ReadCalibratedMg(s_sample.mg);
             sc_level_axes_update(); /* PB10A -> PB02B drawing axes */
             ++s_sample.seq;if(!s_sample.seq)++s_sample.seq;
             s_sample_at=Millis();

@@ -11,15 +11,16 @@
 #include "display/dispDriver.h"
 #include "pm_api.h"
 #include "millis.h"
-#include <math.h>
+#include "mini_math.h"
 #include "mini_format.h"
 #include <string.h>
 
 #define MOTION_APP_PM_BLOCK 0x20u
 #define LEVEL_VIEW_MS       40u
-#define LEVEL_PLUMB_ENTER   43.0f
-#define LEVEL_PLUMB_EXIT    47.0f
-#define RAD_TO_DEG          57.2957795f
+#define LEVEL_PLUMB_ENTER   4300
+#define LEVEL_PLUMB_EXIT    4700
+#define LEVEL_MG_SCALE      16
+#define LEVEL_PIXEL_SCALE   256
 #define LEVEL_RADIUS        18 /* 36px diameter, center at half pixels */
 #define CAL_VIEW_MS         200u
 #define CAL_HOLD_INTERVALS  10u
@@ -31,7 +32,7 @@
 
 static uint8_t s_level_active,s_level_valid,s_level_mode;
 static uint32_t s_level_seq,s_level_draw_at;
-static float s_level_x,s_level_y,s_level_z;
+static int32_t s_level_x, s_level_y, s_level_z; /* mg in Q4 */
 
 static uint8_t s_cal_active,s_cal_done[CAL_FACE_COUNT],s_cal_candidate;
 static uint8_t s_cal_intervals,s_cal_samples,s_cal_completed;
@@ -73,27 +74,23 @@ static void draw_black(void) {
     Disp_SetDrawColor(&black);
     Disp_DrawBox(0u,0u,UI_HOR_RES,UI_VER_RES);
 }
-static void level_draw_horizon(float x,float y,float z) {
-    int32_t nx,ny,offset;
-    int16_t row,first,last,cross;
-    float h=sqrtf(x*x+y*y);
-    uint8_t white=1u,xor_color=2u;
-    if(h<0.0001f)return;
-    /* PB10A screen-space compensation, following physical tests:
-     * normal upright pose level_X=-1g -> white ABOVE, black BELOW.
-     * right-side-down rolls the case clockwise; the horizon MUST tilt
-     * counterclockwise relative to the case, or its world angle doubles.
-     *
-     * Fill when f >= 0, where:
-     *   f = (Y/h)*(px-63) + (X/h)*(py-31) + 50*Z.
-     * For X=-1,Y=0, f=31-py+50*Z: white is above the line and
-     * the boundary py=31+50*Z still moves DOWN on lifting (positive Z).
-     * Relative to the previous version, reverse the Y coefficient
-     * (roll compensation) and Z offset, but keep the X coefficient.
-     * This does not touch the correctly oriented zenith/plumb path. */
-    nx=(int32_t)(( y/h)*1024.0f);
-    ny=(int32_t)(( x/h)*1024.0f);
-    offset=(int32_t)(z*50.0f*1024.0f);
+static uint32_t level_abs(int32_t value) {
+    return (uint32_t)(value < 0 ? -value : value);
+}
+
+static void level_draw_horizon(int32_t x, int32_t y, int32_t h) {
+    int16_t row, first, last, cross;
+    uint8_t white = 1u, xor_color = 2u;
+    if (h == 0) return;
+
+    /* Multiply the original line equation by the XY magnitude. X and Y
+     * use the scaled vector, Z is Q4 milligravity. Split Z at the mg
+     * boundary so the product fits in 32 bits without losing its fraction.
+     * Upright X < 0 is white above, positive Z moves the line down. */
+    int32_t nx = y, ny = x;
+    int32_t z = s_level_z;
+    int32_t offset = ((z / LEVEL_MG_SCALE) * h +
+                      ((z % LEVEL_MG_SCALE) * h) / LEVEL_MG_SCALE) / 20;
     Disp_SetDrawColor(&white);
     for(row=0;row<64;row++) {
         int32_t v0=nx*(-63)+ny*(row-31)+offset;
@@ -143,33 +140,29 @@ static void level_xor_disc(int16_t cx2,int16_t cy2,int16_t radius) {
             Disp_DrawPixel((uint16_t)x,(uint16_t)y);
     }
 }
-static void level_draw_zenith(float x,float y,float z,float angle) {
-    float h=sqrtf(x*x+y*y);
-    float gap=angle*(4.0f*LEVEL_RADIUS)/45.0f;
-    float dx=0.0f,dy=0.0f;
-    int16_t x1,y1,x2,y2;
-    uint8_t fg=1u,xor_color=2u;
-    if(gap>4.0f*LEVEL_RADIUS)gap=4.0f*LEVEL_RADIUS;
-    if(z>0.0f) {
+static int16_t level_round_pixel(int32_t value) {
+    const int32_t half = LEVEL_PIXEL_SCALE / 2;
+    return (int16_t)((value + (value < 0 ? -half : half)) / LEVEL_PIXEL_SCALE);
+}
+
+static void level_draw_zenith(int32_t x, int32_t y, int32_t h, int16_t angle) {
+    int32_t dx = 0, dy = 0;
+    uint8_t fg = 1u, xor_color = 2u;
+    if (s_level_z > 0) {
         Disp_SetDrawColor(&fg);
-        Disp_DrawBox(0u,0u,128u,64u);
+        Disp_DrawBox(0u, 0u, 128u, 64u);
     }
-    if(h>0.0001f) {
-        /* The two circles separate perpendicular to XY gravity,
-         * rather than along the gravity direction itself. */
-        dx=-y*gap/h*0.5f;
-        dy= x*gap/h*0.5f;
+    if (h != 0) {
+        int32_t capped = angle > 4500 ? 4500 : angle;
+        int32_t gap = (capped * (4 * LEVEL_RADIUS * LEVEL_PIXEL_SCALE) + 2250) / 4500;
+        /* Preserve the perpendicular separation in doubled coordinates. */
+        dx = -y * gap / h;
+        dy = x * gap / h;
     }
-    /* Doubled coordinates: (127,63) = (63.5,31.5) pixels.
-     * The original two moving discs are the ONLY zenith graphics:
-     * deliberately omit the fixed center reference ring. */
-    x1=(int16_t)roundf(127.0f-2.0f*dx);
-    y1=(int16_t)roundf(63.0f-2.0f*dy);
-    x2=(int16_t)roundf(127.0f+2.0f*dx);
-    y2=(int16_t)roundf(63.0f+2.0f*dy);
+    int32_t cx = 127 * LEVEL_PIXEL_SCALE, cy = 63 * LEVEL_PIXEL_SCALE;
     Disp_SetDrawColor(&xor_color);
-    level_xor_disc(x1,y1,LEVEL_RADIUS);
-    level_xor_disc(x2,y2,LEVEL_RADIUS);
+    level_xor_disc(level_round_pixel(cx - dx), level_round_pixel(cy - dy), LEVEL_RADIUS);
+    level_xor_disc(level_round_pixel(cx + dx), level_round_pixel(cy + dy), LEVEL_RADIUS);
 }
 /* Compact 3x3 hollow cross: top/left/right/bottom, center empty.
  * XOR each of the four distinct pixels once to avoid self-cancellation
@@ -180,15 +173,14 @@ static void level_xor_degree_mark(void) {
     Disp_DrawPixel(125u,53u);
     Disp_DrawPixel(124u,54u);
 }
-static void level_angle_footer(float angle) {
+static void level_angle_footer(int16_t angle) {
     char text[16];
     uint8_t xor_color=2u;
     uint8_t previous_font_mode=u8g2.font_decode.is_transparent;
     uint8_t previous_color=u8g2_GetDrawColor(&u8g2);
     uint16_t value,x,w;
-    if(angle<0.0f)angle=-angle;
-    if(angle>99.99f)angle=99.99f;
-    value=(uint16_t)(angle*100.0f+0.5f);
+    value = (uint16_t)level_abs(angle);
+    if (value > 9999u) value = 9999u;
     (void)mini_snprintf(text,sizeof(text),"%2u.%02u",
                    (unsigned)(value/100u),(unsigned)(value%100u));
     Disp_SetFont(UI_FONT); /* preserve PB10A default font */
@@ -209,7 +201,8 @@ static void level_angle_footer(float angle) {
 }
 void Motion_LevelerRun(ui_t *ui) {
     sc7a20_sample_t sample;
-    float x,y,z,h,angle,plumb_deg;
+    int32_t x, y, z;
+    int16_t angle;
     uint32_t now=Millis();
     if(!ui)return;
     if(!s_level_active) {
@@ -240,38 +233,47 @@ void Motion_LevelerRun(ui_t *ui) {
          * SC7A20Algo; these are NOT the chip-native X/Y/Z axes.
          * PB10A Z- -> PB02B horizontal, X- -> PB02B left-white
          * vertical, Y- -> PB02B face-up dual zenith circle. */
-        x=sample.level_mg[0]*0.001f;
-        y=sample.level_mg[1]*0.001f;
-        z=sample.level_mg[2]*0.001f;
-        if(!s_level_valid) {
-            s_level_x=x;s_level_y=y;s_level_z=z;
-            s_level_valid=1u;
-        }
-        else {
-            s_level_x+=0.2f*(x-s_level_x);
-            s_level_y+=0.2f*(y-s_level_y);
-            s_level_z+=0.2f*(z-s_level_z);
+        x = (int32_t)sample.level_mg[0] * LEVEL_MG_SCALE;
+        y = (int32_t)sample.level_mg[1] * LEVEL_MG_SCALE;
+        z = (int32_t)sample.level_mg[2] * LEVEL_MG_SCALE;
+        if (!s_level_valid) {
+            s_level_x = x;
+            s_level_y = y;
+            s_level_z = z;
+            s_level_valid = 1u;
+        } else {
+            s_level_x += (x - s_level_x) / 5;
+            s_level_y += (y - s_level_y) / 5;
+            s_level_z += (z - s_level_z) / 5;
         }
     }
-    x=s_level_x;y=s_level_y;z=s_level_z;
-    h=sqrtf(x*x+y*y);
-    plumb_deg=atan2f(h,fabsf(z))*RAD_TO_DEG;
+    x = s_level_x;
+    y = s_level_y;
+    z = s_level_z;
+    /* Keep as much Q4 precision as possible while bounding x*x + y*y. */
+    uint32_t range = level_abs(x) | level_abs(y) | level_abs(z);
+    while (range > 32767u) {
+        x /= 2;
+        y /= 2;
+        z /= 2;
+        range >>= 1;
+    }
+    int32_t h = (int32_t)isqrt_u32((uint32_t)(x * x + y * y));
+    int16_t plumb_cdeg = atan2_cdeg(h, (int32_t)level_abs(z));
+    uint8_t roll_mode = (uint8_t)(level_abs(y) > level_abs(x));
     /* Original hysteresis: enter plumb below 43°, exit above 47°. */
-    if(s_level_mode==2u) {
-        if(plumb_deg>=LEVEL_PLUMB_EXIT)
-            s_level_mode=fabsf(y)>fabsf(x)?1u:0u;
+    if (s_level_mode == 2u) {
+        if (plumb_cdeg >= LEVEL_PLUMB_EXIT) s_level_mode = roll_mode;
+    } else {
+        s_level_mode = plumb_cdeg <= LEVEL_PLUMB_ENTER ? 2u : roll_mode;
     }
-    else if(plumb_deg<=LEVEL_PLUMB_ENTER)s_level_mode=2u;
-    else s_level_mode=fabsf(y)>fabsf(x)?1u:0u;
-    if(s_level_mode==2u) {
-        angle=plumb_deg;
-        level_draw_zenith(x,y,z,plumb_deg);
-    }
-    else {
-        angle=(s_level_mode==0u?
-            atan2f(fabsf(y),fabsf(x)):
-            atan2f(fabsf(x),fabsf(y)))*RAD_TO_DEG;
-        level_draw_horizon(x,y,z);
+    if (s_level_mode == 2u) {
+        angle = plumb_cdeg;
+        level_draw_zenith(x, y, h, angle);
+    } else {
+        int32_t ax = (int32_t)level_abs(x), ay = (int32_t)level_abs(y);
+        angle = s_level_mode == 0u ? atan2_cdeg(ay, ax) : atan2_cdeg(ax, ay);
+        level_draw_horizon(x, y, h);
     }
     level_angle_footer(angle);
     Disp_SendBuffer();

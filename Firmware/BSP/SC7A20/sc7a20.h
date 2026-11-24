@@ -18,6 +18,14 @@ extern "C" {
 //  - 已定义：协作式 API（返回类型为 char，并额外带 struct pt *pt 参数）。
 //#define SC7A20_USE_PROTOTHREAD
 
+/* Keep legacy floating-point APIs available to other projects by default.
+ * PB10A sets this to 0 in its build options. */
+#ifndef SC7A20_USE_FLOAT_API
+#define SC7A20_USE_FLOAT_API 1
+#endif
+
+#define SC7A20_CAL_Q14_ONE 16384u
+
 /* I²C 通信失败 → 清 initialized（不再维护 online 字段）：
  *  - initialized=0 使 SC7A20_IsInitialized() 返回 0，load_task 下一轮就会重新
  *    SC7A20_Init()（WHO_AM_I 校验通过后重新置 1），即"通信失败 → 自动重初始化"；
@@ -127,11 +135,13 @@ typedef struct {
     uint8_t  int_line;       //事件输出线：1=INT1，2=INT2
 } sc7a20_vibration_event_config_t;
 
+#if SC7A20_USE_FLOAT_API
 //软件振动强度结果
 typedef struct {
     float rms_mg;            //窗口RMS振动强度（mg）
     float peak_mg;           //窗口峰值动态幅值（mg）
 } sc7a20_vibration_result_t;
+#endif
 
 struct SC7A20_StatusTypedef {
     uint8_t initialized;            //SC7A20已初始化（WHO_AM_I 校验通过并完成配置）；通信失败时清 0 触发重新初始化
@@ -170,6 +180,7 @@ struct SC7A20_StatusTypedef {
     uint8_t ff_enabled;             //自由跌落已使能
     uint8_t motion_enabled;         //运动/静止检测已使能
     uint8_t vib_evt_enabled;        //硬件振动事件已使能
+#if SC7A20_USE_FLOAT_API
     uint16_t vib_window_samples;    //软件振动RMS窗口样本数（内部）
     float grav_x;                   //低频/DC分量估计（EMA，内部）
     float grav_y;                   //低频/DC分量估计
@@ -178,6 +189,7 @@ struct SC7A20_StatusTypedef {
     float vib_peak;                 //窗口峰值动态幅值（mg，内部）
     uint16_t vib_sample_count;      //窗口已累计样本数（内部）
     sc7a20_vibration_result_t vibration_rms;   //软件振动结果（RMS/峰值）
+#endif
     sc7a20_freefall_config_t freefall_cfg;     //自由跌落配置存档
     sc7a20_motion_config_t motion_cfg;         //运动/静止检测配置存档
     sc7a20_vibration_event_config_t vibration_cfg;//硬件振动事件配置存档
@@ -387,17 +399,24 @@ int16_t SC7A20_ReadX(void);                    //读取X轴原始数据
 int16_t SC7A20_ReadY(void);                    //读取Y轴原始数据
 int16_t SC7A20_ReadZ(void);                    //读取Z轴原始数据
 void SC7A20_ReadRawCode(int16_t *x, int16_t *y, int16_t *z); //读取右对齐、未校准的三轴码
+/* Calibrated milligravity and Q14 slopes, in native X/Y/Z order. */
+void SC7A20_ReadCalibratedMg(int16_t mg[3]);
+void SC7A20_SetCalibrationQ14(const int16_t zero[3], const uint16_t slope[3]);
+#if SC7A20_USE_FLOAT_API
 float SC7A20_ReadX_mg(void);                   //读取X轴加速度（单位：mg，应用零点+斜率校准）
 float SC7A20_ReadY_mg(void);                   //读取Y轴加速度（单位：mg，应用零点+斜率校准）
 float SC7A20_ReadZ_mg(void);                   //读取Z轴加速度（单位：mg，应用零点+斜率校准）
 void SC7A20_SetXCalibration(int16_t zero_raw, float slope_mg_per_lsb);
 void SC7A20_SetYCalibration(int16_t zero_raw, float slope_mg_per_lsb);
 void SC7A20_SetZCalibration(int16_t zero_raw, float slope_mg_per_lsb);
+#endif
 
 //温度操作
 SC7A20_RET SC7A20_TempLoad(SC7A20_NOARG);      //读取温度原始数据镜像（0x0C/0x0D）
 int16_t SC7A20_ReadTempRaw(void);              //读取原始温度寄存器码，不是绝对°C
+#if SC7A20_USE_FLOAT_API
 float SC7A20_ReadTemp(void);                   //°C，LIS2DH12斜率+27°C/0x18B0单点校准
+#endif
 
 //状态操作
 SC7A20_RET SC7A20_StatusLoad(SC7A20_NOARG);    //读取状态寄存器镜像（0x27）
@@ -449,7 +468,9 @@ SC7A20_RET SC7A20_FreefallGetStatus(SC7A20_ARGS(uint8_t *active));//读取跌落
 SC7A20_RET SC7A20_MotionConfig(SC7A20_ARGS(const sc7a20_motion_config_t *cfg));//配置（阈值/静止时长/INT2路由）
 SC7A20_RET SC7A20_MotionEnable(SC7A20_NOARG);   //使能运动/静止检测（写ACT_THS/ACT_DUR + 可选INT2路由）
 SC7A20_RET SC7A20_MotionDisable(SC7A20_NOARG);  //禁止运动/静止检测
+#if SC7A20_USE_FLOAT_API
 SC7A20_RET SC7A20_MotionUpdate(SC7A20_NOARG);   //用最近一次加速度样本更新运动状态（软件判定，按ODR周期调用）
+#endif
 uint8_t SC7A20_MotionGetState(void);            //查询运动状态（sc7a20_motion_state_t）
 
 //硬件振动事件（HPF + AOI阈值中断）
@@ -459,9 +480,11 @@ SC7A20_RET SC7A20_VibrationEventDisable(SC7A20_NOARG);//禁止
 SC7A20_RET SC7A20_VibrationEventGetStatus(SC7A20_ARGS(uint8_t *active));//读取振动事件状态（锁存模式读后清除）
 
 //软件振动强度（窗口RMS/峰值，SC7A20_VERIFIED算法）
+#if SC7A20_USE_FLOAT_API
 SC7A20_RET SC7A20_VibrationAnalyze(SC7A20_NOARG);//用最近一次加速度样本累计窗口（DC去除+平方累加，按ODR周期调用）
 SC7A20_RET SC7A20_VibrationReset(SC7A20_NOARG); //清空窗口累计并按当前ODR重算窗口长度
 const sc7a20_vibration_result_t *SC7A20_VibrationGetResult(void);//获取窗口RMS/峰值
+#endif
 
 //寄存器Dump（调试）
 SC7A20_RET SC7A20_RegisterDumpRead(SC7A20_ARGS(uint8_t *out, uint16_t len));//读0x0F+0x20~0x3F共33字节到out（out[0]=WHO_AM_I）
