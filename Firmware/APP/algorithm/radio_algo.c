@@ -61,13 +61,28 @@ void RadioAlgo_AddSleepWakeItems(ui_page_t *page) {
     Create_element(&s_keep_awake_item,&s_keep_awake_element);
     AddItem(" Radio Keep Awake",UI_ITEM_DATA,0,&s_keep_awake_item,page,0,0);
 }
+static void radio_clock_enable(void) {
+    LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE, LL_RCC_MCO1_DIV_1);
+}
+
+static void radio_clock_disable(void) {
+    LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_NOCLOCK, LL_RCC_MCO1_DIV_1);
+}
+
+void RadioAlgo_RestoreClock(void) {
+    if (s_stop_pending || (s_state != RADIO_STATE_OFF && s_state != RADIO_STATE_ERROR))
+        radio_clock_enable();
+    else
+        radio_clock_disable();
+}
+
 /* All operations below only queue BSP requests; no blocking I2C here. */
 static void radio_fail(uint8_t why) {
     s_state=RADIO_STATE_ERROR;
     s_error_code=why;
     s_full_scan=0u;s_start_requested=0u;
     s_boot_sleep_ack=0u;
-    LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_NOCLOCK,LL_RCC_MCO1_DIV_1);
+    radio_clock_disable();
     pm_api_set_sleep_block(RADIO_PM_BLOCK,0u);
     pm_api_set_sleep_block(RADIO_KEEP_AWAKE_BLOCK,0u);
 }
@@ -92,7 +107,7 @@ static void radio_start(void) {
     s_freq_units=3480u;s_station_count=0u;
     /* Active FM is not an idle-timer block. Its async operations are
      * drained by radio_prepare before STOP1; MCO must keep running. */
-    LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE,LL_RCC_MCO1_DIV_1);
+    radio_clock_enable();
     if(RDA5807_AsyncReset()!=I2C_OK) {
         radio_fail(1u);return;
     }
@@ -101,12 +116,12 @@ static void radio_start(void) {
 }
 static void radio_stop(void) {
     if(s_state!=RADIO_STATE_OFF && !s_stop_pending) {
-        LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE,LL_RCC_MCO1_DIV_1);
+        radio_clock_enable();
         if(RDA5807_AsyncSleep()!=I2C_OK)return; /* retry when queue drains */
         s_stop_pending=1u;
     }
-    s_first_seek_pending=1u;s_full_scan=0u;
-    s_state=RADIO_STATE_OFF;
+    s_first_seek_pending = 1u;
+    s_full_scan = 0u;
     s_stop_requested=0u;
 }
 static void radio_seek(uint8_t upward) {
@@ -284,18 +299,13 @@ uint8_t RadioAlgo_BackgroundWakeNeeded(void) {
          s_state==RADIO_STATE_TUNE_WAIT) &&
         !s_stop_pending && !s_stop_requested);
 }
-void RadioAlgo_BackgroundResume(void) {
-    s_pm_stopping=0u;
-    if(s_state!=RADIO_STATE_OFF && s_state!=RADIO_STATE_ERROR)
-        LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE,LL_RCC_MCO1_DIV_1);
-}
 void RadioAlgo_BeginBackgroundInspection(void) {
     /* Called after WUT has physically resumed clocks; OLED stays off.
      * Check *current level*, not the headset state saved before sleep. */
     s_bg_inspection=1u;
     s_bg_retry_count=0u;
     s_bg_need_battery=RadioAlgo_BackgroundWakeNeeded();
-    RadioAlgo_BackgroundResume();
+    s_pm_stopping = 0u;
     if(s_power_mode==RADIO_POWER_AUTO &&
         !radio_headphone_connected() && s_state!=RADIO_STATE_OFF)
         RadioAlgo_Stop();
@@ -347,13 +357,6 @@ static pm_hook_result_t radio_prepare(void *ctx) {
 }
 static pm_hook_result_t radio_resume(void *ctx) {
     (void)ctx;
-    /* SystemClock_Config() restores MCO=LSE unconditionally after STOP1.
-     * Reapply the Radio ownership policy in the reverse-order PM resume:
-     * keep clock for active FM, otherwise stop driving the output. */
-    if(s_state!=RADIO_STATE_OFF && s_state!=RADIO_STATE_ERROR)
-        LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE,LL_RCC_MCO1_DIV_1);
-    else if(!s_stop_pending)
-        LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_NOCLOCK,LL_RCC_MCO1_DIV_1);
     s_pm_stopping=0u;
     return PM_HOOK_DONE;
 }
@@ -372,11 +375,11 @@ void RadioAlgo_Init(void) {
     s_fail_safe_shutdown_request=0u;
     s_phone_stable=radio_headphone_connected();
     s_phone_candidate=s_phone_stable;s_phone_changed_at=Millis();
-    LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE,LL_RCC_MCO1_DIV_1);
+    radio_clock_enable();
     s_boot_sleep_ack=(uint8_t)(RDA5807_AsyncBootSleep()==I2C_OK);
     s_stop_pending=s_boot_sleep_ack;
     if(!s_boot_sleep_ack)
-        LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_NOCLOCK,LL_RCC_MCO1_DIV_1);
+        radio_clock_disable();
     pm_api_set_sleep_block(RADIO_PM_BLOCK,s_boot_sleep_ack);
     (void)pm_device_register(&s_node);
 }
@@ -392,23 +395,28 @@ __attribute__((noinline)) void RadioAlgo_Poll(void) {
         s_fail_safe_shutdown_request=0u;
         radio_force_low_battery_off();
     }
-    if(s_stop_pending) {
-        if(RDA5807_AsyncBusy())return;
-        s_stop_pending=0u;
-        LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_NOCLOCK,LL_RCC_MCO1_DIV_1);
-        pm_api_set_sleep_block(RADIO_PM_BLOCK,0u);
-    }
-    if(RDA5807_AsyncTakeError()) {
-        radio_fail(4u);
-        if(s_pm_stopping)s_stop_requested=1u;
+    if (s_stop_pending && RDA5807_AsyncBusy())
         return;
+    if (RDA5807_AsyncTakeError()) {
+        s_stop_pending = 0u;
+        radio_fail(4u);
+        if (s_pm_stopping)
+            s_stop_requested = 1u;
+        return;
+    }
+    if (s_stop_pending) {
+        s_stop_pending = 0u;
+        s_state = RADIO_STATE_OFF;
+        radio_clock_disable();
+        pm_api_set_sleep_block(RADIO_PM_BLOCK, 0u);
     }
     if(s_stop_requested) {
         radio_stop();
         if(s_stop_requested)return;
         if(s_stop_pending)return;
     }
-    if(s_pm_stopping)return;
+    if (s_pm_stopping)
+        return;
     /* The Radio coroutine owns the insertion/removal state, independent
      * of EXTI rising edges. During a 30-minute RTC wake the inspection
      * uses the instantaneous pin level; RUN uses 40ms debouncing. */

@@ -50,7 +50,7 @@ uint8_t RadioAlgo_BackgroundInspectionComplete(void);
 void RadioAlgo_AbortBackgroundInspection(void);
 void RadioAlgo_RequestFailSafeOff(void); /* PM requests; Radio coroutine owns state */
 void RadioAlgo_EndBackgroundInspection(void);
-void RadioAlgo_BackgroundResume(void);
+void RadioAlgo_RestoreClock(void);
 void RadioAlgo_AddSleepWakeItems(ui_page_t *page);
 uint8_t RadioAlgo_BootSleepAcknowledged(void);
 #endif

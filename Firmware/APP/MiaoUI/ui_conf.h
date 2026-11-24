@@ -404,7 +404,7 @@ typedef enum { UI_TARGET_RADIO=0, UI_TARGET_POWERBANK=1 } ui_target_t;
 void MiaoUi_RequestNavigate(ui_target_t target);
 void MiaoUi_ProcessNavigate(ui_t *ui);
 uint8_t MiaoUi_NavigationReady(void); /* Pending request past arbitration. */
-void MiaoUi_ExternalEventService(void);
+void MiaoUi_ExternalEventService(uint8_t events);
 
 #ifdef __cplusplus
 }

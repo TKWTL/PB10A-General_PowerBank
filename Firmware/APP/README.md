@@ -71,26 +71,21 @@ The temporary boot-time hardware test, including forced FM auto-seek, has
 been removed. Startup now always runs the standard MiaoUI/coroOS
 scheduler; Radio starts only when its menu application is entered.
 
-The fifth coroOS task, `ADC_RTC_AuxAThread` in `APP/app_task.c`,
-owns ADC calibration before its `for(;;)`, **16** sequential
-four-rank DMA scans separated by **25 ms**, HAL IRQ completion waiting,
-Aux-A status/enable management and RTC refresh. A batch starts every
-**500 ms** (start-to-start), with the RTC read once per batch.
-`PowerAlgo_AdcBatchBegin()` clears the four-channel raw accumulators;
-each successful DMA scan contributes to the batch, and only a complete
-16-scan mean is converted to mV/mA/VDDA/die temperature. The existing
-PM suspend and HAL error paths are retained; the scan does not use a
-new software DMA timeout/retry layer.
-The STM32CubeMX ADC/DMA setup is unchanged.
-`RTC_IsEditing()` prevents the time editor's pending changes from being
-overwritten; the RTC setter remains a normal service function.
+`ADC_RTC_AuxAThread` owns ADC calibration and four-channel LL/DMA scans.
+It publishes the mean of 16 scans sampled about 25 ms apart in every
+500 ms batch. RTC and system service run at 500 ms independently.
+`RTC_IsEditing()` protects pending time-editor changes.
 
-PA6/SUB_EN starts HIGH (CubeMX GPIO initial state) and stays enabled
-during RUN/UI_OFF. PA7/SUB_INDET is active low and sampled every 500 ms
-to cache the insertion state. Before STOP1 the PM hook stops DMA/ADC
-and drives SUB_EN LOW; resume restores it HIGH. No 500 ms software
-overcurrent protection is attempted; the power IC must handle rapid
-faults.
+PA6/SUB_EN defaults LOW. A confirmed PA7 insertion or dashboard RIGHT
+press enables Aux-A. LEFT disables it. After a 10 ms startup delay, the
+ADC owner scans every 5 ms while Aux-A is active and cuts output on any
+valid VOUT reading at or below 2 V. Current below 50 mA for 60 continuous
+seconds also cuts output. Use `PowerAlgo_AuxA_SetAutoOffCurrent()` to
+adjust the threshold. Display readings below 10 mA show as zero.
+
+Active Aux-A pauses automatic sleep. Forced STOP1 cuts output before
+stopping ADC. Aux-A stays off on ordinary wake and may start after an
+insertion wake. A shutdown waits for a fresh insertion or manual press.
 
 The current CubeMX-generated configuration uses ADC1 HSI clock DIV1,
 39.5-cycle sampling for external channels and 79.5-cycle sampling for
@@ -212,9 +207,8 @@ graphics with a static approximation.
 
 RDA5807 power policy: `RadioAlgo_Init()` queues the IRQ-driven
 `RDA5807_AsyncBootSleep()` write with ENABLE=0. MCO is kept active
-until the asynchronous queue drains and its power-down transaction
-finishes. `RadioAlgo_BootSleepAcknowledged()` reports a successful
-boot power-down transaction, not merely enqueue acceptance.
+until the asynchronous power-down write succeeds or reports an error.
+`RadioAlgo_BootSleepAcknowledged()` reports a successful boot power-down write.
 The dedicated RadioServiceThread (5 ms) owns FM startup, tune/seek,
 status polling, presets, power policy and I2C completion.
 `ON` means playback regardless of MIC_INDET; `AUTO` means playback
@@ -222,7 +216,8 @@ only while the 40ms-debounced MIC_INDET input is low; `OFF` always
 turns the receiver off. An active ON or plugged-in AUTO receiver
 can play through STOP1 while MCO stays active; RTC wakes every
 30 minutes for an invisible background battery/headset check.
-Power policy and the OLED page are independent.
+On wake, Radio restores the PA8 clock selection from its own state.
+The RTC keeps LSE running independently of PA8.
 
 ### I2C scanner restoration (Collar-Radio visual compatibility)
 
@@ -441,7 +436,8 @@ the visible menu tree; ICON page label formatting is independent.
 
 PA7 / SUB_INDET falling-edge wake events also receive a dedicated
 40 ms low-level confirmation, one-shot insertion latch and high-level
-re-arm. When the independent `Aux-A Auto UI` switch is enabled, a
+re-arm in the power algorithm. Confirmed insertion enables Aux-A.
+When the independent `Aux-A Auto UI` switch is enabled, a
 confirmed new insertion requests `UI_TARGET_POWERBANK`. Both the
 separately configured SW6306 Port Auto UI and Aux-A Auto UI switch
 can navigate to the same Powerbank WORD page. Radio still has higher
@@ -725,18 +721,16 @@ When the two zenith XOR discs precisely overlap they cancel, by design.
 
 Modeled on Collar-Radio's `Application/Algorithms/system_statistic.c`
 (`OVERSAMPLE_RATE=4` in the Collar-Radio source), PB10A now runs
-**16** ADC1 DMA scans per 500 ms measurement cycle, separated by
-25 ms of cooperative delay after the previous scan completes.
-The 15 inter-scan delays consume about 375 ms, leaving processing
-margin before the next 500 ms start. Each scan reads PA0 current,
+**16** ADC1 DMA scans per 500 ms display batch, spaced about 25 ms
+apart. With Aux-A enabled, the display batch takes samples from the
+5 ms protection scans. Each scan reads PA0 current,
 PA5 voltage, die temperature and VREFINT in the original rank order.
 The 16 raw codes for each rank are accumulated as `uint32_t`;
 the nearest-integer mean is taken **before** the VREFINT calibration
 and the voltage/current/temperature conversions, so all derived values
 use a single averaged VDDA. A batch is published only after 16
 complete scans. The former 50 ms software DMA timeout has been
-removed per project policy; existing HAL error and PM suspend paths
-are retained, with no additional DMA failure/retry machinery.
+removed per project policy. ADC errors discard the affected batch.
 All scan waits yield via Protothreads to other coroOS tasks. Sampling is software
 triggered as before, with no CubeMX initialization changes.
 

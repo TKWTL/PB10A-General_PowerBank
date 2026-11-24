@@ -70,7 +70,7 @@ and SW6306-style starred comment dividers.
 
 `APP/services/` 已撤销：`beep_hw` 与 `beep_algo` 合入 `APP/framework/beep_service.c/.h`；`time_algo` 与 `time_service` 合入 `APP/framework/time_service.c/.h`，对外 `Time_*`、`RTC_*`、`beep_*` 接口保持不变。其余设备/故障/系统逻辑移至 `APP/algorithm/`，`Peripheral/` 的旧占位 README 也已移除。Keil 的 `.uvprojx` 与 `.uvoptx` 源文件路径和 IncludePath 已同步。
 
-ADC 保持每 **500 ms** 发布一组数据，但组内由原来的 4 次扩展至 **16 次**四通道 DMA 扫描，扫描间隔 **25 ms**（15 次共 375 ms），最后计算 16 次原始值均值；不加入新的 DMA 超时或失败恢复流程。外设配置由现有 CubeMX 工程保持。
+ADC 每 **500 ms** 发布一组数据，对间隔约 **25 ms** 的 **16 次**四通道 DMA 扫描取均值。Aux-A 启用时由同一个 ADC 协程每 **5 ms** 扫描一次，用单次样本判断欠压关断，显示仍从这些扫描中按原节奏取样。ADC 采样时间和通道配置沿用现有 CubeMX 工程。
 
 ### Firmware/LIB algorithms
 

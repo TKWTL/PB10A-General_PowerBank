@@ -211,161 +211,286 @@ void PowerAlgo_BackgroundAbort(void) {
 
 
 /************************* 附加 A 口与 ADC DMA *************************/
-/* ADC rank order: PA0 current, PA5 divided voltage, die temperature,
- * VREFINT. Collar-Radio-style averaging: sixteen spaced IRQ-backed DMA
- * scans per 500 ms, mean raw values before conversions to physical
- * units; no extra DMA timeout/retry layer is introduced. */
+#define AUX_PM_BLOCK 0x40u
+#define AUX_DEBOUNCE_MS 40u
+#define AUX_STARTUP_MS 10u
+#define AUX_FAST_SAMPLE_MS 5u
+#define AUX_SHORT_VOLTAGE_MV 2000u
+#define AUX_CURRENT_ZERO_MA 10u
+#define AUX_AUTO_OFF_MS 60000u
 #define AUX_A_VDIV_HIGH 680u
-#define AUX_A_VDIV_LOW  220u
+#define AUX_A_VDIV_LOW 220u
 #define AUX_A_CURRENT_MV_PER_A 500u
 
+#define ADC_BATCH_MS 500u
+#define ADC_SCAN_GAP_MS 25u
+#define ADC_AVERAGE_SAMPLES 16u
+
+typedef enum { AUX_STATE_OFF,
+               AUX_STATE_STARTUP,
+               AUX_STATE_ON } aux_state_t;
+
 static uint16_t s_dma[PB_ADC_SCAN_COUNT] __attribute__((aligned(4)));
-static uint32_t s_adc_accumulator[PB_ADC_SCAN_COUNT]; /* 16 * 4095 per rank fits uint32_t */
-static uint8_t s_adc_sample_count;
-static uint8_t s_active,s_suspended,s_adc_initialized;
-static uint8_t s_aux_inserted, s_aux_enabled, s_system_adc_valid;
+static uint32_t s_adc_accumulator[PB_ADC_SCAN_COUNT];
+static uint32_t s_adc_batch_at, s_display_sample_at;
+static uint8_t s_adc_sample_count, s_active, s_suspended, s_adc_initialized;
+static uint8_t s_scan_for_display, s_scan_for_protection;
+static uint8_t s_system_adc_valid;
 static int s_vdda_mv, s_die_temp_c10;
+
+static aux_state_t s_aux_state;
+static aux_command_t s_aux_command;
+static uint8_t s_aux_command_pending, s_aux_candidate, s_aux_latched, s_aux_inserted;
+static uint32_t s_aux_edge_at, s_aux_sample_at, s_aux_low_since;
+static uint8_t s_aux_low_current;
+static unsigned s_aux_auto_off_ma = 50u;
+
+static void aux_publish(uint8_t valid, uint16_t mv, uint16_t ma) {
+    if (ma < AUX_CURRENT_ZERO_MA)
+        ma = 0u;
+    s_monitor.aux_valid = valid;
+    s_monitor.aux_mv = mv;
+    s_monitor.aux_ma = ma;
+    s_power_values[POWER_AUX_VOLTAGE] = (int)((mv + 5u) / 10u);
+    s_power_values[POWER_AUX_CURRENT] = (int)((ma + 5u) / 10u);
+    s_power_data[POWER_AUX_VOLTAGE].ptr = valid ? &s_power_values[POWER_AUX_VOLTAGE] : NULL;
+    s_power_data[POWER_AUX_CURRENT].ptr = valid ? &s_power_values[POWER_AUX_CURRENT] : NULL;
+}
+
+static void aux_disable(void) {
+    LL_GPIO_ResetOutputPin(SUB_EN_GPIO_Port, SUB_EN_Pin);
+    s_aux_state = AUX_STATE_OFF;
+    s_monitor.aux_enabled = 0u;
+    s_aux_low_current = 0u;
+    s_scan_for_protection = 0u;
+    aux_publish(1u, 0u, 0u);
+    pm_api_set_sleep_block(AUX_PM_BLOCK, 0u);
+}
+
+static void adc_batch_begin(uint32_t now) {
+    s_adc_batch_at = s_display_sample_at = now;
+    s_adc_sample_count = 0u;
+    s_scan_for_display = 0u;
+    memset(s_adc_accumulator, 0, sizeof(s_adc_accumulator));
+}
+
+static void aux_enable(void) {
+    if (s_aux_state != AUX_STATE_OFF || !s_adc_initialized)
+        return;
+    LL_GPIO_SetOutputPin(SUB_EN_GPIO_Port, SUB_EN_Pin);
+    uint32_t now = Millis();
+    s_aux_sample_at = now + AUX_STARTUP_MS;
+    s_aux_state = AUX_STATE_STARTUP;
+    s_monitor.aux_enabled = 1u;
+    aux_publish(0u, 0u, 0u);
+    /* Discard samples taken with the previous output state. */
+    adc_batch_begin(now);
+    pm_api_set_sleep_block(AUX_PM_BLOCK, 1u);
+}
+
+void PowerAlgo_AuxA_Request(aux_command_t command) {
+    s_aux_command = command;
+    s_aux_command_pending = 1u;
+}
+
+void PowerAlgo_AuxA_SetAutoOffCurrent(unsigned threshold_ma) {
+    s_aux_auto_off_ma = threshold_ma;
+    s_aux_low_current = 0u;
+}
+
+void PowerAlgo_AuxA_OnEvents(uint8_t events) {
+    if ((events & PM_WAKE_SUB_INDET) && !s_aux_latched) {
+        s_aux_edge_at = Millis();
+        s_aux_candidate = 1u;
+    }
+}
+
+uint8_t PowerAlgo_AuxA_TakeInserted(void) {
+    uint8_t inserted = s_aux_inserted;
+    s_aux_inserted = 0u;
+    return inserted;
+}
+
+static void aux_service(uint32_t now) {
+    if (LL_GPIO_IsInputPinSet(SUB_INDET_GPIO_Port, SUB_INDET_Pin)) {
+        s_aux_candidate = 0u;
+        s_aux_latched = 0u;
+    }
+    if (s_suspended || pm_api_ui_should_block())
+        return;
+
+    uint8_t inserted = s_aux_candidate && (uint32_t)(now - s_aux_edge_at) >= AUX_DEBOUNCE_MS;
+    if (inserted) {
+        s_aux_candidate = 0u;
+        s_aux_latched = 1u;
+        s_aux_inserted = 1u;
+    }
+
+    if (s_aux_command_pending) {
+        s_aux_command_pending = 0u;
+        if (s_aux_command == AUX_CMD_DISABLE)
+            aux_disable();
+        else
+            aux_enable();
+    } else if (inserted) {
+        aux_enable();
+    }
+}
 
 static pm_hook_result_t power_adc_suspend(void *ctx) {
     (void)ctx;
+    aux_disable();
+    s_aux_command_pending = 0u;
     s_suspended = 1u;
     s_active = 0u;
-    if (!ADC_ScanStop())
-        return PM_HOOK_ERROR;
-    LL_GPIO_ResetOutputPin(SUB_EN_GPIO_Port,SUB_EN_Pin);
-    s_aux_enabled=0u;
     s_system_adc_valid = 0u;
-    s_adc_sample_count=0u; /* discard any interrupted pre-STOP1 burst */
-    memset(s_adc_accumulator,0,sizeof(s_adc_accumulator));
-    return PM_HOOK_DONE;
+    return ADC_ScanStop() ? PM_HOOK_DONE : PM_HOOK_ERROR;
 }
 
 static pm_hook_result_t power_adc_resume(void *ctx) {
     (void)ctx;
-    LL_GPIO_SetOutputPin(SUB_EN_GPIO_Port,SUB_EN_Pin);
-    s_aux_enabled=1u;
-    s_suspended=0u;
+    if (s_suspended) {
+        s_suspended = 0u;
+        adc_batch_begin(Millis());
+    }
     return PM_HOOK_DONE;
 }
 
-static const pm_device_node_t s_power_adc_pm={
-    "power-adc",0,power_adc_suspend,power_adc_resume,0,200u,0,0
-};
+static const pm_device_node_t s_power_adc_pm = {
+    "power-adc", 0, power_adc_suspend, power_adc_resume, 0, 200u, 0, 0};
 
-/* Invoked once by ADC_RTC_AuxAThread before its for(;;). */
 void PowerAlgo_AdcInit(void) {
-    LL_GPIO_SetOutputPin(SUB_EN_GPIO_Port,SUB_EN_Pin);
-    s_active = 0u;
-    s_suspended = 0u;
-    s_aux_enabled=1u;s_aux_inserted=0u;
-    s_power_values[POWER_AUX_VOLTAGE] = 0;
-    s_power_values[POWER_AUX_CURRENT] = 0;
-    s_vdda_mv=0;s_die_temp_c10=0;s_system_adc_valid=0u;
-    s_adc_sample_count=0u;
-    memset(s_adc_accumulator,0,sizeof(s_adc_accumulator));
     s_adc_initialized = ADC_Calibrate();
+    adc_batch_begin(Millis());
 }
 
-uint8_t PowerAlgo_AdcIsSuspended(void){return s_suspended;}
-
-/* Reset accumulation for each 500 ms acquisition period so an aborted
- * burst cannot be mixed into the next period. Retain published data
- * until a fully successful replacement average is available. */
-void PowerAlgo_AdcBatchBegin(void) {
-    s_adc_sample_count=0u;
-    memset(s_adc_accumulator,0,sizeof(s_adc_accumulator));
-}
-
-uint8_t PowerAlgo_AdcBeginScan(void) {
-    if (s_suspended || !s_adc_initialized || s_active) return 0u;
-    if (!ADC_ScanStart(s_dma)) {
-        s_adc_sample_count = 0u;
-        memset(s_adc_accumulator, 0, sizeof(s_adc_accumulator));
-        s_system_adc_valid = 0u;
-        (void)ADC_ScanStop();
+static uint32_t adc_vdda(const uint16_t *raw) {
+    if (raw[PB_ADC_VREF_SLOT] == 0u)
         return 0u;
-    }
-    s_active = 1u;
+    uint32_t mv = __LL_ADC_CALC_VREFANALOG_VOLTAGE(raw[PB_ADC_VREF_SLOT], LL_ADC_RESOLUTION_12B);
+    return mv <= UINT16_MAX ? mv : 0u;
+}
+
+static uint8_t aux_measure(const uint16_t *raw, uint32_t vdda, uint16_t *mv, uint16_t *ma) {
+    uint32_t pin_mv = ((uint32_t)raw[PB_ADC_AUX_VOLTAGE_SLOT] * vdda + 2047u) / 4095u;
+    uint32_t voltage = (pin_mv * (AUX_A_VDIV_HIGH + AUX_A_VDIV_LOW) + AUX_A_VDIV_LOW / 2u) / AUX_A_VDIV_LOW;
+    uint32_t current = ((uint32_t)raw[PB_ADC_AUX_CURRENT_SLOT] * vdda * (1000u / AUX_A_CURRENT_MV_PER_A) + 2047u) / 4095u;
+    if (voltage > UINT16_MAX || current > UINT16_MAX)
+        return 0u;
+    *mv = (uint16_t)voltage;
+    *ma = (uint16_t)current;
     return 1u;
 }
 
-/* Each IRQ-backed DMA scan contributes four raw channels. Publish
- * calibrated results ONLY after all 16 scans have completed.
- * No timeout or retry is needed for this on-chip ADC DMA path. */
-uint8_t PowerAlgo_AdcScanSettled(void) {
-    uint32_t pin_voltage_mv,pin_current_mv;
+static void aux_invalid_sample(void) {
+    s_aux_low_current = 0u;
+    aux_publish(0u, 0u, 0u);
+}
+
+static void aux_protect(uint32_t now, uint32_t vdda) {
+    uint16_t mv, ma;
+    if (!aux_measure(s_dma, vdda, &mv, &ma)) {
+        aux_invalid_sample();
+        return;
+    }
+    if (mv <= AUX_SHORT_VOLTAGE_MV) {
+        aux_disable();
+        return;
+    }
+    s_aux_state = AUX_STATE_ON;
+    if (ma >= s_aux_auto_off_ma) {
+        s_aux_low_current = 0u;
+    } else if (!s_aux_low_current) {
+        s_aux_low_current = 1u;
+        s_aux_low_since = now;
+    } else if ((uint32_t)(now - s_aux_low_since) >= AUX_AUTO_OFF_MS) {
+        aux_disable();
+    }
+}
+
+static void adc_accumulate_display(void) {
     uint16_t avg[PB_ADC_SCAN_COUNT];
-    int32_t cal_span,scaled_temp10;
-    uint8_t i;
-    if(s_suspended || !s_active)return 1u;
-    ADC_ScanStatus result = ADC_ScanState();
-    if (result == ADC_SCAN_BUSY)
-        return 0u;
-    s_active = 0u;
-    if (result != ADC_SCAN_DONE || s_dma[PB_ADC_VREF_SLOT] == 0u) {
-        (void)ADC_ScanStop();
-        s_adc_sample_count=0u;
-        memset(s_adc_accumulator,0,sizeof(s_adc_accumulator));
-        s_system_adc_valid = 0u;
-        return 1u;
+    for (unsigned i = 0; i < PB_ADC_SCAN_COUNT; ++i)
+        s_adc_accumulator[i] += s_dma[i];
+    if (++s_adc_sample_count < ADC_AVERAGE_SAMPLES)
+        return;
+    for (unsigned i = 0; i < PB_ADC_SCAN_COUNT; ++i)
+        avg[i] = (uint16_t)((s_adc_accumulator[i] + ADC_AVERAGE_SAMPLES / 2u) / ADC_AVERAGE_SAMPLES);
+
+    uint32_t vdda = adc_vdda(avg);
+    if (s_aux_state == AUX_STATE_ON) {
+        uint16_t mv, ma;
+        if (vdda && aux_measure(avg, vdda, &mv, &ma))
+            aux_publish(1u, mv, ma);
+        else
+            aux_publish(0u, 0u, 0u);
     }
-    for (i = 0u; i < PB_ADC_SCAN_COUNT; i++)
-        s_adc_accumulator[i] += (uint32_t)s_dma[i];
-    if(++s_adc_sample_count<POWER_ADC_AVERAGE_SAMPLES)
-        return 1u;
-    for (i = 0u; i < PB_ADC_SCAN_COUNT; i++)
-        avg[i]=(uint16_t)((s_adc_accumulator[i]+
-            POWER_ADC_AVERAGE_SAMPLES/2u)/POWER_ADC_AVERAGE_SAMPLES);
-    s_adc_sample_count=0u;
-    memset(s_adc_accumulator,0,sizeof(s_adc_accumulator));
-    /* VREFINT rank uses the raw average; every derived channel shares
-     * the same measured VDDA instead of assuming a fixed 3300 mV. */
-    if (avg[PB_ADC_VREF_SLOT] == 0u) {
-        s_system_adc_valid = 0u;
-        return 1u;
-    }
-    s_vdda_mv = (int)__LL_ADC_CALC_VREFANALOG_VOLTAGE(avg[PB_ADC_VREF_SLOT], LL_ADC_RESOLUTION_12B);
-    pin_current_mv = ((uint32_t)avg[PB_ADC_AUX_CURRENT_SLOT] * (uint32_t)s_vdda_mv + 2047u) / 4095u;
-    pin_voltage_mv = ((uint32_t)avg[PB_ADC_AUX_VOLTAGE_SLOT] * (uint32_t)s_vdda_mv + 2047u) / 4095u;
-    /* PA0: 0.5 V/A (500 mV/A). PA5: 680 k / 220 k divider. */
-    uint32_t aux_ma = pin_current_mv * 1000u / AUX_A_CURRENT_MV_PER_A;
-    uint32_t aux_mv = (pin_voltage_mv * (AUX_A_VDIV_HIGH + AUX_A_VDIV_LOW) +
-                       AUX_A_VDIV_LOW / 2u) /
-                      AUX_A_VDIV_LOW;
-    if (aux_mv <= UINT16_MAX && aux_ma <= UINT16_MAX) {
-        s_monitor.aux_valid = 1u;
-        s_monitor.aux_mv = (uint16_t)aux_mv;
-        s_monitor.aux_ma = (uint16_t)aux_ma;
-    }
-    s_power_values[POWER_AUX_VOLTAGE] = (int)((aux_mv + 5u) / 10u);
-    s_power_values[POWER_AUX_CURRENT] = (int)((aux_ma + 5u) / 10u);
 
     /* Retain tenths of a degree using the factory TS_CAL1/TS_CAL2 values. */
-    cal_span=(int32_t)*TEMPSENSOR_CAL2_ADDR-(int32_t)*TEMPSENSOR_CAL1_ADDR;
-    if(cal_span!=0) {
-        scaled_temp10 = (int32_t)(((uint32_t)avg[PB_ADC_TEMPERATURE_SLOT] * (uint32_t)s_vdda_mv * 10u +
-                                   TEMPSENSOR_CAL_VREFANALOG / 2u) /
-                                  TEMPSENSOR_CAL_VREFANALOG);
-        s_die_temp_c10=(int)(TEMPSENSOR_CAL1_TEMP*10+
-            (scaled_temp10-(int32_t)*TEMPSENSOR_CAL1_ADDR*10)*
-            (TEMPSENSOR_CAL2_TEMP-TEMPSENSOR_CAL1_TEMP)/cal_span);
-        s_system_adc_valid=1u;
+    int32_t cal_span = (int32_t)*TEMPSENSOR_CAL2_ADDR - (int32_t)*TEMPSENSOR_CAL1_ADDR;
+    s_system_adc_valid = (uint8_t)(vdda != 0u && cal_span != 0);
+    if (s_system_adc_valid) {
+        int32_t scaled_temp10 = (int32_t)(((uint32_t)avg[PB_ADC_TEMPERATURE_SLOT] * vdda * 10u +
+                                           TEMPSENSOR_CAL_VREFANALOG / 2u) /
+                                          TEMPSENSOR_CAL_VREFANALOG);
+        s_die_temp_c10 = (int)(TEMPSENSOR_CAL1_TEMP * 10 +
+                               (scaled_temp10 - (int32_t)*TEMPSENSOR_CAL1_ADDR * 10) *
+                                   (TEMPSENSOR_CAL2_TEMP - TEMPSENSOR_CAL1_TEMP) / cal_span);
+        s_vdda_mv = (int)vdda;
     }
-    else s_system_adc_valid=0u;
-    return 1u;
 }
 
-/* PA7 is pulled up: low indicates an inserted auxiliary-A load.
- * The existing RUN/UI_OFF -> STOP1 enable policy is unchanged. */
-void PowerAlgo_AuxA_Service(void) {
-    s_aux_inserted=(uint8_t)!LL_GPIO_IsInputPinSet(SUB_INDET_GPIO_Port,SUB_INDET_Pin);
-    if(s_suspended)return;
-    LL_GPIO_SetOutputPin(SUB_EN_GPIO_Port,SUB_EN_Pin);
-    s_aux_enabled=1u;
+static void adc_scan_failed(void) {
+    if (s_scan_for_protection)
+        aux_invalid_sample();
+    if (s_scan_for_display) {
+        s_adc_sample_count = ADC_AVERAGE_SAMPLES; /* abandon this batch */
+        s_system_adc_valid = 0u;
+    }
+    (void)ADC_ScanStop();
 }
 
-uint8_t PowerAlgo_AuxAIsInserted(void){return s_aux_inserted;}
-uint8_t PowerAlgo_AuxAIsEnabled(void){return s_aux_enabled;}
+void PowerAlgo_AdcPoll(void) {
+    aux_service(Millis());
+    if (s_suspended || !s_adc_initialized)
+        return;
+
+    uint32_t now = Millis();
+    if (s_active) {
+        ADC_ScanStatus result = ADC_ScanState();
+        if (result == ADC_SCAN_BUSY)
+            return;
+        s_active = 0u;
+        uint32_t vdda = result == ADC_SCAN_DONE ? adc_vdda(s_dma) : 0u;
+        if (!vdda) {
+            adc_scan_failed();
+        } else {
+            if (s_scan_for_protection)
+                aux_protect(now, vdda);
+            if (s_scan_for_display)
+                adc_accumulate_display();
+        }
+    }
+
+    if ((uint32_t)(now - s_adc_batch_at) >= ADC_BATCH_MS)
+        adc_batch_begin(now);
+
+    s_scan_for_display = s_adc_sample_count < ADC_AVERAGE_SAMPLES &&
+                         (int32_t)(now - s_display_sample_at) >= 0;
+    s_scan_for_protection = s_aux_state != AUX_STATE_OFF &&
+                            (int32_t)(now - s_aux_sample_at) >= 0;
+    /* When AUX is active, use the same scan for both paths. The first
+     * protection scan starts only after the startup deadline. */
+    if (!(s_aux_state == AUX_STATE_OFF ? s_scan_for_display : s_scan_for_protection))
+        return;
+    if (s_scan_for_protection)
+        s_aux_sample_at = now + AUX_FAST_SAMPLE_MS;
+    if (s_scan_for_display)
+        s_display_sample_at = now + ADC_SCAN_GAP_MS;
+    s_active = ADC_ScanStart(s_dma);
+    if (!s_active)
+        adc_scan_failed();
+}
 
 void PowerAlgo_AddStatisticsItems(ui_page_t *page) {
     static const char *const names[POWER_ITEM_COUNT] = {" BUS V", " BUS A", " Aux-A V", " Aux-A A", " Chip Temp °C"};
@@ -731,6 +856,7 @@ uint8_t PowerAlgo_TakeRadioBatteryCheck(uint16_t *vbat_mv,uint8_t *capacity_pct)
 /**************************** 服务注册与初始化 ***************************/
 void PowerAlgo_Init(void) {
     memset(&s_monitor,0,sizeof(s_monitor));
+    aux_disable();
     s_monitor.protocol="--";
     s_sw_phase=0u;s_capacity_div=1u;s_idle_verified=0u;
     s_adc_fresh = s_eta_mode = s_bus_display_valid = 0u;

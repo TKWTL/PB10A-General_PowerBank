@@ -13,7 +13,7 @@ typedef struct {
     uint16_t aux_mv, aux_ma;
     int16_t ntc_c10;
     uint8_t capacity_pct,capacity_valid;
-    uint8_t aux_valid, ntc_valid, eta_valid;
+    uint8_t aux_enabled, aux_valid, ntc_valid, eta_valid;
     uint8_t initialized,valid,charging,discharging;
     uint8_t c1_on,a1_on,port_busy;
     const char *protocol; /* static SW6306 driver string, read only */
@@ -37,18 +37,15 @@ uint8_t PowerAlgo_TakeRadioBatteryCheck(uint16_t *vbat_mv,uint8_t *capacity_pct)
 pm_hook_result_t PowerAlgo_BackgroundResume(void);
 pm_hook_result_t PowerAlgo_BackgroundSuspend(void);
 void PowerAlgo_BackgroundAbort(void);
-/* ADC_RTC_AuxAThread alone owns ADC calibration and DMA sampling.
- * Sixteen four-channel conversions, separated by 25 ms per 500 ms
- * burst, are averaged as raw ADC codes before voltage/temperature scaling. */
-#define POWER_ADC_AVERAGE_SAMPLES 16u
+/* ADC_RTC_AuxAThread owns the ADC and SUB_EN. */
+typedef enum { AUX_CMD_ENABLE,
+               AUX_CMD_DISABLE } aux_command_t;
 void PowerAlgo_AdcInit(void);
-void PowerAlgo_AdcBatchBegin(void);
-uint8_t PowerAlgo_AdcIsSuspended(void);
-uint8_t PowerAlgo_AdcBeginScan(void);
-uint8_t PowerAlgo_AdcScanSettled(void);
-void PowerAlgo_AuxA_Service(void);
-uint8_t PowerAlgo_AuxAIsInserted(void);
-uint8_t PowerAlgo_AuxAIsEnabled(void);
+void PowerAlgo_AdcPoll(void);
+void PowerAlgo_AuxA_Request(aux_command_t command);
+void PowerAlgo_AuxA_SetAutoOffCurrent(unsigned threshold_ma);
+void PowerAlgo_AuxA_OnEvents(uint8_t events);
+uint8_t PowerAlgo_AuxA_TakeInserted(void);
 void PowerAlgo_AddStatisticsItems(ui_page_t *page);
 void PowerAlgo_AddBatteryItems(ui_page_t *page);
 void PowerAlgo_GetSystemAdc(int *vdda_mv,int *die_temp_c10,uint8_t *valid);

@@ -81,6 +81,7 @@ static void stm32_deepsleep(void *ctx) {
         (!SC7A20Algo_WakeIRQ() || LL_GPIO_IsInputPinSet(INT_GPIO_Port,INT_Pin)))
         HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON,PWR_STOPENTRY_WFI);
     SystemClock_Config();
+    RadioAlgo_RestoreClock();
     if(suspended)stm32_restore();
     /* Stop the one-shot WUT after any STOP1 exit. PM decides whether the
      * wake goes to RUN or to a selective UI_OFF background inspection. */

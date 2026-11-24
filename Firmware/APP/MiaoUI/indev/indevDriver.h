@@ -38,6 +38,7 @@ void indevClearPending(void); /* Discard key actions captured before external na
 void indevService_10ms(void);
 uint8_t indevHasPending(void); /* Read-only queue status; does not consume. */
 UI_ACTION indevScan(const ui_t *ui);
+uint8_t indevActionIsRepeat(void); /* Result of the latest indevScan(). */
 
 #ifdef __cplusplus
 }

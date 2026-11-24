@@ -7,10 +7,11 @@
 #include "pm_api.h"
 #include "beep_service.h"
 #define KEY_QUEUE_SIZE 16u
+#define KEY_EVENT_REPEAT 0x80u
 #define KEY_EVENT_ENTER ((uint8_t)KeyIndex_Max)
 #define KEY_EVENT_BACK ((uint8_t)(KeyIndex_Max+1u))
 static uint8_t queue[KEY_QUEUE_SIZE],head,tail;
-static uint8_t conf_valid,conf_long,suppressed;
+static uint8_t conf_valid, conf_long, suppressed, action_repeat;
 static void clear_events(void){head=0u;tail=0u;}
 void indevClearPending(void) {
     clear_events();
@@ -61,9 +62,11 @@ void indevService_10ms(void) {
             }
         }
         else {
-            uint8_t repeat=KEY_GetDASClick((KeyIndex_t)i);
-            if(repeat && !blocked && !(suppressed&bit))
-                {queue_event(i);pm_api_refresh_idle();}
+            uint8_t click = KEY_GetDASClick((KeyIndex_t)i);
+            if (click && !blocked && !(suppressed & bit)) {
+                queue_event((uint8_t)(i | (edge == KeyEdge_Rising ? 0u : KEY_EVENT_REPEAT)));
+                pm_api_refresh_idle();
+            }
         }
     }
     if(blocked)conf_valid=0u;
@@ -83,14 +86,20 @@ static UI_ACTION translate(uint8_t event,const ui_t *ui) {
     }
 }
 
+uint8_t indevActionIsRepeat(void) {
+    return action_repeat;
+}
+
 UI_ACTION indevScan(const ui_t *ui) {
     UI_ACTION result;
     uint8_t ev;
+    action_repeat = 0u;
     if(pm_api_ui_should_block() || pm_api_is_unstable_wake())
         {clear_events();return UI_ACTION_NONE;}
     if(head==tail)return UI_ACTION_NONE;
     ev=queue[tail];tail=(uint8_t)((tail+1u)%KEY_QUEUE_SIZE);
-    result=translate(ev,ui);
+    action_repeat = (uint8_t)((ev & KEY_EVENT_REPEAT) != 0u);
+    result = translate((uint8_t)(ev & ~KEY_EVENT_REPEAT), ui);
     if(result!=UI_ACTION_NONE)beep_key_click();
     return result;
 }

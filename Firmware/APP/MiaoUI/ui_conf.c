@@ -38,9 +38,7 @@ static ui_element_t s_about_el;
 /* Only one pending target; Radio (1) outranks Powerbank (2). */
 static uint8_t s_nav_pending,s_nav_active;
 static uint32_t s_power_nav_requested_at;
-static uint8_t s_mic_candidate,s_mic_latched;
-static uint8_t s_sub_candidate,s_sub_latched;
-static uint32_t s_sub_edge_at;
+static uint8_t s_mic_candidate, s_mic_latched;
 static uint32_t s_mic_edge_at;
 
 static void add_return(ui_page_t *page,ui_page_t *parent,ui_item_t *item,uint8_t icon) {
@@ -222,8 +220,7 @@ void MiaoUi_ProcessNavigate(ui_t *ui) {
  * PM first forwards EXTI sources; the foreground service waits 40 ms. */
 /* Debounce the physical insert level after an EXTI falling edge.
  * Removal (high) re-arms each source without triggering navigation. */
-void MiaoUi_ExternalEventService(void) {
-    uint8_t events=pm_api_take_events();
+void MiaoUi_ExternalEventService(uint8_t events) {
     uint32_t now=Millis();
     if(LL_GPIO_IsInputPinSet(MIC_INDET_GPIO_Port,MIC_INDET_Pin)) {
         s_mic_candidate=0u;
@@ -242,28 +239,14 @@ void MiaoUi_ExternalEventService(void) {
         }
     }
 
-    if(LL_GPIO_IsInputPinSet(SUB_INDET_GPIO_Port,SUB_INDET_Pin)) {
-        s_sub_candidate=0u;
-        s_sub_latched=0u;
-    }
-    else if((events&PM_WAKE_SUB_INDET) && !s_sub_latched) {
-        s_sub_candidate=1u;
-        s_sub_edge_at=now;
-    }
-    if(s_sub_candidate && (uint32_t)(now-s_sub_edge_at)>=40u) {
-        s_sub_candidate=0u;
-        if(!LL_GPIO_IsInputPinSet(SUB_INDET_GPIO_Port,SUB_INDET_Pin)) {
-            s_sub_latched=1u;
-            if(System_AutoAuxANavigationEnabled())
-                MiaoUi_RequestNavigate(UI_TARGET_POWERBANK);
-        }
-    }
+    if (PowerAlgo_AuxA_TakeInserted() && System_AutoAuxANavigationEnabled())
+        MiaoUi_RequestNavigate(UI_TARGET_POWERBANK);
 }
 
 void MiaoUi_Setup(ui_t *ui) {
     s_nav_pending=0u;s_nav_active=0u;
-    s_mic_candidate=0u;s_mic_latched=0u;
-    s_sub_candidate=0u;s_sub_latched=0u;
+    s_mic_candidate = 0u;
+    s_mic_latched = 0u;
     Create_UI(ui,&s_powerbank);
     (void)UI_NavigateTo(ui, &s_powerbank, UI_NAV_REPLACE);
 }

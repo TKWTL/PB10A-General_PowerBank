@@ -3,6 +3,7 @@
 #include "core/ui.h"
 #include "display/dispDriver.h"
 #include "fonts/fonts.h"
+#include "indev/indevDriver.h"
 #include "millis.h"
 #include "mini_format.h"
 #include "power_algo.h"
@@ -136,8 +137,13 @@ static void draw_battery(const power_monitor_t *power, uint32_t now) {
     draw_measurements(PB_COL_BAT, power->vbat_mv, power->ibat_ma, power->valid);
 }
 
-static void draw_aux(const power_monitor_t *power) {
+static void draw_aux(const power_monitor_t *power, uint8_t bg, uint8_t fg) {
+    if (power->aux_enabled) {
+        Disp_DrawBox(PB_AUX_CENTER - 16u, 0u, 32u, 12u);
+        Disp_SetDrawColor(&bg);
+    }
     draw_centered(PB_AUX_CENTER, PB_ROW_TITLE, "AUX-A");
+    Disp_SetDrawColor(&fg);
     if (power->ntc_valid) {
         char text[8]; /* Up to six glyphs, with two bytes for °. */
         int c10 = power->ntc_c10;
@@ -243,6 +249,14 @@ void Powerbank_AppOnLeave(ui_t *ui) {
 void Powerbank_AppRun(ui_t *ui) {
     if (!ui || ui->action == UI_ACTION_ENTER || ui->action == UI_ACTION_BACK)
         return;
+    /* The dashboard is an icon-page item: RIGHT is DOWN, LEFT is UP.
+     * Held-key repeats must never restart output after protection trips. */
+    if (!indevActionIsRepeat()) {
+        if (ui->action == UI_ACTION_DOWN)
+            PowerAlgo_AuxA_Request(AUX_CMD_ENABLE);
+        else if (ui->action == UI_ACTION_UP)
+            PowerAlgo_AuxA_Request(AUX_CMD_DISABLE);
+    }
     ui->action = UI_ACTION_NONE;
     if (!s_active) {
         s_active = 1u;
@@ -263,7 +277,7 @@ void Powerbank_AppRun(ui_t *ui) {
     Disp_SetClipWindow(PB_BUS_END, 0u, PB_BAT_END, PB_TOP_END);
     draw_battery(&power, Millis());
     Disp_SetClipWindow(PB_BAT_END, 0u, UI_HOR_RES, PB_TOP_END);
-    draw_aux(&power);
+    draw_aux(&power, ui->bgColor, fg);
     Disp_SetFont(font_home_h6w4);
     Disp_SetClipWindow(0u, PB_FOOTER_TOP, UI_HOR_RES, UI_VER_RES);
     draw_footer(&power);

@@ -72,43 +72,31 @@ THRD_DECLARE(SystemServiceThread) {
             s_last_key_tick=now;
             indevService_10ms();
         }
-        MiaoUi_ExternalEventService();
+        uint8_t events = pm_api_take_events();
+        PowerAlgo_AuxA_OnEvents(events);
+        MiaoUi_ExternalEventService(events);
         beep_poll(now);
         THRD_DELAY(1u);
     }
     THRD_END;
 }
-/* Collar-Radio-style software mean: 16 independent four-rank ADC DMA
- * scans per 500 ms period, with 25 ms cooperative delays between
- * completed scans (15 gaps = 375 ms nominal, leaving margin before
- * the next 500 ms deadline). No new DMA timeout/retry machinery.
- * The ADC IRQ signals completion; the 16 means are published as one
- * snapshot while RTC/Aux-A retain their existing 500 ms cadence. */
-#define ADC_SCAN_GAP_MS 25u
-static uint8_t s_adc_scan_index; /* persistent: protothreads are stackless */
-static uint32_t s_adc_cycle_at;
+/* One ADC owner serves both fast AUX protection and the display mean.
+ * RTC and system telemetry keep their independent 500 ms cadence. */
+static uint32_t s_system_update_at;
 THRD_DECLARE(ADC_RTC_AuxAThread) {
     THRD_BEGIN;
     PowerAlgo_AdcInit();
     RTC_UpdateTime();
-    for(;;) {
-        s_adc_cycle_at=Millis();
-        PowerAlgo_AdcBatchBegin();
-        for(s_adc_scan_index=0u;
-            s_adc_scan_index<POWER_ADC_AVERAGE_SAMPLES;
-            ++s_adc_scan_index) {
-            if(PowerAlgo_AdcIsSuspended() || !PowerAlgo_AdcBeginScan())
-                break;
-            THRD_UNTIL(PowerAlgo_AdcScanSettled());
-            if(s_adc_scan_index+1u<POWER_ADC_AVERAGE_SAMPLES)
-                THRD_DELAY(ADC_SCAN_GAP_MS);
+    s_system_update_at = Millis();
+    for (;;) {
+        PowerAlgo_AdcPoll();
+        if ((uint32_t)(Millis() - s_system_update_at) >= 500u) {
+            s_system_update_at = Millis();
+            if (!RTC_IsEditing(&s_ui))
+                RTC_UpdateTime();
+            System_Poll();
         }
-        if(!RTC_IsEditing(&s_ui))RTC_UpdateTime();
-        PowerAlgo_AuxA_Service();
-        System_Poll();
-        /* Preserve the original 500 ms period from burst START,
-         * rather than adding 500 ms after the 16 spaced scans. */
-        THRD_UNTIL((uint32_t)(Millis()-s_adc_cycle_at)>=500u);
+        THRD_DELAY(1u);
     }
     THRD_END;
 }
