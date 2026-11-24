@@ -93,7 +93,7 @@ SW6306_RET SW6306_BytesRead(SW6306_ARGS(uint16_t reg, uint8_t *pdata, uint16_t l
  /通过读取版本寄存器(0x01)的值来确定目前采用的寄存器组，并进行切换
  /读出0x01时为0x00~0xFF，其他值则为0x100~0x1FF
  */
-SW6306_RET SW6306_RegsetSwitch(SW6306_ARGS(uint16_t regset)) {
+SW6306_NOINLINE SW6306_RET SW6306_RegsetSwitch(SW6306_ARGS(uint16_t regset)) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
     SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_REV, SW6306_Status.sendbuf);
@@ -130,7 +130,7 @@ SW6306_RET SW6306_RegsetSwitch(SW6306_ARGS(uint16_t regset)) {
  /遵循读-修改-写的顺序
  /将mask中为1的位按data中的对应位修改成1或0，mask中为0的位不被修改
  */
-SW6306_RET SW6306_ByteModify(SW6306_ARGS(uint16_t reg, uint8_t mask, uint8_t data)) {
+SW6306_NOINLINE SW6306_RET SW6306_ByteModify(SW6306_ARGS(uint16_t reg, uint8_t mask, uint8_t data)) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
     SW6306_SPAWN_ARGS(SW6306_ByteRead, reg, SW6306_Status.sendbuf);
@@ -181,7 +181,7 @@ static void sw6306_adc_read_raw(uint8_t ch, sw6306_adc_slot_t *slot) {
 }
 #endif
 
-SW6306_RET SW6306_ADCLoad(SW6306_NOARG) {
+SW6306_NOINLINE SW6306_RET SW6306_ADCLoad(SW6306_NOARG) {
     /* 原始码与工程量分开：先读齐 12 位原始码，再统一换算写入镜像（换算集中在 LOAD 阶段）。
      * 失败的通道跳过更新，保证镜像不会出现"半新半旧"或被重复换算的值。 */
 #ifdef SW6306_USE_PROTOTHREAD
@@ -328,7 +328,7 @@ float SW6306_ReadNTCTemp(void)//读取句柄中的 NTC 温度（°C，Beta 公�
     return SW6306_Status.ntc_temp;
 }
 
-SW6306_RET SW6306_PortStatusLoad(SW6306_NOARG) {
+SW6306_NOINLINE SW6306_RET SW6306_PortStatusLoad(SW6306_NOARG) {
 #ifdef SW6306_USE_PROTOTHREAD
     static uint8_t t[5]; /* survives PT yields and HAL IRQ */
 #else
@@ -738,7 +738,7 @@ SW6306_RET SW6306_ClearEvents(SW6306_ARGS(uint8_t events))//写1清除REG0x15已
     SW6306_FUNC_END;
 }
 
-SW6306_RET SW6306_CapacityLoad(SW6306_NOARG) {
+SW6306_NOINLINE SW6306_RET SW6306_CapacityLoad(SW6306_NOARG) {
 #ifdef SW6306_USE_PROTOTHREAD
     static uint8_t t[7];
 #else
@@ -917,7 +917,7 @@ SW6306_RET SW6306_Unlock(SW6306_NOARG) {
     SW6306_FUNC_END;
 }
 
-static SW6306_RET SW6306_Unlock_Nolock(SW6306_NOARG) {
+static SW6306_NOINLINE SW6306_RET SW6306_Unlock_Nolock(SW6306_NOARG) {
 #ifdef SW6306_USE_PROTOTHREAD
     static uint8_t rev;
 #endif
