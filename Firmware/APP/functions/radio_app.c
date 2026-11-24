@@ -241,7 +241,7 @@ static void radio_draw_menu(ui_t *ui) {
 
 
 /* A menu action only queues an algorithm command. The radio coroutine
- * then writes its own state and the BSP drives HAL I2C in IRQ mode. */
+ * then writes its own state and the BSP uses IRQ-backed I2C. */
 static uint8_t radio_handle_menu(ui_t *ui,UI_ACTION action) {
     if(action==UI_ACTION_MINUS)
         s_menu_index=s_menu_index?(uint8_t)(s_menu_index-1u):

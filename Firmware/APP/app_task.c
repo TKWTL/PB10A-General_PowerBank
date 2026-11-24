@@ -129,7 +129,7 @@ THRD_DECLARE(RadioServiceThread) {
 /* Each I2C sensor has a cooperative nonblocking service actor.
  * SC7A20 has a sensor data-ready interrupt capability; MMC5603 and
  * BMP180 are sampled by periodic software polling. These sensor-side
- * capabilities are separate from HAL's interrupt-driven I2C transport,
+ * capabilities are separate from the interrupt-driven I2C transport,
  * which is shared by all three actors. */
 THRD_DECLARE(SC7A20Thread) {
     THRD_BEGIN;

@@ -45,7 +45,7 @@ static void sw6306_connection_update(void) {
 static uint8_t s_sw_low_power;
 /* Suspend and resume are repeatable PM callbacks, not blocking threads.
  * PM must never overlap an in-progress SW6306 operation owned by coroOS.
- * If a transition is aborted while I2C is active, finish its HAL transfer
+ * If a transition is aborted while I2C is active, finish its transfer
  * before reusing the child PT. */
 static coro_pt_t s_sw_suspend_pt,s_sw_resume_pt;
 static uint8_t s_sw_suspend_stage,s_sw_resume_started;

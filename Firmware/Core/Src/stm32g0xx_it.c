@@ -22,6 +22,7 @@
 #include "stm32g0xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "i2c.h"
 #include "pm_api.h"
 #include "spi.h"
 #include "millis.h"
@@ -283,7 +284,7 @@ void DMA1_Channel2_3_IRQHandler(void)
 void I2C1_IRQHandler(void)
 {
   /* USER CODE BEGIN I2C1_IRQn 0 */
-
+  I2C_TransferIRQ();
   /* USER CODE END I2C1_IRQn 0 */
   /* USER CODE BEGIN I2C1_IRQn 1 */
 

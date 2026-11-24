@@ -32,7 +32,7 @@ extern "C" {
 #define SW6306_I2C_FAILURE_LIMIT 5U
 #endif
 
-/* HAL I2C is owned by Firmware/Core/i2c.c USER CODE sections. */
+/* I2C1 is owned by Firmware/Core/i2c.c USER CODE sections. */
 #include "i2c.h"
 #ifdef SW6306_USE_PROTOTHREAD
 #include "coroOS.h"
@@ -152,7 +152,7 @@ THRD_SPAWN_ARGS(func, __VA_ARGS__)              //调用子线程/函数语句
 /* SW6306 is serialized by one service coroutine and explicit PM handoff.
  * Device register helpers may nest; PT_SEM_WAIT is not recursive and would
  * deadlock RegsetSwitch/ByteModify under a top-level operation. The Core
- * HAL I2C adapter arbitrates individual bus transactions. */
+ * I2C adapter arbitrates individual bus transactions. */
 #define SW6306_MUTEX_TAKE   ((void)0)
 #define SW6306_MUTEX_GIVE   ((void)0)
 #define SW6306_FUNC_ABORT   PT_EXIT(pt)   

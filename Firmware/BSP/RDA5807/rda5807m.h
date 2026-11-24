@@ -141,7 +141,7 @@ uint8_t RDA5807_CompatLastOK(void);
 
 /* Nonblocking RDA5807 register/operation interface for coroOS.
  * Enqueue only; RDA5807_AsyncPoll() runs in the dedicated Radio thread.
- * All I2C transfers complete via HAL IRQ and caller-owned persistent state.
+ * All I2C transfers complete via I2C IRQ and caller-owned persistent state.
  * Legacy synchronous entry points below are retained for compatibility only. */
 #define RDA5807_ASYNC_PENDING 2u
 uint8_t RDA5807_AsyncBootSleep(void);
