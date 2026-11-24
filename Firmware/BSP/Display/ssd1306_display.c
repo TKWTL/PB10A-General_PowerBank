@@ -117,6 +117,7 @@ uint8_t SSD1306_Display_PowerSettled(uint8_t off) {
 void SSD1306_Display_Service(void) {
     SPI1_DmaState status;
     uint8_t phase;
+    SPI1_DmaTxService();
     if(!s_screen || s_init_failed)return;
     if(s_dma_phase!=OLED_PHASE_IDLE) {
         phase=s_dma_phase;

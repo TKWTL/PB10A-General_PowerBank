@@ -255,7 +255,7 @@ void EXTI4_15_IRQHandler(void)
 void DMA1_Channel1_IRQHandler(void)
 {
   /* USER CODE BEGIN DMA1_Channel1_IRQn 0 */
-
+  SPI1_DmaTxIRQ();
   /* USER CODE END DMA1_Channel1_IRQn 0 */
   /* USER CODE BEGIN DMA1_Channel1_IRQn 1 */
 
@@ -290,9 +290,4 @@ void I2C1_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
-/* Required for asynchronous HAL_SPI_Abort_IT recovery. */
-void SPI1_IRQHandler(void)
-{
-    HAL_SPI_IRQHandler(&hspi1);
-}
 /* USER CODE END 1 */

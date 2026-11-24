@@ -39,8 +39,8 @@ extern "C" {
 void MX_SPI1_Init(void);
 
 /* USER CODE BEGIN Prototypes */
-/* Completion is observed in foreground; callbacks never call app code.
- * All DMA buffers must remain valid until SPI1_DMA_DONE.
+/* Completion is reported after foreground service verifies SPI is idle.
+ * Keep the DMA buffer valid until DONE or until abort returns to IDLE.
  */
 typedef enum {
     SPI1_DMA_IDLE=0,
@@ -49,7 +49,9 @@ typedef enum {
     SPI1_DMA_ERROR,
     SPI1_DMA_ABORTING
 } SPI1_DmaState;
-uint8_t SPI1_DmaTxStart(const uint8_t *bytes,uint16_t count);
+uint8_t SPI1_DmaTxStart(const uint8_t *bytes, uint16_t count);
+void SPI1_DmaTxIRQ(void);
+void SPI1_DmaTxService(void);
 SPI1_DmaState SPI1_DmaTxState(void);
 uint8_t SPI1_DmaTxRelease(void);
 uint8_t SPI1_DmaTxAbortAsync(void);
