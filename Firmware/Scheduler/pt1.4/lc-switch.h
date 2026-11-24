@@ -65,9 +65,16 @@ typedef unsigned short lc_t;
 
 #define LC_INIT(s) s = 0;
 
-#define LC_RESUME(s) switch(s) { case 0:
+#define LC_RESUME(s)                        \
+    enum { _lc_resume_base = __COUNTER__ }; \
+    switch (s) {                            \
+    case 0:
 
-#define LC_SET(s) s = __LINE__; case __LINE__:
+#define LC_SET_NUMBER(s, n)            \
+    s = (lc_t)((n) - _lc_resume_base); \
+    case ((n) - _lc_resume_base):
+
+#define LC_SET(s) LC_SET_NUMBER(s, __COUNTER__)
 
 #define LC_END(s) }
 
