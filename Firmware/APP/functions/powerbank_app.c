@@ -26,7 +26,12 @@
 
 #define PB_BUS_END 45u
 #define PB_BAT_END 88u
+#define PB_BUS_CENTER (PB_COL_BUS + 18u)
+#define PB_BAT_CENTER (PB_COL_BAT + 18u)
+#define PB_AUX_CENTER (PB_COL_AUX + 18u)
 #define PB_ANIM_START UI_FX(48)
+#define PB_ANIM_FRAME_MS 5u
+#define PB_STEADY_FRAME_MS 50u
 
 static int32_t s_remaining_q;
 static ui_animation_param_t s_slide_pid;
@@ -81,29 +86,34 @@ static void draw_measurements(uint16_t x, uint16_t mv, uint16_t ma, uint8_t vali
     draw_quantity(x, PB_ROW_VOLTAGE, mv, 'V', valid);
 }
 
+/* Status fields use only the font's fixed six-pixel ASCII glyphs. */
+static void draw_centered(uint16_t center, uint16_t y, const char *text) {
+    Disp_DrawStr((uint16_t)(center - strlen(text) * 3u), y, text);
+}
+
 static void draw_bus(const power_monitor_t *power) {
     Disp_DrawStr(11u, PB_ROW_TITLE, "BUS");
     if (!power->valid) {
-        Disp_DrawStr(PB_COL_BUS, PB_ROW_INFO, "--");
+        draw_centered(PB_BUS_CENTER, PB_ROW_INFO, "--");
     } else {
         uint8_t c = power->c1_on || power->charging;
         if (power->charging || power->discharging)
             Disp_DrawStr(39u, PB_ROW_TITLE, power->charging ? ">" : "<");
         if (power->a1_on && c) {
-            Disp_DrawStr(PB_COL_BUS, PB_ROW_INFO, "A+C");
+            draw_centered(PB_BUS_CENTER, PB_ROW_INFO, "A+C");
         } else if (power->a1_on || c) {
             char text[7];
             (void)mini_snprintf(text, sizeof(text), "%c:%s", c ? 'C' : 'A', short_protocol(power->protocol));
-            Disp_DrawStr(PB_COL_BUS, PB_ROW_INFO, text);
+            draw_centered(PB_BUS_CENTER, PB_ROW_INFO, text);
         } else {
-            Disp_DrawStr(PB_COL_BUS, PB_ROW_INFO, "NC");
+            draw_centered(PB_BUS_CENTER, PB_ROW_INFO, "NC");
         }
     }
     draw_measurements(PB_COL_BUS, power->vbus_mv, power->ibus_ma, power->valid);
 }
 
 static void draw_battery(const power_monitor_t *power, uint32_t now) {
-    uint8_t valid = power->valid && power->capacity_valid;
+    uint8_t valid = power->capacity_valid;
     if (!(valid && power->capacity_pct <= 5u && (now / 800u & 1u))) {
         Disp_DrawXBMP(56u, 2u, 16u, 8u, s_battery_icon);
         if (valid) {
@@ -119,20 +129,25 @@ static void draw_battery(const power_monitor_t *power, uint32_t now) {
     if (valid) {
         char text[5];
         (void)mini_snprintf(text, sizeof(text), "%u%%", (unsigned)power->capacity_pct);
-        Disp_DrawStr(PB_COL_BAT, PB_ROW_INFO, text);
+        draw_centered(PB_BAT_CENTER, PB_ROW_INFO, text);
     } else {
-        Disp_DrawStr(PB_COL_BAT, PB_ROW_INFO, "--");
+        draw_centered(PB_BAT_CENTER, PB_ROW_INFO, "--");
     }
     draw_measurements(PB_COL_BAT, power->vbat_mv, power->ibat_ma, power->valid);
 }
 
 static void draw_aux(const power_monitor_t *power) {
-    Disp_DrawStr(99u, PB_ROW_TITLE, "AUX");
+    draw_centered(PB_AUX_CENTER, PB_ROW_TITLE, "AUX-A");
     if (power->ntc_valid) {
-        char text[7];
+        char text[8]; /* Up to six glyphs, with two bytes for °. */
         int c10 = power->ntc_c10;
         unsigned mag = (unsigned)(c10 < 0 ? -c10 : c10);
-        (void)mini_snprintf(text, sizeof(text), "%s%u.%uC", c10 < 0 ? "-" : "", mag / 10u, mag % 10u);
+        const char *sign = c10 < 0 ? "-" : "";
+        /* Drop the fractional digit when a sign or third digit needs room. */
+        if (c10 <= -100 || c10 >= 1000)
+            (void)mini_snprintf(text, sizeof(text), "%s%u°C", sign, (mag + 5u) / 10u);
+        else
+            (void)mini_snprintf(text, sizeof(text), "%s%u.%u°C", sign, mag / 10u, mag % 10u);
         Disp_DrawStr(PB_COL_AUX, PB_ROW_INFO, text);
     } else {
         Disp_DrawStr(PB_COL_AUX, PB_ROW_INFO, "--");
@@ -226,7 +241,7 @@ void Powerbank_AppOnLeave(ui_t *ui) {
 }
 
 void Powerbank_AppRun(ui_t *ui) {
-    if (!ui || ui->action == UI_ACTION_BACK)
+    if (!ui || ui->action == UI_ACTION_ENTER || ui->action == UI_ACTION_BACK)
         return;
     ui->action = UI_ACTION_NONE;
     if (!s_active) {
@@ -236,7 +251,7 @@ void Powerbank_AppRun(ui_t *ui) {
     }
 
     power_monitor_t power;
-    PowerAlgo_GetMonitor(&power);
+    PowerAlgo_GetDisplayMonitor(&power);
     Disp_SetMaxClipWindow();
     Disp_SetDrawColor(&ui->bgColor);
     Disp_DrawBox(0u, 0u, UI_HOR_RES, UI_VER_RES);
@@ -262,9 +277,9 @@ void Powerbank_AppRun(ui_t *ui) {
         s_remaining_q = UI_Animation(0, s_remaining_q, &s_slide_pid);
         if (s_remaining_q < 0)
             s_remaining_q = 0;
-        UI_RequestNextFrame(ui, 20u);
+        UI_RequestNextFrame(ui, PB_ANIM_FRAME_MS);
     } else {
-        UI_RequestNextFrame(ui, 200u);
+        UI_RequestNextFrame(ui, PB_STEADY_FRAME_MS);
     }
 
     Disp_DrawLine(0u, PB_DIVIDER_Y, UI_HOR_RES - 1u, PB_DIVIDER_Y);

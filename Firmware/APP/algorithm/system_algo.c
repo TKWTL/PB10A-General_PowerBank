@@ -128,12 +128,13 @@ void System_AddStatisticsItems(ui_page_t *page) {
     s_vdda_element.data=&s_vdda_data;
     Create_element(&s_vdda_item,&s_vdda_element);
     AddItem(" VDDA V", UI_ITEM_DATA, 0, &s_vdda_item, page, 0, 0);
-    s_temp_data.name=" Die Temp C";s_temp_data.ptr=&s_die_temp_c10;
+    s_temp_data.name = " Die Temp °C";
+    s_temp_data.ptr = &s_die_temp_c10;
     s_temp_data.dataType=UI_DATA_FLOAT;s_temp_data.actionType=UI_DATA_ACTION_RO;
     s_temp_data.decimals=1u;
     s_temp_element.data=&s_temp_data;
     Create_element(&s_temp_item,&s_temp_element);
-    AddItem(" Die Temp C",UI_ITEM_DATA,0,&s_temp_item,page,0,0);
+    AddItem(" Die Temp °C", UI_ITEM_DATA, 0, &s_temp_item, page, 0, 0);
 }
 
 void System_Poll(void) {

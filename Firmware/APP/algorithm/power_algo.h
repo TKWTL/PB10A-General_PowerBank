@@ -24,6 +24,8 @@ void PowerAlgo_Init(void);
 /* SW6306 owner thread: cooperative Init/ADC/Status/Port/Power/Capacity. */
 char PowerAlgo_SW6306Thread(coro_pt_t *pt);
 void PowerAlgo_GetMonitor(power_monitor_t *out);
+/* Display cache keeps published values while new transfers are pending. */
+void PowerAlgo_GetDisplayMonitor(power_monitor_t *out);
 /* Radio WUT inspection: requests are serviced by the existing SW6306
  * coroutine, never from RTC ISR. Take returns 0=pending/not available,
  * 1=both fresh ADC and coulomb/capacity data valid, 2=I2C failure.
