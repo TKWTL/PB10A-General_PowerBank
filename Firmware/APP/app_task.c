@@ -44,10 +44,6 @@ THRD_DECLARE(MiaoUiThread) {
                    !pm_api_ui_should_block());
 
         MiaoUi_ProcessNavigate(&s_ui);
-        /* Leveler and calibration views retain their physical orientation. */
-        if (SC7A20Algo_ToolMode() != 0u) Disp_SetRotation(0u);
-        else Disp_ResumeRotation(&s_ui);
-
         s_ui_next_interval = ui_loop(&s_ui);
         /* Advance absolute deadlines without accumulating 1 ms scheduler
          * jitter. Skip missed slots rather than running catch-up frames.

@@ -892,6 +892,11 @@
               <FilePath>../APP/functions/games/arkanoid/game_arkanoid.c</FilePath>
             </File>
             <File>
+              <FileName>game_tiny_tris.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/functions/games/tiny_tris/game_tiny_tris.c</FilePath>
+            </File>
+            <File>
               <FileName>game_pacman.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/functions/games/pacman/game_pacman.c</FilePath>

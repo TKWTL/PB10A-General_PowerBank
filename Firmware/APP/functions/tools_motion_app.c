@@ -48,7 +48,6 @@ static void motion_tool_begin(uint8_t mode) {
     pm_api_set_sleep_block(MOTION_APP_PM_BLOCK,1u);
     pm_api_refresh_idle();
     SC7A20Algo_SetToolMode(mode);
-    Disp_SetRotation(0u); /* native layout from the very first tool frame */
 }
 static void motion_tool_end(void) {
     SC7A20Algo_SetToolMode(0u);

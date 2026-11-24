@@ -37,6 +37,9 @@ them.
 - `games/arkanoid/`: Tiny Arkanoid by Daniel Champagne, with five original
   layouts and portrait controls. See [game documentation](games/arkanoid/README.md).
 
+- `games/tiny_tris/`: Tiny Tris v3, with the original 12×19 well, seven
+  pieces and graphics. See [game documentation](games/tiny_tris/README.md).
+
 - `i2c_scanner.c/.h`: visual UI restored from Collar-Radio: initial
   1.5s title `I2C / Scanner` in the original 24px font, followed by
   the full 16x8 hexadecimal address grid using the original 4px font.
@@ -56,7 +59,7 @@ them.
   Calibration uses six stable ±axis placements, then records zero/slope
   with CRC into the Keil `.noinit` SRAM area; this retains calibration
   across MCU reset while SRAM has power, **not** across total power loss.
-  Both applications release their distinct PM/rotation lock on leave.
+  Both applications release their PM lock on leave.
 
 Shared foundation services such as RTC calendar editing and the buzzer
 are provided by `APP/framework/`; device logic resides in `APP/algorithm/`.

@@ -194,7 +194,6 @@ void SC7A20Algo_SetToolMode(uint8_t mode) {
     s_orient_div=0u;
     s_sample.seq=0u; /* old sample must not be interpreted as new */
 }
-uint8_t SC7A20Algo_ToolMode(void) {return s_tool_mode;}
 uint8_t SC7A20Algo_GetSample(sc7a20_sample_t *out) {
     if(!out || s_stage!=6u || s_suspended || s_paused ||
        s_sample.seq==0u || (uint32_t)(Millis()-s_sample_at)>800u)

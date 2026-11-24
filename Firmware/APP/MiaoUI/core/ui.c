@@ -932,6 +932,7 @@ static void Draw_ImagePage(ui_t *ui, ui_page_t *Page, ui_item_t *nowItem, ui_ite
 static void Draw_UI(ui_t *ui, ui_page_t *Page, ui_item_t *nowItem, ui_item_t *next_item) {
     uint8_t color = ui->bgColor;
 
+    Disp_ResumeRotation(ui);
     Disp_SetFont(UI_FONT);
 
     // 计算页面状态
@@ -1244,6 +1245,10 @@ default:
 static void Process_App_Run(ui_t *ui, ui_item_t *item, UI_ACTION Action) {
     if (item == NULL) return; // 检查空指针，避免未定义行为
 
+    if (MiaoUi_ItemLocksRotation(item))
+        Disp_SetRotation(0u);
+    else
+        Disp_ResumeRotation(ui);
     ui->action = Action; // 设置项目的状态为当前菜单状态
 
     switch (item->itemType) // 根据项目类型执行不同的操作

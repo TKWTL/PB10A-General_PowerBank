@@ -303,10 +303,9 @@ parity bits. No option bytes have been changed by this commit.
 
 ### Display flip orientation
 
-The SSD1306 display BSP initializes u8g2 with `U8G2_R0`.
-In Display > Screen Flip, setting 0 retains that native orientation;
-setting 1 selects `U8G2_R2` (180°). The generic R0/R1/R2/R3
-rotation-mode API is unchanged.
+The SSD1306 initializes in native `U8G2_R0`. Game sessions, Leveler and
+Accel Calibration select `U8G2_R0` before each application draw. Menu draws
+apply the current Screen Flip setting from the first frame after exit.
 
 ### SC7A20 gravity rotation and STOP1 wake (2026-11-20)
 

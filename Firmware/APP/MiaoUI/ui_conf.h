@@ -398,6 +398,7 @@ void Create_Parameter(ui_t *ui);
 void Create_Text(ui_t *ui);
 void Create_MenuTree(ui_t *ui);
 void MiaoUi_Setup(ui_t *ui);
+uint8_t MiaoUi_ItemLocksRotation(const ui_item_t *item);
 /* Request layer owns the static MiaoUI item IDs; no ISR calls ui_loop(). */
 typedef enum { UI_TARGET_RADIO=0, UI_TARGET_POWERBANK=1 } ui_target_t;
 void MiaoUi_RequestNavigate(ui_target_t target);

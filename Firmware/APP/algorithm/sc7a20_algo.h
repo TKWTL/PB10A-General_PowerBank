@@ -23,7 +23,6 @@ typedef struct {
     uint32_t seq;
 } sc7a20_sample_t;
 void SC7A20Algo_SetToolMode(uint8_t mode);
-uint8_t SC7A20Algo_ToolMode(void);
 uint8_t SC7A20Algo_GetSample(sc7a20_sample_t *out);
 /* Face order X-,X+,Y-,Y+,Z-,Z+. Validated/calibrated atomically.
  * CRC-protected calibration retained in Keil RW_NOINIT SRAM across warm
