@@ -107,8 +107,9 @@ is not part of the 30px UI and may be dropped; all visible data stays intact.
 - **Invaders:** preserve 4x6 formation, 10 original level tables,
   original shield-bit state, UFO bonus and one player projectile.
   Keep rendering pure so DMA frame count cannot change hit results.
-- **Breakout:** retain its separate MIT upstream license and game
-  structure; do not force unrelated games into the same mechanics.
+- **Arkanoid:** preserve the original five layouts, reflective blocks and
+  alternate bounce vectors. Native y motion becomes horizontal after a 90°
+  counterclockwise physical turn.
 
 ## Check before committing
 
@@ -136,7 +137,7 @@ is not part of the 30px UI and may be dropped; all visible data stays intact.
   owner is rejected, the same owner may reacquire without clearing.
   `GameBuffer_Release(owner)` zeros all 1024 bytes and releases the owner.
   Never release on STOP1/display suspension; release only on the UI leave
-  hook, and unbind game-core pointers **before** clearing. Breakout needs no
+  hook, and unbind game-core pointers **before** clearing. Arkanoid needs no
   cache. No heap, lazy allocation or third 1024-byte screen buffer.
 - Image compression uses hardware-independent `Firmware/LIB/rle.c`:
   upper two control bits choose literal/zero/FF/repeat, lower six bits

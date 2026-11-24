@@ -28,6 +28,16 @@ static ui_item_t s_battery_items[BATTERY_ITEM_COUNT];
 static ui_data_t s_battery_data[BATTERY_ITEM_COUNT];
 static ui_element_t s_battery_elements[BATTERY_ITEM_COUNT];
 
+enum { POWER_BUS_VOLTAGE,
+       POWER_BUS_CURRENT,
+       POWER_AUX_VOLTAGE,
+       POWER_AUX_CURRENT,
+       POWER_ITEM_COUNT };
+static int s_power_values[POWER_ITEM_COUNT];
+static ui_item_t s_power_items[POWER_ITEM_COUNT];
+static ui_data_t s_power_data[POWER_ITEM_COUNT];
+static ui_element_t s_power_elements[POWER_ITEM_COUNT];
+
 static power_monitor_t s_monitor;
 static uint8_t s_sw_phase,s_capacity_div,s_idle_verified,s_status_fresh;
 static uint8_t s_sw_owner_busy,s_cycle_ok;
@@ -190,12 +200,8 @@ static uint16_t s_dma[PB_ADC_SCAN_COUNT] __attribute__((aligned(4)));
 static uint32_t s_adc_accumulator[PB_ADC_SCAN_COUNT]; /* 16 * 4095 per rank fits uint32_t */
 static uint8_t s_adc_sample_count;
 static uint8_t s_active,s_suspended,s_adc_initialized;
-static uint8_t s_aux_inserted,s_aux_enabled,s_system_adc_valid;
-static int s_aux_voltage_cv, s_aux_current_ma;
-static int s_vdda_mv,s_die_temp_c10;
-static ui_item_t s_aux_voltage_item,s_aux_current_item;
-static ui_data_t s_aux_data[2];
-static ui_element_t s_aux_elements[2];
+static uint8_t s_aux_inserted, s_aux_enabled, s_system_adc_valid;
+static int s_vdda_mv, s_die_temp_c10;
 
 static pm_hook_result_t power_adc_suspend(void *ctx) {
     (void)ctx;
@@ -229,8 +235,8 @@ void PowerAlgo_AdcInit(void) {
     s_active = 0u;
     s_suspended = 0u;
     s_aux_enabled=1u;s_aux_inserted=0u;
-    s_aux_voltage_cv = 0;
-    s_aux_current_ma = 0;
+    s_power_values[POWER_AUX_VOLTAGE] = 0;
+    s_power_values[POWER_AUX_CURRENT] = 0;
     s_vdda_mv=0;s_die_temp_c10=0;s_system_adc_valid=0u;
     s_adc_sample_count=0u;
     memset(s_adc_accumulator,0,sizeof(s_adc_accumulator));
@@ -299,11 +305,12 @@ uint8_t PowerAlgo_AdcScanSettled(void) {
     pin_current_mv = ((uint32_t)avg[PB_ADC_AUX_CURRENT_SLOT] * (uint32_t)s_vdda_mv + 2047u) / 4095u;
     pin_voltage_mv = ((uint32_t)avg[PB_ADC_AUX_VOLTAGE_SLOT] * (uint32_t)s_vdda_mv + 2047u) / 4095u;
     /* PA0: 0.5 V/A (500 mV/A). PA5: 680 k / 220 k divider. */
-    s_aux_current_ma=(int)(pin_current_mv*1000u/AUX_A_CURRENT_MV_PER_A);
+    uint32_t aux_ma = pin_current_mv * 1000u / AUX_A_CURRENT_MV_PER_A;
     uint32_t aux_mv = (pin_voltage_mv * (AUX_A_VDIV_HIGH + AUX_A_VDIV_LOW) +
                        AUX_A_VDIV_LOW / 2u) /
                       AUX_A_VDIV_LOW;
-    s_aux_voltage_cv = (int)((aux_mv + 5u) / 10u);
+    s_power_values[POWER_AUX_VOLTAGE] = (int)((aux_mv + 5u) / 10u);
+    s_power_values[POWER_AUX_CURRENT] = (int)((aux_ma + 5u) / 10u);
 
     /* Retain tenths of a degree using the factory TS_CAL1/TS_CAL2 values. */
     cal_span=(int32_t)*TEMPSENSOR_CAL2_ADDR-(int32_t)*TEMPSENSOR_CAL1_ADDR;
@@ -333,21 +340,16 @@ uint8_t PowerAlgo_AuxAIsInserted(void){return s_aux_inserted;}
 uint8_t PowerAlgo_AuxAIsEnabled(void){return s_aux_enabled;}
 
 void PowerAlgo_AddStatisticsItems(ui_page_t *page) {
-    static const char *const names[2] = {" Aux-A V", " Aux-A I mA"};
-    int *values[2] = {&s_aux_voltage_cv, &s_aux_current_ma};
-    uint8_t i;
-    if(!page)return;
-    for(i=0u;i<2u;i++) {
-        s_aux_data[i].name=names[i];
-        s_aux_data[i].ptr=values[i];
-        s_aux_data[i].dataType = i == 0u ? UI_DATA_FLOAT : UI_DATA_INT;
-        s_aux_data[i].actionType=UI_DATA_ACTION_RO;
-        s_aux_data[i].function=0;
-        s_aux_data[i].decimals = i == 0u ? 2u : 0u;
-        s_aux_elements[i].data=&s_aux_data[i];
-        Create_element(i==0u?&s_aux_voltage_item:&s_aux_current_item,&s_aux_elements[i]);
-        AddItem(names[i],UI_ITEM_DATA,0,
-            i==0u?&s_aux_voltage_item:&s_aux_current_item,page,0,0);
+    static const char *const names[POWER_ITEM_COUNT] = {" BUS V", " BUS A", " Aux-A V", " Aux-A A"};
+    for (unsigned i = 0; i < POWER_ITEM_COUNT; ++i) {
+        s_power_data[i].name = names[i];
+        s_power_data[i].ptr = i >= POWER_AUX_VOLTAGE ? &s_power_values[i] : NULL;
+        s_power_data[i].dataType = UI_DATA_FLOAT;
+        s_power_data[i].actionType = UI_DATA_ACTION_RO;
+        s_power_data[i].decimals = 2u;
+        s_power_elements[i].data = &s_power_data[i];
+        Create_element(&s_power_items[i], &s_power_elements[i]);
+        AddItem(names[i], UI_ITEM_DATA, 0, &s_power_items[i], page, 0, 0);
     }
 }
 
@@ -365,12 +367,17 @@ void PowerAlgo_AddBatteryItems(ui_page_t *page) {
     s_battery_data[BATTERY_VOLTAGE].decimals = 2u;
 }
 
-static void sw6306_cache_battery_voltage(void) {
-    s_battery_data[BATTERY_VOLTAGE].ptr = NULL;
-    if (SW6306_LastOperationOK() && SW6306_IsInitialized()) {
-        s_battery_values[BATTERY_VOLTAGE] = (SW6306_ReadVBAT() + 5u) / 10u;
-        s_battery_data[BATTERY_VOLTAGE].ptr = &s_battery_values[BATTERY_VOLTAGE];
-    }
+static void sw6306_cache_adc(void) {
+    uint8_t valid = SW6306_LastOperationOK() && SW6306_IsInitialized();
+    s_power_data[POWER_BUS_VOLTAGE].ptr = valid ? &s_power_values[POWER_BUS_VOLTAGE] : NULL;
+    s_power_data[POWER_BUS_CURRENT].ptr = valid ? &s_power_values[POWER_BUS_CURRENT] : NULL;
+    s_battery_data[BATTERY_VOLTAGE].ptr = valid ? &s_battery_values[BATTERY_VOLTAGE] : NULL;
+    if (!valid)
+        return;
+
+    s_power_values[POWER_BUS_VOLTAGE] = (SW6306_ReadVBUS() + 5u) / 10u;
+    s_power_values[POWER_BUS_CURRENT] = (SW6306_ReadIBUS() + 5u) / 10u;
+    s_battery_values[BATTERY_VOLTAGE] = (SW6306_ReadVBAT() + 5u) / 10u;
 }
 
 static void sw6306_cache_battery_energy(unsigned item, uint32_t mwh) {
@@ -411,6 +418,8 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             continue;
         }
         if(!SW6306_IsInitialized()) {
+            s_power_data[POWER_BUS_VOLTAGE].ptr = NULL;
+            s_power_data[POWER_BUS_CURRENT].ptr = NULL;
             for (unsigned i = 0; i < BATTERY_ITEM_COUNT; ++i)
                 s_battery_data[i].ptr = NULL;
             s_monitor.initialized=0u;
@@ -451,7 +460,7 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             SW6306_OperationReset();
             THRD_SPAWN_NOARG(SW6306_ADCLoad);
             s_sw_owner_busy=0u;
-            sw6306_cache_battery_voltage();
+            sw6306_cache_adc();
             s_radio_battery_adc_ok=SW6306_LastOperationOK();
             if(s_radio_battery_adc_ok)
                 s_radio_battery_mv=SW6306_ReadVBAT();
@@ -483,7 +492,7 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             SW6306_OperationReset();
             THRD_SPAWN_NOARG(SW6306_ADCLoad);
             s_sw_owner_busy=0u;
-            sw6306_cache_battery_voltage();
+            sw6306_cache_adc();
             if(!SW6306_LastOperationOK())s_cycle_ok=0u;
         }
         else if(s_sw_phase==1u) {

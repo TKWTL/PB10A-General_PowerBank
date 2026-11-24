@@ -88,11 +88,10 @@ internal channels; four ranks, software triggering, normal DMA1 Channel2,
 Keep `.ioc` as the configuration source of truth; do not maintain a
 private patch to the vendor HAL files.
 
-Statistics -> Power contains only two cached Aux-A readings:
-- Voltage (V, two decimal places) uses PA5 ADC rank 2, scaled by measured VDDA from VREFINT
-  and the 680 kΩ / 220 kΩ divider.
-- Current (mA): PA0 ADC rank 1, scaled by measured VDDA, with
-  sensor output sensitivity 0.5 V/A (500 mV/A).
+Statistics → Power shows BUS V, BUS A, Aux-A V and Aux-A A, each with two decimal places.
+BUS readings come from the shared SW6306 bus ADC. Aux-A voltage comes from PA5
+via the 680 kΩ / 220 kΩ divider, and Aux-A current comes from PA0 at 0.5 V/A.
+Both Aux-A channels use the VDDA measured from VREFINT.
 
 Statistics → Battery shows charge percentage, pack voltage in volts,
 and full and remaining energy in Wh. The SW6306 service supplies these values from

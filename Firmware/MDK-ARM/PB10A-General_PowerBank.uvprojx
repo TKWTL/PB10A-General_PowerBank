@@ -887,9 +887,9 @@
               <FilePath>../APP/functions/tools_motion_app.c</FilePath>
             </File>
             <File>
-              <FileName>game_breakout.c</FileName>
+              <FileName>game_arkanoid.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../APP/functions/games/breakout/game_breakout.c</FilePath>
+              <FilePath>../APP/functions/games/arkanoid/game_arkanoid.c</FilePath>
             </File>
             <File>
               <FileName>game_pacman.c</FileName>

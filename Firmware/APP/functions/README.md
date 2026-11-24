@@ -34,8 +34,8 @@ them.
   Hold CONF to pause, long-hold to exit. All mutable session state stays in
   RAM. Automatic STOP1 is allowed. See [game documentation](games/pacman/README.md).
 
-- `games/breakout/`: 8x5 Breakout with nine preset maps and random maps from
-  stage 10. The existing MIT license remains alongside its own sources.
+- `games/arkanoid/`: Tiny Arkanoid by Daniel Champagne, with five original
+  layouts and portrait controls. See [game documentation](games/arkanoid/README.md).
 
 - `i2c_scanner.c/.h`: visual UI restored from Collar-Radio: initial
   1.5s title `I2C / Scanner` in the original 24px font, followed by
