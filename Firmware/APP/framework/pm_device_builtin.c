@@ -5,7 +5,6 @@
 #include "spi.h"
 #include "millis.h"
 #include "main.h"
-#include "peripheral_map.h"
 #include "sc7a20_algo.h"
 #include "radio_algo.h"
 #include "pm_api.h"

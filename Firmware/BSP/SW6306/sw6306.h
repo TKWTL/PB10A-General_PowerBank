@@ -1504,10 +1504,9 @@ uint8_t SW6306_ReadCapacity(void);              //读取SW6306显示电量
 #if SW6306_USE_FLOAT_API
 float SW6306_ReadMaxEnergy_mWh(void);
 float SW6306_ReadRemainEnergy_mWh(void);
-#else
+#endif
 uint32_t SW6306_ReadMaxEnergyRounded_mWh(void);
 uint32_t SW6306_ReadRemainEnergyRounded_mWh(void);
-#endif
 /* 容量学习状态（0xA2 两位组合，bit5=END 在前为高位、bit6=ING 为低位）：
  * 00 等待学习 Waiting / 01 学习中 Learning / 10 完成 Done / 11 共存(不存在) Unknown
  * 注意：成员名带 ST 前缀，避免与 SW6306_LEARN_ING/END 位宏冲突。 */

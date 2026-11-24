@@ -29,7 +29,6 @@ extern "C" {
 #include "main.h"
 
 /* USER CODE BEGIN Includes */
-#include "peripheral_map.h"
 /* USER CODE END Includes */
 
 /* USER CODE BEGIN Private defines */

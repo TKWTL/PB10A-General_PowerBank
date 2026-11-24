@@ -15,6 +15,19 @@
 #define POWER_SW_SLEEP_BLOCK 0x08u /* separate from scanner (0x02) and radio (0x04) */
 #define SW_REINIT_DELAY_MS 5000u
 #define SW_MONITOR_STALE_MS 2500u
+
+enum {
+    BATTERY_CHARGE,
+    BATTERY_VOLTAGE,
+    BATTERY_MAX_ENERGY,
+    BATTERY_REMAIN_ENERGY,
+    BATTERY_ITEM_COUNT
+};
+static int s_battery_values[BATTERY_ITEM_COUNT];
+static ui_item_t s_battery_items[BATTERY_ITEM_COUNT];
+static ui_data_t s_battery_data[BATTERY_ITEM_COUNT];
+static ui_element_t s_battery_elements[BATTERY_ITEM_COUNT];
+
 static power_monitor_t s_monitor;
 static uint8_t s_sw_phase,s_capacity_div,s_idle_verified,s_status_fresh;
 static uint8_t s_sw_owner_busy,s_cycle_ok;
@@ -178,7 +191,7 @@ static uint32_t s_adc_accumulator[PB_ADC_SCAN_COUNT]; /* 16 * 4095 per rank fits
 static uint8_t s_adc_sample_count;
 static uint8_t s_active,s_suspended,s_adc_initialized;
 static uint8_t s_aux_inserted,s_aux_enabled,s_system_adc_valid;
-static int s_aux_voltage_mv,s_aux_current_ma;
+static int s_aux_voltage_cv, s_aux_current_ma;
 static int s_vdda_mv,s_die_temp_c10;
 static ui_item_t s_aux_voltage_item,s_aux_current_item;
 static ui_data_t s_aux_data[2];
@@ -216,7 +229,8 @@ void PowerAlgo_AdcInit(void) {
     s_active = 0u;
     s_suspended = 0u;
     s_aux_enabled=1u;s_aux_inserted=0u;
-    s_aux_voltage_mv=0;s_aux_current_ma=0;
+    s_aux_voltage_cv = 0;
+    s_aux_current_ma = 0;
     s_vdda_mv=0;s_die_temp_c10=0;s_system_adc_valid=0u;
     s_adc_sample_count=0u;
     memset(s_adc_accumulator,0,sizeof(s_adc_accumulator));
@@ -286,8 +300,10 @@ uint8_t PowerAlgo_AdcScanSettled(void) {
     pin_voltage_mv = ((uint32_t)avg[PB_ADC_AUX_VOLTAGE_SLOT] * (uint32_t)s_vdda_mv + 2047u) / 4095u;
     /* PA0: 0.5 V/A (500 mV/A). PA5: 680 k / 220 k divider. */
     s_aux_current_ma=(int)(pin_current_mv*1000u/AUX_A_CURRENT_MV_PER_A);
-    s_aux_voltage_mv=(int)((pin_voltage_mv*
-        (AUX_A_VDIV_HIGH+AUX_A_VDIV_LOW)+AUX_A_VDIV_LOW/2u)/AUX_A_VDIV_LOW);
+    uint32_t aux_mv = (pin_voltage_mv * (AUX_A_VDIV_HIGH + AUX_A_VDIV_LOW) +
+                       AUX_A_VDIV_LOW / 2u) /
+                      AUX_A_VDIV_LOW;
+    s_aux_voltage_cv = (int)((aux_mv + 5u) / 10u);
 
     /* Retain tenths of a degree using the factory TS_CAL1/TS_CAL2 values. */
     cal_span=(int32_t)*TEMPSENSOR_CAL2_ADDR-(int32_t)*TEMPSENSOR_CAL1_ADDR;
@@ -317,22 +333,68 @@ uint8_t PowerAlgo_AuxAIsInserted(void){return s_aux_inserted;}
 uint8_t PowerAlgo_AuxAIsEnabled(void){return s_aux_enabled;}
 
 void PowerAlgo_AddStatisticsItems(ui_page_t *page) {
-    static const char *const names[2]={" Aux-A V mV"," Aux-A I mA"};
-    int *values[2]={&s_aux_voltage_mv,&s_aux_current_ma};
+    static const char *const names[2] = {" Aux-A V", " Aux-A I mA"};
+    int *values[2] = {&s_aux_voltage_cv, &s_aux_current_ma};
     uint8_t i;
     if(!page)return;
     for(i=0u;i<2u;i++) {
         s_aux_data[i].name=names[i];
         s_aux_data[i].ptr=values[i];
-        s_aux_data[i].dataType=UI_DATA_INT;
+        s_aux_data[i].dataType = i == 0u ? UI_DATA_FLOAT : UI_DATA_INT;
         s_aux_data[i].actionType=UI_DATA_ACTION_RO;
         s_aux_data[i].function=0;
-        s_aux_data[i].decimals=0u;
+        s_aux_data[i].decimals = i == 0u ? 2u : 0u;
         s_aux_elements[i].data=&s_aux_data[i];
         Create_element(i==0u?&s_aux_voltage_item:&s_aux_current_item,&s_aux_elements[i]);
         AddItem(names[i],UI_ITEM_DATA,0,
             i==0u?&s_aux_voltage_item:&s_aux_current_item,page,0,0);
     }
+}
+
+void PowerAlgo_AddBatteryItems(ui_page_t *page) {
+    static const char *const names[BATTERY_ITEM_COUNT] = {
+        " Charge %", " Battery V", " Max Wh", " Remain Wh"};
+    for (unsigned i = 0; i < BATTERY_ITEM_COUNT; ++i) {
+        s_battery_data[i].name = names[i];
+        s_battery_data[i].dataType = i == BATTERY_CHARGE ? UI_DATA_INT : UI_DATA_FLOAT;
+        s_battery_data[i].actionType = UI_DATA_ACTION_RO;
+        s_battery_elements[i].data = &s_battery_data[i];
+        Create_element(&s_battery_items[i], &s_battery_elements[i]);
+        AddItem(names[i], UI_ITEM_DATA, 0, &s_battery_items[i], page, 0, 0);
+    }
+    s_battery_data[BATTERY_VOLTAGE].decimals = 2u;
+}
+
+static void sw6306_cache_battery_voltage(void) {
+    s_battery_data[BATTERY_VOLTAGE].ptr = NULL;
+    if (SW6306_LastOperationOK() && SW6306_IsInitialized()) {
+        s_battery_values[BATTERY_VOLTAGE] = (SW6306_ReadVBAT() + 5u) / 10u;
+        s_battery_data[BATTERY_VOLTAGE].ptr = &s_battery_values[BATTERY_VOLTAGE];
+    }
+}
+
+static void sw6306_cache_battery_energy(unsigned item, uint32_t mwh) {
+    uint32_t dwh = (mwh + 50u) / 100u;
+    /* The value column fits five digits or characters. */
+    s_battery_data[item].decimals = dwh < 10000u ? 1u : 0u;
+    s_battery_values[item] = (int)(s_battery_data[item].decimals ? dwh : (mwh + 500u) / 1000u);
+    s_battery_data[item].ptr = &s_battery_values[item];
+}
+
+static uint8_t sw6306_cache_battery_capacity(void) {
+    if (!SW6306_LastOperationOK() || !SW6306_CapacityLoadOK() || !SW6306_IsInitialized()) {
+        s_battery_data[BATTERY_CHARGE].ptr = NULL;
+        s_battery_data[BATTERY_MAX_ENERGY].ptr = NULL;
+        s_battery_data[BATTERY_REMAIN_ENERGY].ptr = NULL;
+        return 0u;
+    }
+
+    uint8_t pct = SW6306_ReadCapacity();
+    s_battery_values[BATTERY_CHARGE] = pct <= 100u ? pct : 100u;
+    s_battery_data[BATTERY_CHARGE].ptr = &s_battery_values[BATTERY_CHARGE];
+    sw6306_cache_battery_energy(BATTERY_MAX_ENERGY, SW6306_ReadMaxEnergyRounded_mWh());
+    sw6306_cache_battery_energy(BATTERY_REMAIN_ENERGY, SW6306_ReadRemainEnergyRounded_mWh());
+    return 1u;
 }
 
 /************************ SW6306 定期采样与缓存 ************************/
@@ -349,6 +411,8 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             continue;
         }
         if(!SW6306_IsInitialized()) {
+            for (unsigned i = 0; i < BATTERY_ITEM_COUNT; ++i)
+                s_battery_data[i].ptr = NULL;
             s_monitor.initialized=0u;
             s_monitor.valid=0u;
             s_monitor.capacity_valid=0u;
@@ -387,6 +451,7 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             SW6306_OperationReset();
             THRD_SPAWN_NOARG(SW6306_ADCLoad);
             s_sw_owner_busy=0u;
+            sw6306_cache_battery_voltage();
             s_radio_battery_adc_ok=SW6306_LastOperationOK();
             if(s_radio_battery_adc_ok)
                 s_radio_battery_mv=SW6306_ReadVBAT();
@@ -394,16 +459,14 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             SW6306_OperationReset();
             THRD_SPAWN_NOARG(SW6306_CapacityLoad);
             s_sw_owner_busy=0u;
-            if(s_radio_battery_adc_ok && SW6306_LastOperationOK() &&
-                SW6306_CapacityLoadOK()) {
-                s_radio_battery_pct=SW6306_ReadCapacity();
-                if(s_radio_battery_pct>100u)s_radio_battery_pct=100u;
+            if (sw6306_cache_battery_capacity() && s_radio_battery_adc_ok) {
+                s_radio_battery_pct = (uint8_t)s_battery_values[BATTERY_CHARGE];
                 s_monitor.vbat_mv=s_radio_battery_mv;
                 s_monitor.capacity_pct=s_radio_battery_pct;
                 s_monitor.capacity_valid=1u;
                 s_radio_battery_check_result=1u;
-            }
-            else s_radio_battery_check_result=2u;
+            } else
+                s_radio_battery_check_result = 2u;
             THRD_DELAY(100u);
             continue;
         }
@@ -420,6 +483,7 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             SW6306_OperationReset();
             THRD_SPAWN_NOARG(SW6306_ADCLoad);
             s_sw_owner_busy=0u;
+            sw6306_cache_battery_voltage();
             if(!SW6306_LastOperationOK())s_cycle_ok=0u;
         }
         else if(s_sw_phase==1u) {
@@ -461,11 +525,9 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
                 SW6306_OperationReset();
                 THRD_SPAWN_NOARG(SW6306_CapacityLoad);
                 s_sw_owner_busy=0u;
-                s_monitor.capacity_valid=(uint8_t)(SW6306_LastOperationOK() && SW6306_CapacityLoadOK());
-                if(s_monitor.capacity_valid) {
-                    s_monitor.capacity_pct=SW6306_ReadCapacity();
-                    if(s_monitor.capacity_pct>100u)s_monitor.capacity_pct=100u;
-                }
+                s_monitor.capacity_valid = sw6306_cache_battery_capacity();
+                if (s_monitor.capacity_valid)
+                    s_monitor.capacity_pct = (uint8_t)s_battery_values[BATTERY_CHARGE];
             }
             s_monitor.initialized=1u;
             s_monitor.vbus_mv=SW6306_ReadVBUS();

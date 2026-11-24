@@ -821,7 +821,8 @@ float SW6306_ReadRemainEnergy_mWh(void)//读取库仑计当前（剩余）能量
     return SW6306_Status.presentcap * 0.07964f *
     (float)SW6306_BATT_CURRENT_NUM / (float)SW6306_BATT_CURRENT_DEN;
 }
-#else
+#endif
+
 uint32_t SW6306_ReadMaxEnergyRounded_mWh(void) {
     uint32_t raw = SW6306_Status.maxcap;
     uint32_t mwh = raw * 326u + (raw * 2236u + 5000u) / 10000u;
@@ -834,7 +835,6 @@ uint32_t SW6306_ReadRemainEnergyRounded_mWh(void) {
     uint32_t mwh = (raw / 25000u) * 1991u + ((raw % 25000u) * 1991u + 12500u) / 25000u;
     return (mwh * SW6306_BATT_CURRENT_NUM + SW6306_BATT_CURRENT_DEN / 2u) / SW6306_BATT_CURRENT_DEN;
 }
-#endif
 
 sw6306_learn_state_t SW6306_ReadLearnState(void)//读取容量学习状态（0xA2 镜像，3 态 + Unknown）
 {

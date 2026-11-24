@@ -23,7 +23,6 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "adc.h"
-#include "peripheral_map.h"
 #include "i2c.h"
 #include "pm_api.h"
 #include "spi.h"

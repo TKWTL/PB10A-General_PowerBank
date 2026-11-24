@@ -44,5 +44,6 @@ void PowerAlgo_AuxA_Service(void);
 uint8_t PowerAlgo_AuxAIsInserted(void);
 uint8_t PowerAlgo_AuxAIsEnabled(void);
 void PowerAlgo_AddStatisticsItems(ui_page_t *page);
+void PowerAlgo_AddBatteryItems(ui_page_t *page);
 void PowerAlgo_GetSystemAdc(int *vdda_mv,int *die_temp_c10,uint8_t *valid);
 #endif

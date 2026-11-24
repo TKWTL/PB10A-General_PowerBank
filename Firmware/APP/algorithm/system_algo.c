@@ -11,7 +11,7 @@ static ui_item_t s_radio_auto_item,s_power_auto_item,s_aux_auto_item;
 static ui_item_t s_vdda_item,s_temp_item;
 static ui_data_t s_vdda_data,s_temp_data;
 static ui_element_t s_vdda_element,s_temp_element;
-static int s_vdda_mv,s_die_temp_c10;
+static int s_vdda_cv, s_die_temp_c10;
 static ui_data_t s_click_data,s_volume_data;
 static ui_data_t s_radio_auto_data,s_power_auto_data,s_aux_auto_data;
 static ui_element_t s_click_element,s_volume_element;
@@ -120,11 +120,14 @@ __attribute__((noinline)) void System_AddSettingsItems(ui_page_t *page) {
 
 void System_AddStatisticsItems(ui_page_t *page) {
     if(!page)return;
-    s_vdda_data.name=" VDDA mV";s_vdda_data.ptr=&s_vdda_mv;
-    s_vdda_data.dataType=UI_DATA_INT;s_vdda_data.actionType=UI_DATA_ACTION_RO;
+    s_vdda_data.name = " VDDA V";
+    s_vdda_data.ptr = &s_vdda_cv;
+    s_vdda_data.dataType = UI_DATA_FLOAT;
+    s_vdda_data.decimals = 2u;
+    s_vdda_data.actionType = UI_DATA_ACTION_RO;
     s_vdda_element.data=&s_vdda_data;
     Create_element(&s_vdda_item,&s_vdda_element);
-    AddItem(" VDDA mV",UI_ITEM_DATA,0,&s_vdda_item,page,0,0);
+    AddItem(" VDDA V", UI_ITEM_DATA, 0, &s_vdda_item, page, 0, 0);
     s_temp_data.name=" Die Temp C";s_temp_data.ptr=&s_die_temp_c10;
     s_temp_data.dataType=UI_DATA_FLOAT;s_temp_data.actionType=UI_DATA_ACTION_RO;
     s_temp_data.decimals=1u;
@@ -134,7 +137,9 @@ void System_AddStatisticsItems(ui_page_t *page) {
 }
 
 void System_Poll(void) {
-    PowerAlgo_GetSystemAdc(&s_vdda_mv,&s_die_temp_c10,0);
+    int vdda_mv;
+    PowerAlgo_GetSystemAdc(&vdda_mv, &s_die_temp_c10, 0);
+    s_vdda_cv = (vdda_mv + 5) / 10;
 }
 
 uint8_t System_AutoRadioNavigationEnabled(void){return s_radio_auto;}

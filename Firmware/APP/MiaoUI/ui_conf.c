@@ -22,7 +22,7 @@ static ui_item_t s_settings_back,s_stats_back,s_game_back,s_tools_back;
 static ui_item_t s_display_item,s_sleep_wake_item,s_system_item,s_display_back,s_sleep_wake_back,s_system_back;
 static ui_item_t s_stat_power_item,s_stat_battery_item,s_stat_sensors_item,s_stat_system_item;
 static ui_item_t s_stat_power_back,s_stat_battery_back,s_stat_sensors_back,s_stat_system_back;
-static ui_item_t s_breakout,s_pacman,s_bomber,s_invaders,s_dino,s_scanner,s_tools_info,s_leveler,s_accel_cal;
+static ui_item_t s_breakout, s_pacman, s_bomber, s_invaders, s_scanner, s_leveler, s_accel_cal;
 static ui_item_t s_sleep_options_item,s_sleep_options_back,s_sleep_items[9];
 static ui_data_t s_sleep_data[9];
 static ui_element_t s_sleep_elements[9];
@@ -32,8 +32,8 @@ static const char *const s_sleep_labels[9]={
     " 5min"," 10min"," 15min"," 30min"
 };
 static const int s_sleep_seconds[9]={0,15,30,60,120,300,600,900,1800};
-static ui_text_t s_about_text,s_dino_text,s_tools_text;
-static ui_element_t s_about_el,s_dino_el,s_tools_el;
+static ui_text_t s_about_text;
+static ui_element_t s_about_el;
 /* Only one pending target; Radio (1) outranks Powerbank (2). */
 static uint8_t s_nav_pending,s_nav_active;
 static uint32_t s_power_nav_requested_at;
@@ -90,30 +90,22 @@ void Create_Text(ui_t *ui) {
     s_about_text.ptr="PB10A General Powerbank\nSTM32G070 / MiaoUI\nTKWTL open firmware";
     s_about_text.font=UI_FONT;s_about_text.fontHight=UI_FONT_HIGHT;
     s_about_text.fontWidth=UI_FONT_WIDTH;
-    s_about_el.text=&s_about_text;Create_element(&s_about,&s_about_el);
-    s_dino_text.ptr="Dinosaur is not yet\navailable.";
-    s_dino_text.font=UI_FONT;s_dino_text.fontHight=UI_FONT_HIGHT;
-    s_dino_text.fontWidth=UI_FONT_WIDTH;
-    s_dino_el.text=&s_dino_text;Create_element(&s_dino,&s_dino_el);
-    s_tools_text.ptr="PB10A diagnostics\nInstall more apps in\nAPP/functions";
-    s_tools_text.font=UI_FONT;s_tools_text.fontHight=UI_FONT_HIGHT;
-    s_tools_text.fontWidth=UI_FONT_WIDTH;
-    s_tools_el.text=&s_tools_text;Create_element(&s_tools_info,&s_tools_el);
+    s_about_el.text = &s_about_text;
+    Create_element(&s_about, &s_about_el);
 }
 
-/* Menu hierarchy is deliberately visible through indentation. All
- * AddPage/AddItem calls remain in their original registration order. */
+/* Menu hierarchy is deliberately visible through indentation. */
+// clang-format off
 void Create_MenuTree(ui_t *ui) {
     (void)ui;
     AddPage("[PB10A]",&s_home,UI_PAGE_ICON,0);
         AddItem("-Powerbank",UI_ITEM_WORD,img_power,&s_powerbank,&s_home,0,Powerbank_AppRun);
         AddItem("-Radio",UI_ITEM_WORD,img_radio,&s_radio,&s_home,0,Radio_AppRun);
         UI_SetLeaveHook(&s_radio,Radio_AppOnLeave);
-        AddItem("-Settings",UI_ITEM_PARENTS,img_configuration,&s_settings_item,&s_home,&s_settings,0);
-        AddItem("-Statistics",UI_ITEM_PARENTS,img_statistics,&s_stats_item,&s_home,&s_stats,0);
         AddItem("-Game",UI_ITEM_PARENTS,img_games,&s_game_item,&s_home,&s_game,0);
         AddItem("-Tools",UI_ITEM_PARENTS,img_tools,&s_tools_item,&s_home,&s_tools,0);
-        AddItem("-About",UI_ITEM_WORD,img_toby_fox,&s_about,&s_home,0,0);
+        AddItem("-Settings",UI_ITEM_PARENTS,img_configuration,&s_settings_item,&s_home,&s_settings,0);
+        AddItem("-Statistics",UI_ITEM_PARENTS,img_statistics,&s_stats_item,&s_home,&s_stats,0);
 
     AddPage("[Settings]",&s_settings,UI_PAGE_TEXT,&s_home);
         add_return(&s_settings,&s_home,&s_settings_back,0);
@@ -149,6 +141,7 @@ void Create_MenuTree(ui_t *ui) {
 
         AddPage("[Battery]",&s_stat_battery,UI_PAGE_TEXT,&s_stats);
             add_return(&s_stat_battery,&s_stats,&s_stat_battery_back,0);
+            PowerAlgo_AddBatteryItems(&s_stat_battery);
 
         AddPage("[Sensors]",&s_stat_sensors,UI_PAGE_TEXT,&s_stats);
             add_return(&s_stat_sensors,&s_stats,&s_stat_sensors_back,0);
@@ -159,6 +152,7 @@ void Create_MenuTree(ui_t *ui) {
         AddPage("[System]",&s_stat_system,UI_PAGE_TEXT,&s_stats);
             add_return(&s_stat_system,&s_stats,&s_stat_system_back,0);
             System_AddStatisticsItems(&s_stat_system);
+            AddItem(" About", UI_ITEM_WORD, 0, &s_about, &s_stat_system, 0, 0);
 
     AddPage("[Game]",&s_game,UI_PAGE_ICON,&s_home);
         add_return(&s_game,&s_home,&s_game_back,0);
@@ -170,7 +164,6 @@ void Create_MenuTree(ui_t *ui) {
         UI_SetLeaveHook(&s_bomber,Game_BomberOnLeave);
         AddItem("-Invaders",UI_ITEM_WORD,img_invaders,&s_invaders,&s_game,0,Game_InvadersRun);
         UI_SetLeaveHook(&s_invaders,Game_InvadersOnLeave);
-        AddItem("-Dinosaur",UI_ITEM_WORD,img_dinosuar,&s_dino,&s_game,0,0);
 
     AddPage("[Tools]",&s_tools,UI_PAGE_ICON,&s_home);
         add_return(&s_tools,&s_home,&s_tools_back,0);
@@ -181,8 +174,8 @@ void Create_MenuTree(ui_t *ui) {
             &s_accel_cal,&s_tools,0,Motion_CalibrationRun);
         UI_SetLeaveHook(&s_accel_cal,Motion_CalibrationOnLeave);
         AddItem("-I2C Scanner",UI_ITEM_WORD,img_scan,&s_scanner,&s_tools,0,i2c_Scanner);
-        AddItem("-Diagnostics",UI_ITEM_WORD,img_burn_in,&s_tools_info,&s_tools,0,0);
 }
+// clang-format on
 
 /* Called from foreground services, never modifies any ui_t directly.
  * Radio supersedes Powerbank if both connections arrive close together. */

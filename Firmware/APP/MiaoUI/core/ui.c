@@ -767,18 +767,19 @@ static void Draw_TextPage(ui_t *ui, ui_page_t *Page, ui_item_t *now_Item, ui_ite
 
         if (temp_item->animationY >= -UI_FX(UI_FONT_HIGHT) && temp_item->animationY <= UI_FX(UI_VER_RES + UI_FONT_HIGHT)) {
             if (temp_item->itemType == UI_ITEM_DATA && temp_item->element != NULL) {
+                const ui_data_t *data = temp_item->element->data;
                 char Data[12] = {0};
                 Disp_SetClipWindow(UI_DATA_X0, UI_DATA_Y0, UI_DATA_X1, UI_DATA_Y1);
 
-                switch (temp_item->element->data->dataType) {
+                switch (data->dataType) {
                 case UI_DATA_INT:
-                    mini_snprintf(Data, sizeof(Data), "%d", *(int *)(temp_item->element->data->ptr));
-                    break;
-
                 case UI_DATA_FLOAT:
-                    /* 定点整数：真实值 = 值 / 10^decimals，不再用 %f */
-                    UI_FmtScaled(Data, sizeof(Data), *(int *)(temp_item->element->data->ptr),
-                        temp_item->element->data->decimals);
+                    if (data->ptr) {
+                        UI_FmtScaled(Data, sizeof(Data), *(const int *)data->ptr,
+                                     data->dataType == UI_DATA_FLOAT ? data->decimals : 0u);
+                    } else {
+                        memcpy(Data, "--", sizeof("--"));
+                    }
                     break;
 
                 case UI_DATA_SWITCH:
@@ -797,7 +798,7 @@ static void Draw_TextPage(ui_t *ui, ui_page_t *Page, ui_item_t *now_Item, ui_ite
 
             default:
                     break;
-                }
+            }
 
                 if (temp_item->element->data->dataType != UI_DATA_SWITCH) Disp_DrawStr(UI_DATA_X0, (uint16_t)UI_FXI(temp_item->animationY), Data);
             }

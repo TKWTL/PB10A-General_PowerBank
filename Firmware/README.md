@@ -29,7 +29,7 @@ APP (framework / algorithm / functions)
 
 ## 外设移植
 
-[peripheral_map.h](Core/Inc/peripheral_map.h) 集中定义运行时绑定。先在 CubeMX 更新引脚、时钟、DMA 请求、ADC 扫描顺序和中断，再更新对应宏。
+[main.h](Core/Inc/main.h) 的 `USER CODE BEGIN EM` 区集中定义运行时绑定。先在 CubeMX 更新引脚、时钟、DMA 请求、ADC 扫描顺序和中断，再更新对应宏。
 
 | 用途 | 当前绑定 |
 | --- | --- |

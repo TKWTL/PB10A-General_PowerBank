@@ -21,7 +21,6 @@
 #include "i2c.h"
 
 /* USER CODE BEGIN 0 */
-#include "peripheral_map.h"
 #include "millis.h"
 #include "pt.h"
 /* USER CODE END 0 */

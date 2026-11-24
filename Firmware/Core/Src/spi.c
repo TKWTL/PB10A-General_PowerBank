@@ -21,7 +21,6 @@
 #include "spi.h"
 
 /* USER CODE BEGIN 0 */
-#include "peripheral_map.h"
 #include "millis.h"
 /* USER CODE END 0 */
 

@@ -49,9 +49,9 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 - `Core/Src/i2c.c` USER CODE owns the LL I2C1 master state machine and IRQ completion, including new `ASYNC_I2C_Transmit/Receive`, asynchronous scanner probe and bounded abort handling. Old `BSP/I2C/bsp_i2c.c/.h` were removed and Keil references updated. The sensor and radio application paths use IRQ-completed register transactions; legacy synchronous compatibility functions remain in the BSP drivers. **SW6306 now enables `SW6306_USE_PROTOTHREAD`** and uses the IRQ-backed asynchronous transfer API from its own exclusive service coroutine. Other modules must not directly run another SW6306 protothread concurrently.
 - In the I2C transaction layer, synchronous `I2C_TransactionBegin/End` brackets non-yielding legacy transactions. Asynchronous operations use an independent single-in-flight admission check and persistent completion flags; on timeout, a stalled abort poisons the HAL adapter until reset. Do not use stack buffers for asynchronous transfers
 
-### Seven icon entries
+### Home menu
 
-Powerbank (app), Radio (app), Settings (TEXT: Display/Sleep&Wake/Time/System), Statistics (TEXT: Power/Battery/Sensors/System), Game (ICON), Tools (ICON), About (WORD). Battery and game items remain placeholders; Sensors and System show measured telemetry.
+Powerbank, Radio, Game, Tools, Settings and Statistics appear in that order. Statistics contains Power, Battery, Sensors and System. Open About from Statistics → System.
 
 ### Board bring-up and ADC telemetry (2026-11)
 
@@ -89,15 +89,18 @@ Keep `.ioc` as the configuration source of truth; do not maintain a
 private patch to the vendor HAL files.
 
 Statistics -> Power contains only two cached Aux-A readings:
-- Voltage (mV): PA5 ADC rank 2, scaled by measured VDDA from VREFINT
+- Voltage (V, two decimal places) uses PA5 ADC rank 2, scaled by measured VDDA from VREFINT
   and the 680 kΩ / 220 kΩ divider.
 - Current (mA): PA0 ADC rank 1, scaled by measured VDDA, with
   sensor output sensitivity 0.5 V/A (500 mV/A).
 
-Statistics -> System contains only measured VDDA in mV (ADC rank 4)
-and die temperature with one decimal place, calculated using
-VREFINT-corrected ADC rank 3 and STM32G0 factory TS_CAL1/TS_CAL2.
-Neither statistics page displays ADC HAL/error/debug fields or Uptime.
+Statistics → Battery shows charge percentage, pack voltage in volts,
+and full and remaining energy in Wh. The SW6306 service supplies these values from
+its regular ADC and capacity reads. Unavailable readings display as `--`.
+
+Statistics → System shows VDDA in volts to two decimal places, die temperature
+to one decimal place and About. Die temperature uses VREFINT-corrected ADC
+rank 3 and STM32G0 factory TS_CAL1/TS_CAL2.
 
 The reproduced G0 calibration failure (`hadc1.State=0x13`,
 `ErrorCode=0x01`, second `ADC_DISABLE_TIMEOUT` branch) and the verified
@@ -163,11 +166,7 @@ TEXT pages map UP/DOWN to item selection, LEFT/RIGHT to MINUS/PLUS.
 Root BACK invokes `pm_api_force_sleep()` (UI_OFF / STOP1), following
 IH01A/DPC27A.
 
-`Vout~ mV` uses an assumed 3.3V analog reference and the netlist's
-R39=680k / R41=220k divider; confirm voltage with a multimeter.
-
-The seven home tiles now use Collar-Radio 30x30 XBM assets appropriate to
-their categories. Powerbank has a custom 30x30 battery/bolt XBM icon;
+The home tiles use 30x30 XBM assets. Powerbank has a custom 30x30 battery/bolt XBM icon;
 the Radio page restores the original Collar-Radio 12px/24px fonts,
 status XBM icons, FM dial, discovered-station markers and RTC footer.
 The original shared 12px fusion-pixel menu font remains in place.
@@ -298,10 +297,8 @@ parity bits. No option bytes have been changed by this commit.
   Their I2C buffers and completion flags persist across scheduler calls.
 - APP/MiaoUI/ui_conf.c only binds cached telemetry to Statistics/Sensors;
   no I2C request or sensor conversion runs in a drawing callback.
-- Statistics/System displays ADC rank 4 VREFINT-derived VDDA (mV)
-  and rank 3 internal die temperature (degrees Celsius) through the
-  factory-calibrated HAL conversion helpers, using a four-scan
-  raw-channel average updated at the existing 500 ms cadence.
+- Statistics/System displays VDDA in volts and die temperature in degrees
+  Celsius from ADC ranks 4 and 3, averaged across 16 scans every 500 ms.
 - Conversion timing, sensor scaling, STOP1 transitions and UI fields still
   require hardware verification; this edit has not been board-tested.
 
