@@ -125,7 +125,7 @@ void AddItem(const char *name, UI_ITEM_TYPE type, const uint8_t *image, ui_item_
  * @param type 新页面的类型。
  * @param parent 所属的上级页面。
  */
-__attribute__((noinline)) void AddPage(const char *name, ui_page_t *page, UI_PAGE_TYPE type, ui_page_t *parent) {
+void AddPage(const char *name, ui_page_t *page, UI_PAGE_TYPE type, ui_page_t *parent) {
     // 初始化新页面的基本信息
     page->pageName = name;
     page->item.head = NULL;
