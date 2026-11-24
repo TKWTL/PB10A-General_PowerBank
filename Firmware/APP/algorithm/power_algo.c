@@ -29,7 +29,7 @@ static uint16_t s_radio_battery_mv;
 
 /* An insertion is a 0->1 transition in a successful live port snapshot.
  * The initial snapshot is only a baseline, not a synthetic insert event. */
-static SW6306_NOINLINE void sw6306_connection_update(void) {
+static void sw6306_connection_update(void) {
     uint8_t connected=SW6306_ConnectedPortMask();
     if(s_port_baseline_valid) {
         uint8_t newly_connected=(uint8_t)(connected &

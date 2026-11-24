@@ -2,6 +2,12 @@
 #include <math.h>
 #include "millis.h"
 
+#if defined(SW6306_USE_PROTOTHREAD) && SW6306_SELECTIVE_NOINLINE
+#define SW6306_NOINLINE __attribute__((noinline))
+#else
+#define SW6306_NOINLINE
+#endif
+
 /* initialized 默认 0（零初始化，.bss）：MCU 复位后即视为未初始化，
  * SW6306_task 会对 SW6306 执行一次 ForceOff+Init（芯片复位后重置）。
  * 芯片独立复位（PowerLoad 读回失配）、ADCLoad 数据越界、MarkUninitialized
@@ -148,7 +154,7 @@ typedef struct {
 } sw6306_adc_slot_t;
 
 #ifdef SW6306_USE_PROTOTHREAD
-static SW6306_NOINLINE SW6306_RET sw6306_adc_read_raw(SW6306_ARGS(uint8_t ch, sw6306_adc_slot_t *slot)) {
+static SW6306_RET sw6306_adc_read_raw(SW6306_ARGS(uint8_t ch, sw6306_adc_slot_t *slot)) {
     /* ISR reads into persistent bytes. Never yield with a stack buffer. */
     static uint8_t raw[2];
     SW6306_FUNC_BEGIN;
