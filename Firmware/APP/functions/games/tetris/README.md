@@ -1,4 +1,4 @@
-# Tiny Tris v3
+# Tetris v3
 
 Adapted from Daniel C's 2025 Tinyjoypad ATtiny85 source archive. The port
 uses the original 12×19 well, seven piece matrices, score table, start

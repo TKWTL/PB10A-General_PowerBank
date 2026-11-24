@@ -11,6 +11,7 @@
 #include "games/pacman/pacman_assets.h"
 #include "games/bomber/bomber_assets.h"
 #include "games/invaders/invaders_assets.h"
+#include "games/tetris/tetris_assets.h"
 #include "algorithms.h"
 #include "pm_api.h"
 #include "main.h"
@@ -22,7 +23,7 @@ static ui_item_t s_settings_back,s_stats_back,s_game_back,s_tools_back;
 static ui_item_t s_display_item,s_sleep_wake_item,s_system_item,s_display_back,s_sleep_wake_back,s_system_back;
 static ui_item_t s_stat_power_item,s_stat_battery_item,s_stat_sensors_item,s_stat_system_item;
 static ui_item_t s_stat_power_back,s_stat_battery_back,s_stat_sensors_back,s_stat_system_back;
-static ui_item_t s_arkanoid, s_tiny_tris, s_pacman, s_bomber, s_invaders, s_scanner, s_leveler, s_accel_cal;
+static ui_item_t s_arkanoid, s_tetris, s_pacman, s_bomber, s_invaders, s_scanner, s_leveler, s_accel_cal;
 static ui_item_t s_sleep_options_item,s_sleep_options_back,s_sleep_items[9];
 static ui_data_t s_sleep_data[9];
 static ui_element_t s_sleep_elements[9];
@@ -108,6 +109,29 @@ void Create_MenuTree(ui_t *ui) {
         AddItem("-Settings",UI_ITEM_PARENTS,img_configuration,&s_settings_item,&s_home,&s_settings,0);
         AddItem("-Statistics",UI_ITEM_PARENTS,img_statistics,&s_stats_item,&s_home,&s_stats,0);
 
+    AddPage("[Game]",&s_game,UI_PAGE_ICON,&s_home);
+        add_return(&s_game,&s_home,&s_game_back,0);
+        AddItem("-Arkanoid",UI_ITEM_WORD,img_games,&s_arkanoid,&s_game,0,Game_ArkanoidRun);
+        UI_SetLeaveHook(&s_arkanoid,Game_ArkanoidOnLeave);
+        AddItem("-Tetris",UI_ITEM_WORD,img_tetris,&s_tetris,&s_game,0,Game_TetrisRun);
+        UI_SetLeaveHook(&s_tetris,Game_TetrisOnLeave);
+        AddItem("-Pac-Man",UI_ITEM_WORD,img_pacman,&s_pacman,&s_game,0,Game_PacmanRun);
+        UI_SetLeaveHook(&s_pacman,Game_PacmanOnLeave);
+        AddItem("-Bomber",UI_ITEM_WORD,img_bomber,&s_bomber,&s_game,0,Game_BomberRun);
+        UI_SetLeaveHook(&s_bomber,Game_BomberOnLeave);
+        AddItem("-Invaders",UI_ITEM_WORD,img_invaders,&s_invaders,&s_game,0,Game_InvadersRun);
+        UI_SetLeaveHook(&s_invaders,Game_InvadersOnLeave);
+
+    AddPage("[Tools]",&s_tools,UI_PAGE_ICON,&s_home);
+        add_return(&s_tools,&s_home,&s_tools_back,0);
+        AddItem("-Leveler",UI_ITEM_WORD,img_gradienter,
+            &s_leveler,&s_tools,0,Motion_LevelerRun);
+        UI_SetLeaveHook(&s_leveler,Motion_LevelerOnLeave);
+        AddItem("-Accel Calibration",UI_ITEM_WORD,img_gradienter_cal,
+            &s_accel_cal,&s_tools,0,Motion_CalibrationRun);
+        UI_SetLeaveHook(&s_accel_cal,Motion_CalibrationOnLeave);
+        AddItem("-I2C Scanner",UI_ITEM_WORD,img_scan,&s_scanner,&s_tools,0,i2c_Scanner);
+
     AddPage("[Settings]",&s_settings,UI_PAGE_TEXT,&s_home);
         add_return(&s_settings,&s_home,&s_settings_back,0);
         AddItem("-Display",UI_ITEM_PARENTS,0,&s_display_item,&s_settings,&s_display,0);
@@ -153,30 +177,7 @@ void Create_MenuTree(ui_t *ui) {
         AddPage("[System]",&s_stat_system,UI_PAGE_TEXT,&s_stats);
             add_return(&s_stat_system,&s_stats,&s_stat_system_back,0);
             System_AddStatisticsItems(&s_stat_system);
-            AddItem(" About", UI_ITEM_WORD, 0, &s_about, &s_stat_system, 0, 0);
-
-    AddPage("[Game]",&s_game,UI_PAGE_ICON,&s_home);
-        add_return(&s_game,&s_home,&s_game_back,0);
-        AddItem("-Arkanoid",UI_ITEM_WORD,img_games,&s_arkanoid,&s_game,0,Game_ArkanoidRun);
-        UI_SetLeaveHook(&s_arkanoid,Game_ArkanoidOnLeave);
-        AddItem("-Tiny Tris",UI_ITEM_WORD,img_games,&s_tiny_tris,&s_game,0,Game_TinyTrisRun);
-        UI_SetLeaveHook(&s_tiny_tris,Game_TinyTrisOnLeave);
-        AddItem("-Pac-Man",UI_ITEM_WORD,img_pacman,&s_pacman,&s_game,0,Game_PacmanRun);
-        UI_SetLeaveHook(&s_pacman,Game_PacmanOnLeave);
-        AddItem("-Bomber",UI_ITEM_WORD,img_bomber,&s_bomber,&s_game,0,Game_BomberRun);
-        UI_SetLeaveHook(&s_bomber,Game_BomberOnLeave);
-        AddItem("-Invaders",UI_ITEM_WORD,img_invaders,&s_invaders,&s_game,0,Game_InvadersRun);
-        UI_SetLeaveHook(&s_invaders,Game_InvadersOnLeave);
-
-    AddPage("[Tools]",&s_tools,UI_PAGE_ICON,&s_home);
-        add_return(&s_tools,&s_home,&s_tools_back,0);
-        AddItem("-Leveler",UI_ITEM_WORD,img_gradienter,
-            &s_leveler,&s_tools,0,Motion_LevelerRun);
-        UI_SetLeaveHook(&s_leveler,Motion_LevelerOnLeave);
-        AddItem("-Accel Calibration",UI_ITEM_WORD,img_gradienter_cal,
-            &s_accel_cal,&s_tools,0,Motion_CalibrationRun);
-        UI_SetLeaveHook(&s_accel_cal,Motion_CalibrationOnLeave);
-        AddItem("-I2C Scanner",UI_ITEM_WORD,img_scan,&s_scanner,&s_tools,0,i2c_Scanner);
+            AddItem("-About", UI_ITEM_WORD, 0, &s_about, &s_stat_system, 0, 0);
 }
 // clang-format on
 

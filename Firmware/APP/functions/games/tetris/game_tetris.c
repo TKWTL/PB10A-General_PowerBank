@@ -1,10 +1,10 @@
 /*
- * Tiny Tris v3 by Daniel Champagne, 2025 Tinyjoypad release.
+ * Tetris, ported from Tiny Tris v3 by Daniel Champagne, 2025 Tinyjoypad release.
  * Adapted from tiny-tris_v3.ino for PB10A.
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-#include "game_tiny_tris.h"
-#include "tiny_tris_assets.h"
+#include "game_tetris.h"
+#include "tetris_assets.h"
 #include "beep_service.h"
 #include "buttons.h"
 #include "core/ui.h"
@@ -20,7 +20,7 @@
 #define WELL_Y 5
 #define CELL_PIXELS 3
 #define PIECE_SIZE 5
-#define PIECE_COUNT (sizeof(tris_pieces) / PIECE_SIZE)
+#define PIECE_COUNT (sizeof(tetris_pieces) / PIECE_SIZE)
 #define WIDTH 128
 #define HEIGHT 64
 #define FRAME_MS 33u
@@ -31,19 +31,19 @@
 #define CLEAR_FRAMES 10u
 #define GAME_OVER_MS 2000u
 
-typedef enum { TRIS_TITLE,
-               TRIS_PLAYING,
-               TRIS_CLEARING,
-               TRIS_OVER } tris_phase_t;
+typedef enum { TETRIS_TITLE,
+               TETRIS_PLAYING,
+               TETRIS_CLEARING,
+               TETRIS_OVER } tetris_phase_t;
 
 typedef struct {
     uint32_t score;
     uint16_t lines;
     uint8_t level;
-} tris_score_t;
+} tetris_score_t;
 
 typedef struct {
-    tris_score_t score;
+    tetris_score_t score;
     uint16_t well[WELL_ROWS]; /* One bit per column. */
     uint8_t piece[PIECE_SIZE]; /* Rotated copy of the original 5x5 matrix. */
     uint32_t full_lines;
@@ -51,11 +51,11 @@ typedef struct {
     uint16_t drop_ms, phase_ms, move_ms;
     int8_t x, y, direction;
     uint8_t type, next, rotation, drop_armed;
-    tris_phase_t phase;
-} tris_game_t;
+    tetris_phase_t phase;
+} tetris_game_t;
 
-static tris_game_t s_game;
-static tris_score_t s_record;
+static tetris_game_t s_game;
+static tetris_score_t s_record;
 static uint32_t s_last_ms;
 static uint8_t s_active;
 
@@ -74,7 +74,7 @@ static void play(const uint16_t *sequence) {
 static void rotate_matrix(uint8_t matrix[PIECE_SIZE], uint8_t type, unsigned rotation) {
     memset(matrix, 0, PIECE_SIZE);
     for (unsigned y = 0; y < PIECE_SIZE; ++y) {
-        uint8_t source = tris_pieces[type * PIECE_SIZE + y];
+        uint8_t source = tetris_pieces[type * PIECE_SIZE + y];
         for (unsigned x = 0; x < PIECE_SIZE; ++x) {
             if (!(source & (0x80u >> x)))
                 continue;
@@ -100,7 +100,7 @@ static void rotate_matrix(uint8_t matrix[PIECE_SIZE], uint8_t type, unsigned rot
     }
 }
 
-static uint8_t fits(const tris_game_t *game, const uint8_t matrix[PIECE_SIZE], int x, int y) {
+static uint8_t fits(const tetris_game_t *game, const uint8_t matrix[PIECE_SIZE], int x, int y) {
     for (int row = 0; row < PIECE_SIZE; ++row) {
         for (int col = 0; col < PIECE_SIZE; ++col) {
             if (!(matrix[row] & (1u << col)))
@@ -115,7 +115,7 @@ static uint8_t fits(const tris_game_t *game, const uint8_t matrix[PIECE_SIZE], i
     return 1u;
 }
 
-static void try_rotate(tris_game_t *game) {
+static void try_rotate(tetris_game_t *game) {
     static const uint8_t rotations[] = {4u, 1u, 2u, 2u, 2u, 4u, 4u};
     unsigned rotation = game->rotation + 1u;
     if (rotation == rotations[game->type])
@@ -129,7 +129,7 @@ static void try_rotate(tris_game_t *game) {
     }
 }
 
-static uint8_t pick_piece(tris_game_t *game) {
+static uint8_t pick_piece(tetris_game_t *game) {
     uint32_t value = game->rng;
     value ^= value << 13;
     value ^= value >> 17;
@@ -138,15 +138,15 @@ static uint8_t pick_piece(tris_game_t *game) {
     return (uint8_t)(value % PIECE_COUNT);
 }
 
-static void end_game(tris_game_t *game) {
+static void end_game(tetris_game_t *game) {
     if (game->score.score > s_record.score)
         s_record = game->score;
-    game->phase = TRIS_OVER;
+    game->phase = TETRIS_OVER;
     game->phase_ms = 0u;
     play(s_over);
 }
 
-static void spawn(tris_game_t *game, uint8_t soft_drop) {
+static void spawn(tetris_game_t *game, uint8_t soft_drop) {
     game->type = game->next;
     game->next = pick_piece(game);
     game->rotation = 0u;
@@ -159,10 +159,10 @@ static void spawn(tris_game_t *game, uint8_t soft_drop) {
         end_game(game);
         return;
     }
-    game->phase = TRIS_PLAYING;
+    game->phase = TETRIS_PLAYING;
 }
 
-static void start_game(tris_game_t *game, uint32_t now, uint8_t soft_drop) {
+static void start_game(tetris_game_t *game, uint32_t now, uint8_t soft_drop) {
     memset(game, 0, sizeof(*game));
     game->rng = now | 1u;
     game->next = pick_piece(game);
@@ -170,7 +170,7 @@ static void start_game(tris_game_t *game, uint32_t now, uint8_t soft_drop) {
     play(s_start);
 }
 
-static void lock_piece(tris_game_t *game, uint8_t soft_drop) {
+static void lock_piece(tetris_game_t *game, uint8_t soft_drop) {
     for (int row = 0; row < PIECE_SIZE; ++row) {
         for (int col = 0; col < PIECE_SIZE; ++col) {
             if (!(game->piece[row] & (1u << col)))
@@ -187,7 +187,7 @@ static void lock_piece(tris_game_t *game, uint8_t soft_drop) {
             game->full_lines |= 1u << row;
 
     if (game->full_lines) {
-        game->phase = TRIS_CLEARING;
+        game->phase = TETRIS_CLEARING;
         game->phase_ms = 0u;
         play(s_clear);
     } else {
@@ -195,7 +195,7 @@ static void lock_piece(tris_game_t *game, uint8_t soft_drop) {
     }
 }
 
-static void clear_lines(tris_game_t *game, uint8_t soft_drop) {
+static void clear_lines(tetris_game_t *game, uint8_t soft_drop) {
     static const uint8_t line_score[] = {0u, 2u, 5u, 8u, 12u};
     int dst = WELL_ROWS - 1;
     unsigned removed = 0u;
@@ -214,7 +214,7 @@ static void clear_lines(tris_game_t *game, uint8_t soft_drop) {
     spawn(game, soft_drop);
 }
 
-static void move_lateral(tris_game_t *game, int direction, uint16_t elapsed) {
+static void move_lateral(tetris_game_t *game, int direction, uint16_t elapsed) {
     if (direction != game->direction) {
         game->direction = (int8_t)direction;
         game->move_ms = 0u;
@@ -229,24 +229,24 @@ static void move_lateral(tris_game_t *game, int direction, uint16_t elapsed) {
         game->move_ms = 0u;
 }
 
-static void advance(tris_game_t *game, uint16_t elapsed, int direction, uint8_t soft_drop) {
+static void advance(tetris_game_t *game, uint16_t elapsed, int direction, uint8_t soft_drop) {
     switch (game->phase) {
-    case TRIS_TITLE:
+    case TETRIS_TITLE:
         game->phase_ms = (uint16_t)((game->phase_ms + elapsed) % (8u * FRAME_MS));
         return;
-    case TRIS_OVER:
+    case TETRIS_OVER:
         game->phase_ms += elapsed;
         if (game->phase_ms >= GAME_OVER_MS) {
-            game->phase = TRIS_TITLE;
+            game->phase = TETRIS_TITLE;
             game->phase_ms = 0u;
         }
         return;
-    case TRIS_CLEARING:
+    case TETRIS_CLEARING:
         game->phase_ms += elapsed;
         if (game->phase_ms >= CLEAR_FRAMES * FRAME_MS)
             clear_lines(game, soft_drop);
         return;
-    case TRIS_PLAYING:
+    case TETRIS_PLAYING:
         break;
     }
 
@@ -304,51 +304,51 @@ static void draw_piece(uint8_t *buf, const uint8_t matrix[PIECE_SIZE], const uin
 
 static void draw_number(uint8_t *buf, uint32_t value, int digits, int x, int y, int spacing) {
     for (int pos = digits - 1; pos >= 0; --pos) {
-        blit(buf, tris_digits, value % 10u, x + spacing * pos, y);
+        blit(buf, tetris_digits, value % 10u, x + spacing * pos, y);
         value /= 10u;
     }
 }
 
-static void draw_score(uint8_t *buf, const tris_score_t *score) {
+static void draw_score(uint8_t *buf, const tetris_score_t *score) {
     draw_number(buf, score->lines, 3, 16, 8, 4);
     draw_number(buf, score->score, 5, 95, 8, 4);
     /* The original panel presents the internal score in tens. */
-    blit(buf, tris_digits, 0u, 115, 8);
+    blit(buf, tetris_digits, 0u, 115, 8);
     draw_number(buf, score->level, 2, 109, 41, 5);
 }
 
-static void render(const tris_game_t *game) {
+static void render(const tetris_game_t *game) {
     uint8_t *buf = Disp_GetBufferPtr();
     if (!buf)
         return;
-    memcpy(buf, tris_background, sizeof(tris_background));
-    if (game->phase == TRIS_TITLE) {
+    memcpy(buf, tetris_background, sizeof(tetris_background));
+    if (game->phase == TETRIS_TITLE) {
         for (unsigned page = 0; page < HEIGHT / 8u; ++page)
             for (unsigned x = 0; x < 36u; ++x)
-                buf[page * WIDTH + WELL_X + x] |= tris_castle[page * 36u + x];
+                buf[page * WIDTH + WELL_X + x] |= tetris_castle[page * 36u + x];
         if (game->phase_ms >= 4u * FRAME_MS) {
-            blit(buf, tris_start_top, 0u, 49, 28);
-            blit(buf, tris_start_bottom, 0u, 49, 36);
+            blit(buf, tetris_start_top, 0u, 49, 28);
+            blit(buf, tetris_start_bottom, 0u, 49, 36);
         }
         draw_score(buf, &s_record);
     } else {
         for (int y = 0; y < WELL_ROWS; ++y) {
-            if (game->phase == TRIS_CLEARING && ((game->phase_ms / FRAME_MS) & 1u) &&
+            if (game->phase == TETRIS_CLEARING && ((game->phase_ms / FRAME_MS) & 1u) &&
                 (game->full_lines & (1u << y)))
                 continue;
             for (int x = 0; x < WELL_COLUMNS; ++x)
                 if (game->well[y] & (1u << x))
-                    blit(buf, tris_fixed_block, 0u, WELL_X + x * CELL_PIXELS, WELL_Y + y * CELL_PIXELS);
+                    blit(buf, tetris_fixed_block, 0u, WELL_X + x * CELL_PIXELS, WELL_Y + y * CELL_PIXELS);
         }
-        if (game->phase == TRIS_PLAYING) {
-            draw_piece(buf, game->piece, tris_active_block, CELL_PIXELS,
+        if (game->phase == TETRIS_PLAYING) {
+            draw_piece(buf, game->piece, tetris_active_block, CELL_PIXELS,
                        WELL_X + game->x * CELL_PIXELS, WELL_Y + game->y * CELL_PIXELS - 5);
         }
         static const int8_t next_dx[] = {1, 0, 1, 0, 1, 1, 0};
         static const int8_t next_dy[] = {1, -1, 0, 0, 1, 0, 0};
         uint8_t preview[PIECE_SIZE];
         rotate_matrix(preview, game->next, 0u);
-        draw_piece(buf, preview, tris_preview_block, 2, 92 + next_dx[game->next], 22 + next_dy[game->next]);
+        draw_piece(buf, preview, tetris_preview_block, 2, 92 + next_dx[game->next], 22 + next_dy[game->next]);
         draw_score(buf, &game->score);
     }
     Disp_SendBuffer();
@@ -359,12 +359,12 @@ static uint8_t held(KeyIndex_t key) {
     return (uint8_t)(state == KeyState_ShortPress || state == KeyState_LongPress);
 }
 
-void Game_TinyTrisOnLeave(ui_t *ui) {
+void Game_TetrisOnLeave(ui_t *ui) {
     (void)ui;
     s_active = 0u;
 }
 
-void Game_TinyTrisRun(ui_t *ui) {
+void Game_TetrisRun(ui_t *ui) {
     if (!ui || ui->action == UI_ACTION_BACK)
         return;
 
@@ -372,15 +372,15 @@ void Game_TinyTrisRun(ui_t *ui) {
     if (!s_active) {
         s_active = 1u;
         s_last_ms = now;
-        s_game.phase = TRIS_TITLE;
+        s_game.phase = TETRIS_TITLE;
         s_game.phase_ms = 0u;
     }
 
     uint8_t soft_drop = held(KeyIndex_DOWN);
     if (ui->action == UI_ACTION_ENTER) {
-        if (s_game.phase == TRIS_TITLE)
+        if (s_game.phase == TETRIS_TITLE)
             start_game(&s_game, now, soft_drop);
-        else if (s_game.phase == TRIS_PLAYING)
+        else if (s_game.phase == TETRIS_PLAYING)
             try_rotate(&s_game);
     }
     ui->action = UI_ACTION_NONE;

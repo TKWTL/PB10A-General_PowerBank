@@ -16,12 +16,12 @@
 
 //  You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#ifndef PB10A_TINY_TRIS_ASSETS_H
-#define PB10A_TINY_TRIS_ASSETS_H
+#ifndef PB10A_TETRIS_ASSETS_H
+#define PB10A_TETRIS_ASSETS_H
 
 #include <stdint.h>
 
-static const uint8_t tris_pieces[] = {
+static const uint8_t tetris_pieces[] = {
     //0
     0x00,
     0x20,
@@ -66,14 +66,14 @@ static const uint8_t tris_pieces[] = {
     0x00,
 };
 
-static const uint8_t tris_preview_block[] = {
+static const uint8_t tetris_preview_block[] = {
     2,
     1,
     0xC0,
     0xC0,
 };
 
-static const uint8_t tris_fixed_block[] = {
+static const uint8_t tetris_fixed_block[] = {
     3,
     1,
     0x07,
@@ -81,7 +81,7 @@ static const uint8_t tris_fixed_block[] = {
     0x07,
 };
 
-static const uint8_t tris_active_block[] = {
+static const uint8_t tetris_active_block[] = {
     3,
     1,
     0xE0,
@@ -89,7 +89,7 @@ static const uint8_t tris_active_block[] = {
     0xE0,
 };
 
-static const uint8_t tris_digits[] = {
+static const uint8_t tetris_digits[] = {
     4,
     1,
     0x1F,
@@ -134,7 +134,7 @@ static const uint8_t tris_digits[] = {
     0x00,
 };
 
-static const uint8_t tris_start_top[] = {
+static const uint8_t tetris_start_top[] = {
     30,
     1,
     0xFE,
@@ -169,7 +169,7 @@ static const uint8_t tris_start_top[] = {
     0xFE,
 };
 
-static const uint8_t tris_start_bottom[] = {
+static const uint8_t tetris_start_bottom[] = {
     30,
     1,
     0x03,
@@ -204,7 +204,7 @@ static const uint8_t tris_start_bottom[] = {
     0x03,
 };
 
-static const uint8_t tris_castle[] = {
+static const uint8_t tetris_castle[] = {
     0xD5,
     0xF8,
     0xF4,
@@ -495,7 +495,7 @@ static const uint8_t tris_castle[] = {
     0x1F,
 };
 
-static const uint8_t tris_background[] = {
+static const uint8_t tetris_background[] = {
     0xFC,
     0x02,
     0xF9,
@@ -1521,5 +1521,8 @@ static const uint8_t tris_background[] = {
     0x00,
     0x00,
 };
+
+/* Dedicated MiaoUI Game index icon: 30x30 XBM, 120 Flash bytes. */
+extern const uint8_t img_tetris[120];
 
 #endif

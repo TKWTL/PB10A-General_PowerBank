@@ -37,8 +37,8 @@ them.
 - `games/arkanoid/`: Tiny Arkanoid by Daniel Champagne, with five original
   layouts and portrait controls. See [game documentation](games/arkanoid/README.md).
 
-- `games/tiny_tris/`: Tiny Tris v3, with the original 12×19 well, seven
-  pieces and graphics. See [game documentation](games/tiny_tris/README.md).
+- `games/tetris/`: Tetris v3, with the original 12×19 well, seven
+  pieces and graphics. See [game documentation](games/tetris/README.md).
 
 - `i2c_scanner.c/.h`: visual UI restored from Collar-Radio: initial
   1.5s title `I2C / Scanner` in the original 24px font, followed by
