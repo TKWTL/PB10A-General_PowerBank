@@ -434,7 +434,7 @@ uint8_t SW6306_IsPortA2ON(void) {
     return SW6306_Status.sys_stat & SW6306_SYS_STAT_A2ON;
 }
 
-SW6306_RET SW6306_PowerLoad(SW6306_NOARG) {
+SW6306_NOINLINE SW6306_RET SW6306_PowerLoad(SW6306_NOARG) {
 #ifdef SW6306_USE_PROTOTHREAD
     /* Read all fields privately, then publish only on complete success. */
     static uint8_t t[9];
@@ -562,7 +562,7 @@ const char *SW6306_ReadProtocol(void)//当前协议读取（返回字符串地�
     }
 }
 
-SW6306_RET SW6306_StatusLoad(SW6306_NOARG) {
+SW6306_NOINLINE SW6306_RET SW6306_StatusLoad(SW6306_NOARG) {
 #ifdef SW6306_USE_PROTOTHREAD
     static uint8_t t[8];
 #else
@@ -1497,7 +1497,7 @@ static SW6306_NOINLINE SW6306_RET SW6306_UFCSCurrentSet(SW6306_NOARG) {
     SW6306_FUNC_END;
 }
 
-static SW6306_RET SW6306_UFCSSet(SW6306_NOARG) {
+static SW6306_NOINLINE SW6306_RET SW6306_UFCSSet(SW6306_NOARG) {
     SW6306_FUNC_BEGIN;
     SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_P_UFCS);
     SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_P_UFCS,
