@@ -106,14 +106,23 @@ void Time_FormatDuration(uint32_t seconds, char *out, size_t size) {
 
 /******************** MiaoUI calendar edit interface ********************/
 RTC_TimeTypeDef_Aligned sTime;
+static uint8_t s_rtc_read_valid;
+
+uint8_t RTC_CacheValid(void) {
+    return s_rtc_read_valid;
+}
 void RTC_UpdateTime(void) {
     RTC_TimeTypeDef t={0};
     RTC_DateTypeDef d={0};
+    s_rtc_read_valid = 0u;
     if(HAL_RTC_GetTime(&hrtc,&t,RTC_FORMAT_BIN)!=HAL_OK)return;
     if(HAL_RTC_GetDate(&hrtc,&d,RTC_FORMAT_BIN)!=HAL_OK)return;
     sTime.Year=d.Year;sTime.Month=d.Month;sTime.Date=d.Date;
     sTime.WeekDay=d.WeekDay;sTime.Hours=t.Hours;
     sTime.Minutes=t.Minutes;sTime.Seconds=t.Seconds;
+    s_rtc_read_valid = d.Year <= 99u && d.Date >= 1u &&
+                       d.Date <= Time_DaysInMonth(2000u + d.Year, d.Month) &&
+                       t.Hours < 24u && t.Minutes < 60u && t.Seconds < 60u;
 }
 
 static uint8_t days_in_month(int y,int m) {
@@ -150,8 +159,8 @@ void SetTime(ui_t *ui) {
     t.Seconds=(uint8_t)sTime.Seconds;
     t.DayLightSaving=RTC_DAYLIGHTSAVING_NONE;
     t.StoreOperation=RTC_STOREOPERATION_RESET;
-    if(HAL_RTC_SetDate(&hrtc,&d,RTC_FORMAT_BIN)==HAL_OK)
-        (void)HAL_RTC_SetTime(&hrtc,&t,RTC_FORMAT_BIN);
+    s_rtc_read_valid = HAL_RTC_SetDate(&hrtc, &d, RTC_FORMAT_BIN) == HAL_OK &&
+                       HAL_RTC_SetTime(&hrtc, &t, RTC_FORMAT_BIN) == HAL_OK;
 }
 
 static ui_item_t s_time_item,s_back,s_fields[6];

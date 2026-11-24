@@ -10,11 +10,15 @@
  * individual per-port current measurements. All getters read RAM only. */
 typedef struct {
     uint16_t vbus_mv,ibus_ma,vbat_mv,ibat_ma;
+    uint16_t aux_mv, aux_ma;
+    int16_t ntc_c10;
     uint8_t capacity_pct,capacity_valid;
+    uint8_t aux_valid, ntc_valid, eta_valid;
     uint8_t initialized,valid,charging,discharging;
     uint8_t c1_on,a1_on,port_busy;
     const char *protocol; /* static SW6306 driver string, read only */
     uint32_t sample_ms;
+    uint32_t eta_seconds;
 } power_monitor_t;
 void PowerAlgo_Init(void);
 /* SW6306 owner thread: cooperative Init/ADC/Status/Port/Power/Capacity. */

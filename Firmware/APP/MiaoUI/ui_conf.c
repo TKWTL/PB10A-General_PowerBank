@@ -100,6 +100,7 @@ void Create_MenuTree(ui_t *ui) {
     (void)ui;
     AddPage("[PB10A]",&s_home,UI_PAGE_ICON,0);
         AddItem("-Powerbank",UI_ITEM_WORD,img_power,&s_powerbank,&s_home,0,Powerbank_AppRun);
+        UI_SetLeaveHook(&s_powerbank,Powerbank_AppOnLeave);
         AddItem("-Radio",UI_ITEM_WORD,img_radio,&s_radio,&s_home,0,Radio_AppRun);
         UI_SetLeaveHook(&s_radio,Radio_AppOnLeave);
         AddItem("-Game",UI_ITEM_PARENTS,img_games,&s_game_item,&s_home,&s_game,0);
@@ -263,4 +264,5 @@ void MiaoUi_Setup(ui_t *ui) {
     s_mic_candidate=0u;s_mic_latched=0u;
     s_sub_candidate=0u;s_sub_latched=0u;
     Create_UI(ui,&s_powerbank);
+    (void)UI_NavigateTo(ui, &s_powerbank, UI_NAV_REPLACE);
 }

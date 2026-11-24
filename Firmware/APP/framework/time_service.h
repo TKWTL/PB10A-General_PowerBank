@@ -38,6 +38,7 @@ typedef struct {
 } RTC_TimeTypeDef_Aligned;
 extern RTC_TimeTypeDef_Aligned sTime;
 void RTC_UpdateTime(void);
+uint8_t RTC_CacheValid(void);
 /* Do not overwrite editable calendar fields during MiaoUI Time editing. */
 uint8_t RTC_IsEditing(const ui_t *ui);
 void SetTime(ui_t *ui);

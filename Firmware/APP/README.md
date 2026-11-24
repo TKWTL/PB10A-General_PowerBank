@@ -51,7 +51,15 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 
 ### Home menu
 
-Powerbank, Radio, Game, Tools, Settings and Statistics appear in that order. Statistics contains Power, Battery, Sensors and System. Open About from Statistics → System.
+Powerbank, Radio, Game, Tools, Settings and Statistics appear in that order. Statistics contains Power, Battery, Sensors and System. Open About from Statistics → System. After reset the firmware first opens the Powerbank dashboard. Long CONF opens the home menu.
+
+The dashboard aligns BUS, battery and Aux-A power above their voltages.
+It shows the SW6306 NTC at the right and the RTC time/date at the bottom.
+ETA uses filtered battery power and measured full/remaining energy. It first
+appears after 5 seconds of stable mode at 200 mW or more, is recalculated
+every 10 seconds, and counts down between estimates. END adds ETA to RTC
+time and appends a day offset when needed. The two LED brightness lines
+are drawn at zero fill until a brightness value is supplied.
 
 ### Board bring-up and ADC telemetry (2026-11)
 
@@ -89,13 +97,14 @@ Keep `.ioc` as the configuration source of truth; do not maintain a
 private patch to the vendor HAL files.
 
 Statistics → Power shows BUS V, BUS A, Aux-A V and Aux-A A, each with two decimal places.
-BUS readings come from the shared SW6306 bus ADC. Aux-A voltage comes from PA5
+BUS readings come from the shared SW6306 bus ADC. Chip Temp C shows the SW6306 die temperature to one decimal place. Aux-A voltage comes from PA5
 via the 680 kΩ / 220 kΩ divider, and Aux-A current comes from PA0 at 0.5 V/A.
 Both Aux-A channels use the VDDA measured from VREFINT.
 
 Statistics → Battery shows charge percentage, pack voltage in volts,
-and full and remaining energy in Wh. The SW6306 service supplies these values from
-its regular ADC and capacity reads. Unavailable readings display as `--`.
+full and remaining energy in Wh, and Batt Temp C from the SW6306 NTC to one
+decimal place. The SW6306 service supplies the readings from its ADC, status
+and capacity caches. Unavailable readings display as `--`.
 
 Statistics → System shows VDDA in volts to two decimal places, die temperature
 to one decimal place and About. Die temperature uses VREFINT-corrected ADC
