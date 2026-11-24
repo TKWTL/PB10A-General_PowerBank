@@ -21,7 +21,7 @@ extern "C" {
  */
 #define SW6306_USE_PROTOTHREAD
 
-/* Set to 0 to let the compiler inline the selected operations for size comparison. */
+/* Protothread builds only. Set to 0 to allow inlining for size comparison. */
 #ifndef SW6306_SELECTIVE_NOINLINE
 #define SW6306_SELECTIVE_NOINLINE 1
 #endif

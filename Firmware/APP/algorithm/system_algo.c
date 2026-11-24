@@ -65,7 +65,7 @@ void System_Reset(void) {
 
 static void system_reset_selected(ui_t *ui)
 { (void)ui;System_Reset(); }
-void System_AddSettingsItems(ui_page_t *page) {
+__attribute__((noinline)) void System_AddSettingsItems(ui_page_t *page) {
     if(!page)return;
     s_click_on=beep_get_key_enabled();
     s_click_data.name=" Click Beep";

@@ -103,7 +103,7 @@ void Create_Text(ui_t *ui) {
 
 /* Menu hierarchy is deliberately visible through indentation. All
  * AddPage/AddItem calls remain in their original registration order. */
-void Create_MenuTree(ui_t *ui) {
+__attribute__((noinline)) void Create_MenuTree(ui_t *ui) {
     (void)ui;
     AddPage("[PB10A]",&s_home,UI_PAGE_ICON,0);
         AddItem("-Powerbank",UI_ITEM_WORD,img_power,&s_powerbank,&s_home,0,Powerbank_AppRun);

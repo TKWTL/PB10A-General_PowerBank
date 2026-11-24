@@ -2,7 +2,7 @@
 #include <math.h>
 #include "millis.h"
 
-#if SW6306_SELECTIVE_NOINLINE
+#if defined(SW6306_USE_PROTOTHREAD) && SW6306_SELECTIVE_NOINLINE
 #define SW6306_NOINLINE __attribute__((noinline))
 #else
 #define SW6306_NOINLINE
