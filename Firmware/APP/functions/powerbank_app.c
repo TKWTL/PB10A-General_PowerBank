@@ -21,7 +21,7 @@ void Powerbank_AppRun(ui_t *ui) {
     Disp_DrawBox(0u,0u,UI_HOR_RES,UI_VER_RES);
     fg=(uint8_t)(ui->bgColor^1u);
     Disp_SetDrawColor(&fg);
-    Disp_SetFont(font_radio_h12w6);
+    Disp_SetFont(font_fusion_pixel_p12_zhcn);
     if(!m.initialized) {
         Disp_DrawStr(3u,12u,"SW6306 INIT...");
         Disp_DrawStr(3u,30u,"BUS/BAT --");
