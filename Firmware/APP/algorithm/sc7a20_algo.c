@@ -218,7 +218,7 @@ uint8_t SC7A20Algo_GetSample(sc7a20_sample_t *out) {
 /* Called from EXTI5 ISR: never use I2C or touch MiaoUI in an interrupt. */
 uint8_t SC7A20Algo_WakeIRQ(void) {return s_wake_armed;}
 
-void SC7A20Algo_Poll(void) {
+__attribute__((noinline)) void SC7A20Algo_Poll(void) {
     uint8_t result;
     if(s_suspended || (s_paused && !s_waiting))return;
     if(!s_waiting && s_stage==0u && (int32_t)(Millis()-s_retry_at)<0)return;

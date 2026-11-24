@@ -30,7 +30,7 @@ static void bmp_offline(void) {
     s_due_at=Millis()+BMP_RETRY_MS;
 }
 
-void BMP180Algo_Poll(void) {
+__attribute__((noinline)) void BMP180Algo_Poll(void) {
     uint8_t result;
     if(s_paused && !s_waiting)return;
     if(!s_waiting && (s_stage==0u || s_stage==2u) &&

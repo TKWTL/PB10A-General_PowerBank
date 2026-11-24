@@ -383,7 +383,7 @@ void RadioAlgo_Init(void) {
 
 /* The dedicated radio coroutine calls this at 5 ms. All queued I2C
  * writes and status reads settle by IRQ while other coroutines run. */
-void RadioAlgo_Poll(void) {
+__attribute__((noinline)) void RadioAlgo_Poll(void) {
     uint32_t now=Millis();
     uint8_t ret;
     uint16_t status=0u,signal=0u;

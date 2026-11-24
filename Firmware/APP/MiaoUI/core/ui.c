@@ -1319,7 +1319,7 @@ static uint32_t UI_NextFrameDelay(const ui_t *ui) {
     return 20u;
 }
 
-uint32_t ui_loop(ui_t *ui) {
+__attribute__((noinline)) uint32_t ui_loop(ui_t *ui) {
     UI_ACTION Action;
     if (!ui) return 20u;
     ui->nextFrameRequested = 0u;

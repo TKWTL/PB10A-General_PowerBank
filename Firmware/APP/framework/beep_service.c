@@ -118,7 +118,7 @@ void beep_tone(uint16_t frequency_hz, uint16_t duration_ms) {
     s_tone_active = s_need_note = 1u;
 }
 
-void beep_poll(uint32_t now_ms) {
+__attribute__((noinline)) void beep_poll(uint32_t now_ms) {
     if (s_tone_active) {
         if (s_need_note) {
             beep_hw_set_frequency(s_tone_frequency);
