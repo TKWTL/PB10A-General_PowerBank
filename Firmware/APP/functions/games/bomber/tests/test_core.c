@@ -94,6 +94,28 @@ static void set_block(bomber_game_t *g, int16_t col, int16_t row) {
     g->blocks[i >> 3] |= (uint8_t)(0x80u >> (i & 7u));
 }
 
+static void test_fixed_wall_shields_brick(const uint8_t *collision) {
+    bomber_game_t g;
+    Bomber_CoreNewGame(&g, 2u);
+    Bomber_CoreStart(&g);
+    memset(g.blocks, 0, sizeof(g.blocks));
+    set_block(&g, 1, 0); /* Brick, fixed pillar, bomb from top to bottom. */
+    g.bomb.x = 16;
+    g.bomb.page_y = 3;
+    g.bomb.fuse = 1u;
+    g.bomb.anim = 1u;
+    g.frame = 3u;
+
+    Bomber_CoreBindBack(NULL);
+    Bomber_CoreTick(&g, BOMBER_NONE, 0u);
+    Bomber_CoreBindBack(collision);
+
+    assert(g.bomb.anim == 2u);
+    assert(Bomber_CoreBlockVisible(&g, 1));
+    assert(!Bomber_CoreFireCell(&g, 0, -1));
+    assert(!Bomber_CoreFireCell(&g, 0, -2));
+}
+
 /* Vertical and horizontal arm propagation must be blocked by the fixed
  * walls of the original board, even at an otherwise empty level cell. */
 static void test_blast_reaches_two_cells(void) {
@@ -214,6 +236,7 @@ int main(void){
     test_level_and_blocks();
     test_spawn_lane_fe_sentinel();
     test_bomb_explosion();
+    test_fixed_wall_shields_brick(collision);
     test_blast_reaches_two_cells();
     test_life_and_restart();
     test_random_walk();

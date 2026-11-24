@@ -256,14 +256,11 @@ static void move_actors(bomber_game_t *g) {
     }
 }
 
-/* A fixed wall occupies the center of an 8x8 maze cell.
- * The original collision bitmap has decorative 0x80 border lines on
- * otherwise empty cells. Ignore bit7 and sample an interior column;
- * testing any nonzero pixel would incorrectly treat EVERY cell as a wall. */
+/* All levels share the same fixed pillars at odd columns and odd rows.
+ * The pixel collision cache is used for actor movement. */
 static uint8_t fixed_wall_cell(int16_t col, int16_t row) {
-    int16_t x = (int16_t)(8 + col * 8 + 3);
     if (col < 0 || col >= 15 || row < 0 || row >= 7) return 1u;
-    return (uint8_t)((back_byte(x, row + 1) & 0x7fu) != 0u);
+    return (uint8_t)(col & row & 1);
 }
 
 /* Snapshot flame visibility before destructible blocks are removed. The

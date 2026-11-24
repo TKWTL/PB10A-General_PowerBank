@@ -108,8 +108,7 @@ snapshot. This is necessary because block removal takes place before
 later explosion animation frames; recalculating rays from the cleared
 map would make the flames incorrectly pass through the vanished block.
 
-The fixed wall image contains an `0x80` decorative horizontal border
-on otherwise empty cells. An occupied cell is detected by sampling
-an interior column with mask `0x7F`, rather than treating any nonzero
-pixel in the 8x8 tile as a wall. Cell edges and the original FE rendering
-sentinel remain unchanged. The logic uses no additional tile bitmap.
+All levels share the same fixed pillars at odd columns and odd rows
+in the zero-based grid. Blast propagation uses these grid coordinates.
+Actor movement still uses the original pixel collision bitmap, including
+its cell edges and the original FE collision sentinel.
