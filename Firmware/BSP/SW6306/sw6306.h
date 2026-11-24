@@ -11,15 +11,15 @@ extern "C" {
 #include "stdint.h"
 
 /******************************用户设置区开始**********************************/
-// 定义 SW6306_USE_PROTOTHREAD 以启用协作式挂起（protothread + coroOS）。
-//  - 未定义：阻塞式 API（返回类型为 void）。
-//  - 已定义：协作式 API（返回类型为 char，并额外带 struct pt *pt 参数）。
-/* SW6306 driver now runs from one owning Protothreads actor.
- * Do not call SW6306 PT functions directly from UI or other tasks:
- * register configuration requests with that actor instead.
- * The PM callback temporarily takes ownership only after it is idle.
- */
-#define SW6306_USE_PROTOTHREAD
+/* 1: IRQ-backed Protothreads with one owning actor. 0: blocking calls for a task. */
+#ifndef SW6306_USE_PROTOTHREAD
+#define SW6306_USE_PROTOTHREAD 1
+#endif
+
+/* 1: legacy floating-point API. 0: integer units and NTC lookup table. */
+#ifndef SW6306_USE_FLOAT_API
+#define SW6306_USE_FLOAT_API 1
+#endif
 
 /* Protothread builds only. Set to 0 to allow inlining for size comparison. */
 #ifndef SW6306_SELECTIVE_NOINLINE
@@ -32,24 +32,35 @@ extern "C" {
 #define SW6306_I2C_FAILURE_LIMIT 5U
 #endif
 
-/* I2C1 is owned by Firmware/Core/i2c.c USER CODE sections. */
+#if SW6306_USE_PROTOTHREAD
 #include "i2c.h"
-#ifdef SW6306_USE_PROTOTHREAD
 #include "coroOS.h"
+#elif defined(SW6306_BLOCKING_PORT_HEADER)
+#include SW6306_BLOCKING_PORT_HEADER
+#else
+#include "i2c.h"
+#define SW6306_BLOCKING_READ I2C_RegRead
+#define SW6306_BLOCKING_WRITE I2C_RegWrite
+#define SW6306_BLOCKING_LOCK I2C_TransactionBegin
+#define SW6306_BLOCKING_UNLOCK I2C_TransactionEnd
+#define SW6306_BLOCKING_DELAY_MS Millis_Delay
 #endif
 
-/* SW6306将0x000~0x0FF与0x100~0x1FF映射到同一个8位I2C寄存器地址空间，
- * 由0x24[7]/0x1FF寄存器切换页。驱动内部保留16位逻辑地址，用于判断页；
- * 只有最终提交I2C事务时才显式提取低8位（0x1FF在高页对应总线地址0xFF）。 */
-#define SW6306_I2C_REG8(reg)    ((uint8_t)((uint16_t)(reg) & 0x00FFU))
+/* 16-bit logical register addresses select the page. The bus uses the low byte. */
+#define SW6306_I2C_REG8(reg) ((uint8_t)((uint16_t)(reg) & 0x00FFU))
 
-//外部库给出的I2C读写函数
-#ifdef SW6306_USE_PROTOTHREAD   //允许挂起
-#define SW6306_I2C_Transmit(addr,reg,pdata,len,pflag)   ASYNC_I2C_Transmit(addr,SW6306_I2C_REG8(reg),pdata,len,0,pflag)
-#define SW6306_I2C_Receive(addr,reg,pdata,len,pflag)    ASYNC_I2C_Receive(addr,SW6306_I2C_REG8(reg),pdata,len,0,pflag)
-#else                           //不允许挂起
-#define SW6306_I2C_Transmit(addr,reg,pdata,len,pflag)   I2C_RegWrite(addr, SW6306_I2C_REG8(reg), pdata, len)
-#define SW6306_I2C_Receive(addr,reg,pdata,len,pflag)    I2C_RegRead(addr, SW6306_I2C_REG8(reg), pdata, len)
+#if SW6306_USE_PROTOTHREAD
+#define SW6306_I2C_Transmit(addr, reg, pdata, len, pflag) \
+    ASYNC_I2C_Transmit(addr, SW6306_I2C_REG8(reg), pdata, len, 0, pflag)
+#define SW6306_I2C_Receive(addr, reg, pdata, len, pflag) \
+    ASYNC_I2C_Receive(addr, SW6306_I2C_REG8(reg), pdata, len, 0, pflag)
+#define SW6306_DELAY(ms) THRD_DELAY(ms)
+#else
+#define SW6306_I2C_Transmit(addr, reg, pdata, len, pflag) \
+    SW6306_BLOCKING_WRITE(addr, SW6306_I2C_REG8(reg), pdata, len)
+#define SW6306_I2C_Receive(addr, reg, pdata, len, pflag) \
+    SW6306_BLOCKING_READ(addr, SW6306_I2C_REG8(reg), pdata, len)
+#define SW6306_DELAY(ms) SW6306_BLOCKING_DELAY_MS(ms)
 #endif
 
 /* PB10A-only fixed-point current calibration (unsigned rational NUM/DEN).
@@ -72,23 +83,18 @@ extern "C" {
 #error "SW6306 current calibration ratios must be nonzero"
 #endif
 
-/* 按实际 NTC 改这三个参数：
- *  - SW6306_NTC_R25_OHM    ：25°C 时阻值（常见 10k / 100k）
- *  - SW6306_NTC_T0_C       ：标称温度（一般 25°C）
- *  - SW6306_NTC_B          ：B值（如 3435 / 3950）
- */
+/* Beta-model parameters for the float API. Regenerate the table for the integer API. */
 #ifndef SW6306_NTC_R25_OHM
-#define SW6306_NTC_R25_OHM              10000.0f
+#define SW6306_NTC_R25_OHM 10000.0f
 #endif
 #ifndef SW6306_NTC_T0_C
-#define SW6306_NTC_T0_C                 25.0f
+#define SW6306_NTC_T0_C 25.0f
 #endif
 #ifndef SW6306_NTC_B
-#define SW6306_NTC_B                    3380
+#define SW6306_NTC_B 3380
 #endif
 
-/* NTC 温度计算使能：1=启用（需 FPU/浮点 logf，SW6306_CalcNTCTemp_C/NTCTempLoad 会计算）。
- * 无 FPU MCU 置 0 裁剪计算（不链接浮点代码；读取 API SW6306_ReadNTCTemp 仍可用，句柄不更新） */
+/* Enable cached NTC temperature calculation using the selected numeric path. */
 #ifndef SW6306_NTC_TEMP_CALC_EN
 #define SW6306_NTC_TEMP_CALC_EN         1
 #endif
@@ -118,7 +124,7 @@ extern "C" {
 
 /******************************用户设置区结束**********************************/
 //操作语法宏，方便添加freeRTOS之类的支持
-#ifdef SW6306_USE_PROTOTHREAD
+#if SW6306_USE_PROTOTHREAD
 #define SW6306_RET          char
 #define SW6306_NOARG        struct pt *pt
 #define SW6306_ARGS(...)    struct pt *pt, __VA_ARGS__
@@ -160,16 +166,32 @@ THRD_SPAWN_ARGS(func, __VA_ARGS__)              //调用子线程/函数语句
 #define SW6306_RET          void
 #define SW6306_NOARG        void
 #define SW6306_ARGS(...)    __VA_ARGS__
-#define SW6306_EXEC(cond)   cond
-#define SW6306_UNTIL(cond)  {}
-#define SW6306_SPAWN_NOARG(func)\
-func()
-#define SW6306_SPAWN_ARGS(func,...)\
-func(__VA_ARGS__)
-#define SW6306_FUNC_BEGIN   {}
-#define SW6306_FUNC_END     {}
-#define SW6306_MUTEX_TAKE   ((void)I2C_TransactionBegin()) /* whole operation */
-#define SW6306_MUTEX_GIVE   I2C_TransactionEnd()
+#define SW6306_EXEC(cond)     \
+    do {                      \
+        if ((cond) != 0)      \
+            s_io_failed = 1u; \
+    } while (0)
+#define SW6306_UNTIL(cond) ((void)0)
+#define SW6306_SPAWN_NOARG(func) \
+    do {                         \
+        if (!s_io_failed)        \
+            func();              \
+    } while (0)
+#define SW6306_SPAWN_ARGS(func, ...) \
+    do {                             \
+        if (!s_io_failed)            \
+            func(__VA_ARGS__);       \
+    } while (0)
+#define SW6306_FUNC_BEGIN ((void)0)
+#define SW6306_FUNC_END ((void)0)
+#define SW6306_MUTEX_TAKE                  \
+    do {                                   \
+        if (SW6306_BLOCKING_LOCK() != 0) { \
+            s_io_failed = 1u;              \
+            return;                        \
+        }                                  \
+    } while (0)
+#define SW6306_MUTEX_GIVE SW6306_BLOCKING_UNLOCK()
 #define SW6306_FUNC_ABORT   return
 #endif    
 
@@ -188,7 +210,9 @@ struct SW6306_StatusTypedef {
     uint16_t tntc;                  //NTC温度（精度太低，不建议使用）
     uint16_t tchip;                 //芯片温度
     uint16_t vntc;                  //NTC电压
-    float ntc_temp;                 //NTC温度（°C，由 VNTC/INTC Beta 公式计算；SW6306_NTCTempLoad 更新）
+#if SW6306_USE_FLOAT_API
+    float ntc_temp; /* cached by SW6306_NTCTempLoad (°C) */
+#endif
     //以上为原始数据，需要经过对应的Read()函数转换才有意义
 
     //状态寄存器区
@@ -1369,12 +1393,26 @@ uint16_t SW6306_ReadIBUS(void);                 //读取BUS电流
 uint16_t SW6306_ReadVBAT(void);                 //读取BAT电压
 uint16_t SW6306_ReadIBAT(void);                 //读取BAT电流（已按电池端感测电阻校准）
 int16_t SW6306_ReadTNTC(void);                  //读取NTC温度（结果为5的倍数，并不准确，不推荐使用）
-float SW6306_ReadTCHIP(void);                   //读取芯片温度
-float SW6306_ReadVNTC(void);                    //读取NTC电压
-float SW6306_ReadNTCResistance_Ohm(void);       //由 VNTC 与 INTC 反算 Rntc
-float SW6306_TNTC_Calc(void);                   //由 Rntc 用 Beta 公式算温度(°C)
-float SW6306_CalcNTCTemp_C(void);               //计算 NTC 温度（°C，Beta 公式；独立 API，无 FPU 平台可裁剪）
-float SW6306_ReadNTCTemp(void);                 //读取句柄中的 NTC 温度（°C，Beta 公式计算）
+#if SW6306_USE_FLOAT_API
+float SW6306_ReadTCHIP(void);
+float SW6306_ReadVNTC(void);
+float SW6306_ReadNTCResistance_Ohm(void);
+float SW6306_TNTC_Calc(void);
+#if SW6306_NTC_TEMP_CALC_EN
+float SW6306_CalcNTCTemp_C(void);
+#endif
+float SW6306_ReadNTCTemp(void);
+#else
+#define SW6306_NTC_INVALID_C10 INT16_MIN
+int16_t SW6306_ReadTCHIP_c10(void); /* 0.1 °C */
+uint16_t SW6306_ReadVNTC_mV10(void); /* 0.1 mV */
+uint32_t SW6306_ReadNTCResistanceOhm(void); /* rounded Ω, 0 if invalid */
+#if SW6306_NTC_TEMP_CALC_EN
+int16_t SW6306_NtcTempFromRaw_c10(uint16_t raw, uint8_t current_ua);
+int16_t SW6306_CalcNTCTemp_c10(void);
+#endif
+int16_t SW6306_ReadNTCTemp_c10(void); /* cached 0.1 °C */
+#endif
 SW6306_RET SW6306_NTCTempLoad(SW6306_NOARG);    //计算并缓存 NTC 温度到句柄（须先 ADCLoad+StatusLoad）
 /* 电池端感测电阻校准（芯片按 SW6306_BATT_RSHUNT_NOMINAL 标定，实际硬件不同时用本 API 重新校准）：
  * 影响 IBAT 读数/电池限流读数/库仑计能量读数（× NOMINAL/实际）与下次 Init 写入的电池限流值（× 实际/NOMINAL）。 */
@@ -1463,8 +1501,13 @@ SW6306_RET SW6306_UFCSBroadcast(SW6306_NOARG);  //手动触发 UFCS 电流能力
 SW6306_RET SW6306_CapacityLoad(SW6306_NOARG); //更新容量与库仑计镜像寄存器(0x86~0x8A,0x99,0xA2)
 uint8_t SW6306_CapacityLoadOK(void);            //最近一次 CapacityLoad 全部读成功
 uint8_t SW6306_ReadCapacity(void);              //读取SW6306显示电量
-float SW6306_ReadMaxEnergy_mWh(void);           //读取库仑计最大能量（单位：mWh）
-float SW6306_ReadRemainEnergy_mWh(void);        //读取库仑计当前（剩余）能量（单位：mWh）
+#if SW6306_USE_FLOAT_API
+float SW6306_ReadMaxEnergy_mWh(void);
+float SW6306_ReadRemainEnergy_mWh(void);
+#else
+uint32_t SW6306_ReadMaxEnergyRounded_mWh(void);
+uint32_t SW6306_ReadRemainEnergyRounded_mWh(void);
+#endif
 /* 容量学习状态（0xA2 两位组合，bit5=END 在前为高位、bit6=ING 为低位）：
  * 00 等待学习 Waiting / 01 学习中 Learning / 10 完成 Done / 11 共存(不存在) Unknown
  * 注意：成员名带 ST 前缀，避免与 SW6306_LEARN_ING/END 位宏冲突。 */
@@ -1483,7 +1526,7 @@ SW6306_RET SW6306_CapacityLearningSet(SW6306_ARGS(uint8_t enable));
 SW6306_RET SW6306_CapacityLearningRearm(SW6306_NOARG);
 //状态操作
 SW6306_RET SW6306_ForceOff(SW6306_NOARG);     //强制关闭放电并休眠
-#ifndef SW6306_USE_PROTOTHREAD
+#if !SW6306_USE_PROTOTHREAD
 uint8_t SW6306_WakeAndUnlock(void); /* 有限等待、版本寄存器读回与I2C错误反馈 */
 #endif
 SW6306_RET SW6306_Unlock(SW6306_NOARG);       //无短按事件：解除低功耗并解锁寄存器写入

@@ -1,8 +1,14 @@
 #include "sw6306.h"
+#if SW6306_USE_FLOAT_API
 #include <math.h>
+#elif SW6306_NTC_TEMP_CALC_EN
+#include "sw6306_ntc_table.h"
+#endif
+#if SW6306_USE_PROTOTHREAD || !defined(SW6306_BLOCKING_PORT_HEADER)
 #include "millis.h"
+#endif
 
-#if defined(SW6306_USE_PROTOTHREAD) && SW6306_SELECTIVE_NOINLINE
+#if SW6306_USE_PROTOTHREAD && SW6306_SELECTIVE_NOINLINE
 #define SW6306_NOINLINE __attribute__((noinline))
 #else
 #define SW6306_NOINLINE
@@ -60,32 +66,38 @@ static uint8_t sw6306_batt_limit_register(uint32_t current_ma) {
 /*******************************基本操作区*************************************/
 SW6306_RET SW6306_ByteWrite(SW6306_ARGS(uint16_t reg, uint8_t data)) {
     SW6306_FUNC_BEGIN;
+    SW6306_MUTEX_TAKE;
     SW6306_Status.sendbuf[0] = data;
     SW6306_EXEC(SW6306_I2C_Transmit(SW6306_I2C_ADDR, reg, (uint8_t*)SW6306_Status.sendbuf, 1, (uint8_t*)&SW6306_Status.flag));
     SW6306_UNTIL(SW6306_Status.flag);
-#ifdef SW6306_USE_PROTOTHREAD
+#if SW6306_USE_PROTOTHREAD
     if(SW6306_Status.flag!=I2C_ASYNC_DONE) s_io_failed=1u;
 #endif
+    SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
 
 SW6306_RET SW6306_ByteRead(SW6306_ARGS(uint16_t reg, volatile uint8_t *data)) {
     SW6306_FUNC_BEGIN;
+    SW6306_MUTEX_TAKE;
     SW6306_EXEC(SW6306_I2C_Receive(SW6306_I2C_ADDR, reg, (uint8_t*)data, 1, (uint8_t*)&SW6306_Status.flag));
     SW6306_UNTIL(SW6306_Status.flag);
-#ifdef SW6306_USE_PROTOTHREAD
+#if SW6306_USE_PROTOTHREAD
     if(SW6306_Status.flag!=I2C_ASYNC_DONE) s_io_failed=1u;
 #endif
+    SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
 
 SW6306_RET SW6306_BytesRead(SW6306_ARGS(uint16_t reg, uint8_t *pdata, uint16_t len)) {
     SW6306_FUNC_BEGIN;
+    SW6306_MUTEX_TAKE;
     SW6306_EXEC(SW6306_I2C_Receive(SW6306_I2C_ADDR, reg, pdata, len, (uint8_t*)&SW6306_Status.flag));
     SW6306_UNTIL(SW6306_Status.flag);
-#ifdef SW6306_USE_PROTOTHREAD
+#if SW6306_USE_PROTOTHREAD
     if(SW6306_Status.flag!=I2C_ASYNC_DONE) s_io_failed=1u;
 #endif
+    SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
 
@@ -97,29 +109,22 @@ SW6306_RET SW6306_RegsetSwitch(SW6306_ARGS(uint16_t regset)) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
     SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_REV, SW6306_Status.sendbuf);
-#ifdef SW6306_USE_PROTOTHREAD
-    if(s_io_failed) SW6306_FUNC_ABORT;
-#endif
+    if (s_io_failed) {
+        SW6306_MUTEX_GIVE;
+        SW6306_FUNC_ABORT;
+    }
     if(regset > 0xFFU) {
         if(SW6306_Status.sendbuf[0] == 0x01)//需要读写高位地址但目前是低地址
             {
             SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_WREN,0x81);
-#ifndef SW6306_USE_PROTOTHREAD
-            Millis_Delay(2U); /* >=50us */
-#else
-            THRD_DELAY(2u);
-#endif
+            SW6306_DELAY(2u); /* >=50us */
         }
     }
     else {
         if(SW6306_Status.sendbuf[0] != 0x01)//需要读写低位地址但目前是高地址
             {
             SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_LREGSET,0x00);
-#ifndef SW6306_USE_PROTOTHREAD
-            Millis_Delay(2U); /* >=50us */
-#else
-            THRD_DELAY(2u);
-#endif
+            SW6306_DELAY(2u); /* >=50us */
         }
     }
     SW6306_MUTEX_GIVE;
@@ -134,9 +139,10 @@ SW6306_RET SW6306_ByteModify(SW6306_ARGS(uint16_t reg, uint8_t mask, uint8_t dat
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
     SW6306_SPAWN_ARGS(SW6306_ByteRead, reg, SW6306_Status.sendbuf);
-#ifdef SW6306_USE_PROTOTHREAD
-    if(s_io_failed) SW6306_FUNC_ABORT;
-#endif
+    if (s_io_failed) {
+        SW6306_MUTEX_GIVE;
+        SW6306_FUNC_ABORT;
+    }
     SW6306_Status.sendbuf[0] = (SW6306_Status.sendbuf[0] &(~mask)) | (data & mask);
     SW6306_SPAWN_ARGS(SW6306_ByteWrite, reg, SW6306_Status.sendbuf[0]);
     SW6306_MUTEX_GIVE;
@@ -153,13 +159,15 @@ typedef struct {
     uint16_t raw;
 } sw6306_adc_slot_t;
 
-#ifdef SW6306_USE_PROTOTHREAD
 static SW6306_RET sw6306_adc_read_raw(SW6306_ARGS(uint8_t ch, sw6306_adc_slot_t *slot)) {
-    /* ISR reads into persistent bytes. Never yield with a stack buffer. */
+#if SW6306_USE_PROTOTHREAD
+    /* Bus reads can outlive the current scheduler pass. */
     static uint8_t raw[2];
+#else
+    uint8_t raw[2];
+#endif
     SW6306_FUNC_BEGIN;
-    slot->ok=0u;
-    s_io_failed=0u;
+    slot->ok = 0u;
     SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_ADC_SET, ch);
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_BytesRead, SW6306_STRG_ADCL, raw, 2u);
     if(!s_io_failed) {
@@ -168,29 +176,18 @@ static SW6306_RET sw6306_adc_read_raw(SW6306_ARGS(uint8_t ch, sw6306_adc_slot_t 
     }
     SW6306_FUNC_END;
 }
-#else
-static void sw6306_adc_read_raw(uint8_t ch, sw6306_adc_slot_t *slot) {
-    uint16_t raw = 0U;
-    SW6306_ByteWrite(SW6306_CTRG_ADC_SET, ch);
-    if(SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_ADCL, (uint8_t*)&raw, 2, (uint8_t*)&SW6306_Status.flag) != I2C_OK) {
-        slot->ok = 0U;               /* 本通道读失败（I2C 层已整笔重试过） */
-        return;
-    }
-    slot->raw = raw & 0x0FFF;        /* 12 位有效（0x31 低 8 位 + 0x32 低 4 位），高 4 位为保留位 */
-    slot->ok  = 1U;
-}
-#endif
 
 SW6306_RET SW6306_ADCLoad(SW6306_NOARG) {
     /* 原始码与工程量分开：先读齐 12 位原始码，再统一换算写入镜像（换算集中在 LOAD 阶段）。
      * 失败的通道跳过更新，保证镜像不会出现"半新半旧"或被重复换算的值。 */
-#ifdef SW6306_USE_PROTOTHREAD
+#if SW6306_USE_PROTOTHREAD
     static sw6306_adc_slot_t adc[7];
     static uint8_t i;
     static uint8_t any_fail;
 #else
     sw6306_adc_slot_t adc[7];
     uint8_t i;
+    uint8_t any_fail;
 #endif
     static const uint8_t ch_tab[7] = {
         SW6306_ADC_SET_VBUS, SW6306_ADC_SET_IBUS, SW6306_ADC_SET_VBAT, SW6306_ADC_SET_IBAT,
@@ -199,24 +196,21 @@ SW6306_RET SW6306_ADCLoad(SW6306_NOARG) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
     SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_ADC_SET);
-#ifdef SW6306_USE_PROTOTHREAD
-    if(s_io_failed) {
+    if (s_io_failed) {
         sw6306_i2c_failed();
+        SW6306_MUTEX_GIVE;
         SW6306_FUNC_ABORT; /* never interpret the wrong register page */
     }
     any_fail=0u;
     for(i=0u;i<7u;i++) {
+        s_io_failed = 0u;
         SW6306_SPAWN_ARGS(sw6306_adc_read_raw, ch_tab[i], &adc[i]);
         if(s_io_failed) any_fail=1u;
     }
     s_io_failed=any_fail;
     if(any_fail) sw6306_i2c_failed();
-    else sw6306_i2c_succeeded();
-#else
-    for(i = 0U; i < 7U; i++) {
-        sw6306_adc_read_raw(ch_tab[i], &adc[i]);
-    }
-#endif
+    else
+        sw6306_i2c_succeeded();
 
     /* 原始码 → 工程量（8mV / 4mA / 7mV / 5mA 每 LSB；电池端感测电阻校准在 ReadIBAT 里做） */
     if(adc[0].ok) SW6306_Status.vbus  = (uint16_t)(adc[0].raw << 3);//转换BUS电压
@@ -267,6 +261,7 @@ int16_t SW6306_ReadTNTC(void)//读取并转换NTC温度
     return (SW6306_Status.tntc- 16)* 5;
 }
 
+#if SW6306_USE_FLOAT_API
 float SW6306_ReadTCHIP(void)//读取并转换芯片温度
 {
     return (float)(SW6306_Status.tchip- 1839)/ 6.82f;
@@ -303,7 +298,7 @@ float SW6306_TNTC_Calc(void) {
 }
 
 /* 独立计算 API：由 VNTC/INTC 反算 Rntc 再用 Beta 公式求温度（°C）。
- * 纯计算不写句柄；无 FPU MCU 可置 SW6306_NTC_TEMP_CALC_EN=0 裁剪本函数（不链接浮点计算）。
+ * 纯计算不写句柄。
  * 依赖：先 SW6306_ADCLoad() 更新 vntc、SW6306_StatusLoad() 更新 intc。 */
 #if SW6306_NTC_TEMP_CALC_EN
 float SW6306_CalcNTCTemp_C(void) {
@@ -311,25 +306,86 @@ float SW6306_CalcNTCTemp_C(void) {
 }
 #endif
 
-/* 计算 NTC 温度并更新句柄（NTCTempLoad：调计算 API 缓存，供 UI/菜单读取）。
- * 数据无效时 ntc_temp 为 114514（与 TNTC_Calc 一致）；无 FPU（宏=0）时句柄保持 0。 */
+float SW6306_ReadNTCTemp(void) {
+    return SW6306_Status.ntc_temp;
+}
+#else
+static int16_t s_ntc_temp_c10 = SW6306_NTC_INVALID_C10;
+
+int16_t SW6306_ReadTCHIP_c10(void) {
+    return (int16_t)(((int32_t)SW6306_Status.tchip - 1839) * 1000 / 682);
+}
+
+uint16_t SW6306_ReadVNTC_mV10(void) {
+    return (uint16_t)(SW6306_Status.vntc * 11u);
+}
+
+static uint32_t sw6306_ntc_voltage_uv(uint16_t raw, uint8_t current_ua) {
+    if (raw == 0u || raw >= 4095u ||
+        (current_ua != 20u && current_ua != 40u && current_ua != 80u)) {
+        return 0u;
+    }
+    return (uint32_t)raw * 1100u;
+}
+
+uint32_t SW6306_ReadNTCResistanceOhm(void) {
+    uint8_t current_ua = SW6306_Status.intc;
+    uint32_t uv = sw6306_ntc_voltage_uv(SW6306_Status.vntc, current_ua);
+    return uv ? (uv + current_ua / 2u) / current_ua : 0u;
+}
+
+#if SW6306_NTC_TEMP_CALC_EN
+int16_t SW6306_NtcTempFromRaw_c10(uint16_t raw, uint8_t current_ua) {
+    uint32_t uv = sw6306_ntc_voltage_uv(raw, current_ua);
+    uint32_t cold = 0u;
+    uint32_t hot = sizeof(sw6306_ntc_ohms) / sizeof(sw6306_ntc_ohms[0]) - 1u;
+    /* Compare in µV to avoid rounding raw resistance before interpolation. */
+    if (!uv || uv > sw6306_ntc_ohms[cold] * current_ua || uv < sw6306_ntc_ohms[hot] * current_ua) {
+        return SW6306_NTC_INVALID_C10;
+    }
+
+    while (hot - cold > 1u) {
+        uint32_t mid = (cold + hot) / 2u;
+        if (uv > sw6306_ntc_ohms[mid] * current_ua)
+            hot = mid;
+        else
+            cold = mid;
+    }
+
+    uint32_t cold_uv = sw6306_ntc_ohms[cold] * current_ua;
+    uint32_t span_uv = cold_uv - sw6306_ntc_ohms[hot] * current_ua;
+    uint32_t offset_c10 = ((cold_uv - uv) * SW6306_NTC_TABLE_STEP_C10 + span_uv / 2u) / span_uv;
+    return (int16_t)(SW6306_NTC_TABLE_MIN_C10 + (int32_t)(cold * SW6306_NTC_TABLE_STEP_C10 + offset_c10));
+}
+
+int16_t SW6306_CalcNTCTemp_c10(void) {
+    return SW6306_NtcTempFromRaw_c10(SW6306_Status.vntc, SW6306_Status.intc);
+}
+#endif
+
+int16_t SW6306_ReadNTCTemp_c10(void) {
+    return s_ntc_temp_c10;
+}
+#endif
+
 SW6306_RET SW6306_NTCTempLoad(SW6306_NOARG) {
     SW6306_FUNC_BEGIN;
+    SW6306_MUTEX_TAKE;
+#if SW6306_USE_FLOAT_API
 #if SW6306_NTC_TEMP_CALC_EN
     SW6306_Status.ntc_temp = SW6306_CalcNTCTemp_C();
 #else
     SW6306_Status.ntc_temp = 0.0f;
 #endif
+#elif SW6306_NTC_TEMP_CALC_EN
+    s_ntc_temp_c10 = SW6306_CalcNTCTemp_c10();
+#endif
+    SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
 
-float SW6306_ReadNTCTemp(void)//读取句柄中的 NTC 温度（°C，Beta 公式计算）
-{
-    return SW6306_Status.ntc_temp;
-}
-
 SW6306_RET SW6306_PortStatusLoad(SW6306_NOARG) {
-#ifdef SW6306_USE_PROTOTHREAD
+#if SW6306_USE_PROTOTHREAD
     static uint8_t t[5]; /* survives PT yields and HAL IRQ */
 #else
     uint8_t t[5];
@@ -337,27 +393,16 @@ SW6306_RET SW6306_PortStatusLoad(SW6306_NOARG) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
     SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_STRG_NOLOAD);
-#ifdef SW6306_USE_PROTOTHREAD
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_NOLOAD, &t[0]);
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_SYS_STAT, &t[1]);
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_TYPEC, &t[2]);
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_TYPEA_QCIN, &t[3]);
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_PORT_STA, &t[4]);
-    if(s_io_failed) {
-        sw6306_i2c_failed();
-        SW6306_FUNC_ABORT;
-    }
-#else
-    if(SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_NOLOAD, &t[0], 1, (uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
-       SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_SYS_STAT, &t[1], 1, (uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
-       SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_TYPEC, &t[2], 1, (uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
-       SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_TYPEA_QCIN, &t[3], 1, (uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
-       SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_PORT_STA, &t[4], 1, (uint8_t*)&SW6306_Status.flag)!=I2C_OK) {
+    if (s_io_failed) {
         sw6306_i2c_failed();
         SW6306_MUTEX_GIVE;
-        return;
+        SW6306_FUNC_ABORT;
     }
-#endif
     sw6306_i2c_succeeded();
     SW6306_Status.noload=t[0];
     SW6306_Status.sys_stat=t[1];
@@ -391,9 +436,9 @@ uint8_t SW6306_ConnectedPortMask(void) {
  * 已打开A1、检测到A1在线的情况禁止运输；物理端口存在标志不能表示设备插入。
  * 独立于SW6306缓存镜像，避免利用500ms前的旧数据。 */
 uint8_t SW6306_TransportPortsIdle(void) {
-    uint8_t sys,typec,port;
+    uint8_t sys = 0u, typec = 0u, port = 0u;
     if(!SW6306_IsInitialized())return 0u;
-#ifdef SW6306_USE_PROTOTHREAD
+#if SW6306_USE_PROTOTHREAD
     /* Caller MUST check PortReadSequence advanced in its own async
      * operation. RAM-only here: never block the scheduler in PM. */
     if(!s_port_read_seq)return 0u;
@@ -401,15 +446,19 @@ uint8_t SW6306_TransportPortsIdle(void) {
     typec=SW6306_Status.typec_stat;
     port=SW6306_Status.port_stat;
 #else
-    if(I2C_TransactionBegin()!=I2C_OK)return 0u;
-    SW6306_RegsetSwitch(SW6306_STRG_SYS_STAT);
-    if(SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_SYS_STAT, &sys, 1, (uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
-       SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_TYPEC, &typec, 1, (uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
-       SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_PORT_STA, &port, 1, (uint8_t*)&SW6306_Status.flag)!=I2C_OK) {
-        I2C_TransactionEnd();
+    if (SW6306_BLOCKING_LOCK() != 0) {
+        s_io_failed = 1u;
         return 0u;
     }
-    I2C_TransactionEnd();
+    SW6306_OperationReset();
+    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_STRG_SYS_STAT);
+    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_SYS_STAT, &sys);
+    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_TYPEC, &typec);
+    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_PORT_STA, &port);
+    uint8_t ok = SW6306_LastOperationOK();
+    SW6306_MUTEX_GIVE;
+    if (!ok)
+        return 0u;
 #endif
     return ((sys & (SW6306_SYS_STAT_CHGING|SW6306_SYS_STAT_DISCHGING|
         SW6306_SYS_STAT_C1ON|SW6306_SYS_STAT_A1ON))==0u &&
@@ -435,14 +484,15 @@ uint8_t SW6306_IsPortA2ON(void) {
 }
 
 SW6306_NOINLINE SW6306_RET SW6306_PowerLoad(SW6306_NOARG) {
-#ifdef SW6306_USE_PROTOTHREAD
+#if SW6306_USE_PROTOTHREAD
     /* Read all fields privately, then publish only on complete success. */
     static uint8_t t[9];
+#else
+    uint8_t t[9];
 #endif
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
     SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_STRG_VBUS_CHG);
-#ifdef SW6306_USE_PROTOTHREAD
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead,SW6306_STRG_VBUS_CHG,&t[0]);
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead,SW6306_STRG_QCSTAT,&t[1]);
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead,SW6306_STRG_BUSILIM_CHG,&t[2]);
@@ -454,6 +504,7 @@ SW6306_NOINLINE SW6306_RET SW6306_PowerLoad(SW6306_NOARG) {
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead,SW6306_STRG_PIMAX,&t[8]);
     if(s_io_failed) {
         sw6306_i2c_failed();
+        SW6306_MUTEX_GIVE;
         SW6306_FUNC_ABORT;
     }
     SW6306_Status.vbus_chg=t[0];
@@ -466,17 +517,6 @@ SW6306_NOINLINE SW6306_RET SW6306_PowerLoad(SW6306_NOARG) {
     SW6306_Status.pomax=t[7];
     SW6306_Status.pimax=t[8];
     sw6306_i2c_succeeded();
-#else
-    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_VBUS_CHG, &SW6306_Status.vbus_chg);
-    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_QCSTAT, &SW6306_Status.qcstat);
-    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_BUSILIM_CHG, &SW6306_Status.ibuslim_chg);
-    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_BATILIM_CHG, &SW6306_Status.ibatlim_chg);
-    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_TYPEA_QCIN, &SW6306_Status.typea_qcin);
-    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_CTRG_PISET, &SW6306_Status.pimax_set);
-    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_CTRG_POSET, &SW6306_Status.pomax_set);
-    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_POMAX, &SW6306_Status.pomax);
-    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_PIMAX, &SW6306_Status.pimax);
-#endif
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
@@ -563,7 +603,7 @@ const char *SW6306_ReadProtocol(void)//当前协议读取（返回字符串地�
 }
 
 SW6306_NOINLINE SW6306_RET SW6306_StatusLoad(SW6306_NOARG) {
-#ifdef SW6306_USE_PROTOTHREAD
+#if SW6306_USE_PROTOTHREAD
     static uint8_t t[8];
 #else
     uint8_t t[8];
@@ -571,7 +611,6 @@ SW6306_NOINLINE SW6306_RET SW6306_StatusLoad(SW6306_NOARG) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
     SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_STRG_MODE);
-#ifdef SW6306_USE_PROTOTHREAD
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_MODE, &t[0]);
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_DISPLAY, &t[1]);
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_FAULT0, &t[2]);
@@ -580,24 +619,11 @@ SW6306_NOINLINE SW6306_RET SW6306_StatusLoad(SW6306_NOARG) {
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_FAULT1, &t[5]);
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_FAULT2, &t[6]);
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_FAULT3, &t[7]);
-    if(s_io_failed) {
-        sw6306_i2c_failed();
-        SW6306_FUNC_ABORT;
-    }
-#else
-    if(SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_STRG_MODE,&t[0],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
-       SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_STRG_DISPLAY,&t[1],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
-       SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_STRG_FAULT0,&t[2],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
-       SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_STRG_SYS_STAT,&t[3],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
-       SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_STRG_NTC_CURR,&t[4],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
-       SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_STRG_FAULT1,&t[5],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
-       SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_STRG_FAULT2,&t[6],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
-       SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_STRG_FAULT3,&t[7],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK) {
+    if (s_io_failed) {
         sw6306_i2c_failed();
         SW6306_MUTEX_GIVE;
-        return;
+        SW6306_FUNC_ABORT;
     }
-#endif
     sw6306_i2c_succeeded();
     SW6306_Status.mode=t[0];
     SW6306_Status.display=t[1];
@@ -739,36 +765,25 @@ SW6306_RET SW6306_ClearEvents(SW6306_ARGS(uint8_t events))//写1清除REG0x15已
 }
 
 SW6306_RET SW6306_CapacityLoad(SW6306_NOARG) {
-#ifdef SW6306_USE_PROTOTHREAD
+#if SW6306_USE_PROTOTHREAD
     static uint8_t t[7];
 #else
     uint8_t t[7];
 #endif
     SW6306_FUNC_BEGIN;
-    SW6306_Status.capacity_load_ok=0u;
     SW6306_MUTEX_TAKE;
+    SW6306_Status.capacity_load_ok = 0u;
     SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_STRG_BATLVL_DISPLAY);
-#ifdef SW6306_USE_PROTOTHREAD
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_BATLVL_DISPLAY, &t[0]);
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_LEARN, &t[1]);
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_CTRG_GAUGE_MCAPL, &t[2]);
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_CTRG_GAUGE_MCAPH, &t[3]);
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_BytesRead, SW6306_CTRG_CURR_CAPL, &t[4], 3u);
-    if(s_io_failed) {
-        sw6306_i2c_failed();
-        SW6306_FUNC_ABORT;
-    }
-#else
-    if(SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_STRG_BATLVL_DISPLAY,&t[0],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
-       SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_STRG_LEARN,&t[1],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
-       SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_CTRG_GAUGE_MCAPL,&t[2],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
-       SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_CTRG_GAUGE_MCAPH,&t[3],1u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK ||
-       SW6306_I2C_Receive(SW6306_I2C_ADDR,SW6306_CTRG_CURR_CAPL,&t[4],3u,(uint8_t*)&SW6306_Status.flag)!=I2C_OK) {
+    if (s_io_failed) {
         sw6306_i2c_failed();
         SW6306_MUTEX_GIVE;
-        return;
+        SW6306_FUNC_ABORT;
     }
-#endif
     sw6306_i2c_succeeded();
     SW6306_Status.capacity=t[0];
     SW6306_Status.learn_stat=t[1];
@@ -792,6 +807,7 @@ uint8_t SW6306_ReadCapacity(void)//读取SW6306显示电量
  *  - 当前能量 = presentcap × 0.07964 mWh（24bit 细分辨率）
  *  - 326.2236 / 0.07964 ≈ 4096，两者仅分辨率不同。
  * 例：2S1P 30Q 充满后 maxcap=65 → 65×326.22 ≈ 21203 mWh ≈ 21.2 Wh（≈7.2V×3.0Ah）。 */
+#if SW6306_USE_FLOAT_API
 float SW6306_ReadMaxEnergy_mWh(void)//读取库仑计最大能量（单位：mWh，已按感测电阻校准）
 {
     /* Energy unit is fractional mWh; only its fixed shunt ratio is
@@ -805,6 +821,21 @@ float SW6306_ReadRemainEnergy_mWh(void)//读取库仑计当前（剩余）能量
     return SW6306_Status.presentcap * 0.07964f *
     (float)SW6306_BATT_CURRENT_NUM / (float)SW6306_BATT_CURRENT_DEN;
 }
+#else
+uint32_t SW6306_ReadMaxEnergyRounded_mWh(void) {
+    uint32_t raw = SW6306_Status.maxcap;
+    uint32_t mwh = raw * 326u + (raw * 2236u + 5000u) / 10000u;
+    return (mwh * SW6306_BATT_CURRENT_NUM + SW6306_BATT_CURRENT_DEN / 2u) / SW6306_BATT_CURRENT_DEN;
+}
+
+uint32_t SW6306_ReadRemainEnergyRounded_mWh(void) {
+    /* 0.07964 = 1991 / 25000. Divide first so the 24-bit code needs only 32-bit arithmetic. */
+    uint32_t raw = SW6306_Status.presentcap;
+    uint32_t mwh = (raw / 25000u) * 1991u + ((raw % 25000u) * 1991u + 12500u) / 25000u;
+    return (mwh * SW6306_BATT_CURRENT_NUM + SW6306_BATT_CURRENT_DEN / 2u) / SW6306_BATT_CURRENT_DEN;
+}
+#endif
+
 sw6306_learn_state_t SW6306_ReadLearnState(void)//读取容量学习状态（0xA2 镜像，3 态 + Unknown）
 {
     /* bit5=END 在前为高位、bit6=ING 为低位：
@@ -865,42 +896,16 @@ SW6306_RET SW6306_ForceOff(SW6306_NOARG) {
 /* SW6306V:0x23[7:1]为保留位，按V版手册写0x01而非通用SW630x的0x81。
  * 关机LP下普通版本寄存器不可读取：必须先退出LP，再切回低页并探测。
  * 注意这里由外层持有I2C互斥锁；任何失败都不宣布写权限成功。 */
-#ifndef SW6306_USE_PROTOTHREAD
-static uint8_t sw6306_wake_unlock_locked(void) {
-    uint8_t data, rev = 0U, i;
-    const uint8_t unlock_seq[3] = {0x20U, 0x40U, 0x80U};
-    SW6306_Status.unlocked = 0U;
-    data = SW6306_LPSET_EN;
-    if (SW6306_I2C_Transmit(SW6306_I2C_ADDR, SW6306_CTRG_LPSET,
-        &data, 1U, &SW6306_Status.flag) != I2C_OK) return 0U;
-    Millis_Delay(2U);
-    if (SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_REV,
-        &rev, 1U, &SW6306_Status.flag) != I2C_OK) return 0U;
-    if (rev != 0x01U) {
-        data = 0U;
-        if (SW6306_I2C_Transmit(SW6306_I2C_ADDR, SW6306_CTRG_LREGSET,
-            &data, 1U, &SW6306_Status.flag) != I2C_OK) return 0U;
-        /* 手册要求换页后至少50us；2个tick保证在1kHz时至少等待1ms。 */
-        Millis_Delay(2U);
-    }
-    if (SW6306_I2C_Receive(SW6306_I2C_ADDR, SW6306_STRG_REV,
-        &rev, 1U, &SW6306_Status.flag) != I2C_OK ||
-        (rev & 0x0FU) == 0U) return 0U;
-    for (i = 0U; i < 3U; i++) {
-        data = unlock_seq[i];
-        if (SW6306_I2C_Transmit(SW6306_I2C_ADDR, SW6306_CTRG_WREN,
-            &data, 1U, &SW6306_Status.flag) != I2C_OK) return 0U;
-    }
-    SW6306_Status.unlocked = 1U;
-    return 1U;
-}
-
+#if !SW6306_USE_PROTOTHREAD
 uint8_t SW6306_WakeAndUnlock(void) {
-    uint8_t ok;
-    ((void)0);
-    ok = sw6306_wake_unlock_locked();
-    if (!ok) SW6306_Status.initialized = 0U;
-    ((void)0);
+    if (SW6306_BLOCKING_LOCK() != 0) {
+        s_io_failed = 1u;
+        return 0u;
+    }
+    SW6306_OperationReset();
+    SW6306_Unlock();
+    uint8_t ok = SW6306_LastOperationOK();
+    SW6306_MUTEX_GIVE;
     return ok;
 }
 #endif
@@ -908,35 +913,34 @@ uint8_t SW6306_WakeAndUnlock(void) {
 SW6306_RET SW6306_Unlock(SW6306_NOARG) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
-#ifndef SW6306_USE_PROTOTHREAD
-    if(!sw6306_wake_unlock_locked())SW6306_Status.initialized=0u;
-#else
     SW6306_SPAWN_NOARG(SW6306_Unlock_Nolock);
+#if !SW6306_USE_PROTOTHREAD
+    if (s_io_failed)
+        SW6306_Status.initialized = 0u;
 #endif
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
 
 static SW6306_RET SW6306_Unlock_Nolock(SW6306_NOARG) {
-#ifdef SW6306_USE_PROTOTHREAD
+#if SW6306_USE_PROTOTHREAD
     static uint8_t rev;
+#else
+    uint8_t rev;
 #endif
     SW6306_FUNC_BEGIN;
-#ifndef SW6306_USE_PROTOTHREAD
-    if(!sw6306_wake_unlock_locked())SW6306_Status.initialized=0u;
-#else
     /* Keep the verified synchronous sequence: LP exit, 2ms settle,
      * page selection, version check and three write-unlock pulses. */
     SW6306_Status.unlocked=0u;
     SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_LPSET, SW6306_LPSET_EN);
     if(s_io_failed) SW6306_FUNC_ABORT;
-    THRD_DELAY(2u);
+    SW6306_DELAY(2u);
     SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_REV, &rev);
     if(s_io_failed) SW6306_FUNC_ABORT;
     if(rev!=0x01u) {
         SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_LREGSET, 0u);
         if(s_io_failed) SW6306_FUNC_ABORT;
-        THRD_DELAY(2u);
+        SW6306_DELAY(2u);
     }
     SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_REV, &rev);
     if(s_io_failed || !(rev&0x0fu)) {
@@ -947,8 +951,8 @@ static SW6306_RET SW6306_Unlock_Nolock(SW6306_NOARG) {
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_WREN, 0x40u);
     if(!s_io_failed) SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_WREN, 0x80u);
     if(!s_io_failed) SW6306_Status.unlocked=1u;
-    else SW6306_Status.initialized=0u;
-#endif
+    else
+        SW6306_Status.initialized = 0u;
     SW6306_FUNC_END;
 }
 
@@ -1515,6 +1519,7 @@ SW6306_NOINLINE SW6306_RET SW6306_Init(SW6306_NOARG) {
     SW6306_SPAWN_NOARG(SW6306_Unlock_Nolock);
     if(!SW6306_Status.unlocked || s_io_failed) {
         SW6306_Status.initialized=0u;
+        SW6306_MUTEX_GIVE;
         SW6306_FUNC_ABORT;
     }
     //使能UVLO、充放电异常与场景变化中断（插拔/唤醒事件可经IRQ脚发脉冲唤醒MCU）
