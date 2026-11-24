@@ -5,6 +5,7 @@
 #include "spi.h"
 #include "millis.h"
 #include "main.h"
+#include "peripheral_map.h"
 #include "sc7a20_algo.h"
 #include "radio_algo.h"
 #include "pm_api.h"
@@ -48,8 +49,9 @@ static void radio_wut_disarm(void) {
 static pm_hook_result_t stm32_suspend(void *ctx) {
     (void)ctx;
     if(suspended)return PM_HOOK_DONE;
-    if(I2C_BusIsLocked() || SSD1306_Display_FrameBusy() ||
-        SPI1_DmaTxState()!=SPI1_DMA_IDLE)return PM_HOOK_PENDING;
+    if (I2C_BusIsLocked() || SSD1306_Display_FrameBusy() ||
+        SPI_DmaTxState() != SPI_DMA_IDLE)
+        return PM_HOOK_PENDING;
     /* Arm the timer while HAL Tick still runs; the RTC IRQ only latches
      * its source. A failed arm rejects STOP1 instead of leaving an active
      * FM receiver without periodic battery monitoring. */
@@ -59,14 +61,13 @@ static pm_hook_result_t stm32_suspend(void *ctx) {
             return PM_HOOK_ERROR;
         s_radio_wut_armed=1u;
     }
-    adc_internal=ADC1_COMMON->CCR & (ADC_CCR_VREFEN|ADC_CCR_TSEN);
-    ADC1_COMMON->CCR &= ~(ADC_CCR_VREFEN|ADC_CCR_TSEN);
+    adc_internal = PB_ADC_COMMON->CCR & (ADC_CCR_VREFEN | ADC_CCR_TSEN);
+    PB_ADC_COMMON->CCR &= ~(ADC_CCR_VREFEN | ADC_CCR_TSEN);
     HAL_SuspendTick();suspended=1;return PM_HOOK_DONE;
 }
 
 static void stm32_restore(void) {
-    ADC1_COMMON->CCR=(ADC1_COMMON->CCR & ~(ADC_CCR_VREFEN|ADC_CCR_TSEN))
-    |adc_internal;
+    PB_ADC_COMMON->CCR = (PB_ADC_COMMON->CCR & ~(ADC_CCR_VREFEN | ADC_CCR_TSEN)) | adc_internal;
     HAL_ResumeTick();suspended=0;
 }
 

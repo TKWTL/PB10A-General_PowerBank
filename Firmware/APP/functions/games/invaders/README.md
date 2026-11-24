@@ -49,17 +49,12 @@ writes, dynamic allocation, PM sleep lock or artificial idle refresh is used.
 After a STOP1 gap over 150ms the accumulated simulation time is discarded;
 projectiles and movement do not run at accelerated speed after wake.
 
-## Files and validation
+## Files
 
 - `invaders_core.c/.h`: pure portable simulation + read-only page rendering.
 - `invaders_assets.c/.h`: original byte-exact fontless bitmap and level arrays.
 - `game_invaders.c/.h`: MiaoUI WORD page, native keys, nonblocking Beep Service,
   direct OLED DMA buffer, restart and leave hook.
-- `tests/run.sh`: GCC or Clang host regression tests of asset hashes, pure
-  rendering, shots/hits/shields, UFO bonus, level 9 wrap, three lives, pause,
-  STOP1 and MiaoUI state cleanup.
-
-Host tests are not substitutes for Keil/ARMClang and real PB10A testing.
 
 ## Game-index icon
 

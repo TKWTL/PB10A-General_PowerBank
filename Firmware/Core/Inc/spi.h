@@ -43,18 +43,18 @@ void MX_SPI1_Init(void);
  * Keep the DMA buffer valid until DONE or until abort returns to IDLE.
  */
 typedef enum {
-    SPI1_DMA_IDLE=0,
-    SPI1_DMA_BUSY,
-    SPI1_DMA_DONE,
-    SPI1_DMA_ERROR,
-    SPI1_DMA_ABORTING
-} SPI1_DmaState;
-uint8_t SPI1_DmaTxStart(const uint8_t *bytes, uint16_t count);
-void SPI1_DmaTxIRQ(void);
-void SPI1_DmaTxService(void);
-SPI1_DmaState SPI1_DmaTxState(void);
-uint8_t SPI1_DmaTxRelease(void);
-uint8_t SPI1_DmaTxAbortAsync(void);
+    SPI_DMA_IDLE=0,
+    SPI_DMA_BUSY,
+    SPI_DMA_DONE,
+    SPI_DMA_ERROR,
+    SPI_DMA_ABORTING
+} SPI_DmaState;
+uint8_t SPI_DmaTxStart(const uint8_t *bytes, uint16_t count);
+void SPI_DmaTxIRQ(void);
+void SPI_DmaTxService(void);
+SPI_DmaState SPI_DmaTxState(void);
+uint8_t SPI_DmaTxRelease(void);
+uint8_t SPI_DmaTxAbortAsync(void);
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus

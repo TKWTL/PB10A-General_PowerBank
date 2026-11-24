@@ -29,7 +29,7 @@ extern "C" {
 #include "main.h"
 
 /* USER CODE BEGIN Includes */
-
+#include "peripheral_map.h"
 /* USER CODE END Includes */
 
 /* USER CODE BEGIN Private defines */
@@ -40,18 +40,18 @@ void MX_ADC1_Init(void);
 
 /* USER CODE BEGIN Prototypes */
 typedef enum {
-    ADC1_SCAN_IDLE = 0,
-    ADC1_SCAN_BUSY,
-    ADC1_SCAN_DONE,
-    ADC1_SCAN_ERROR
-} ADC1_ScanStatus;
+    ADC_SCAN_IDLE = 0,
+    ADC_SCAN_BUSY,
+    ADC_SCAN_DONE,
+    ADC_SCAN_ERROR
+} ADC_ScanStatus;
 
-uint8_t ADC1_Calibrate(void);
+uint8_t ADC_Calibrate(void);
 /* The four halfwords must remain writable until completion or stop. */
-uint8_t ADC1_ScanStart(uint16_t samples[4]);
-ADC1_ScanStatus ADC1_ScanState(void);
-uint8_t ADC1_ScanStop(void);
-void ADC1_DmaIRQ(void);
+uint8_t ADC_ScanStart(uint16_t samples[PB_ADC_SCAN_COUNT]);
+ADC_ScanStatus ADC_ScanState(void);
+uint8_t ADC_ScanStop(void);
+void ADC_DmaIRQ(void);
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus

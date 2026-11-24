@@ -55,8 +55,6 @@ or interrupts-disabled critical section. Compatible with ArmClang/GCC.
   although IRQ-DMA UART integration itself belongs in its hardware driver.
 - Existing Radio queues are not migrated automatically.
 
-Run `bash Firmware/LIB/tests/run.sh` on a host with GCC and Clang installed.
- 
 ## Small integer/string formatter
 
 `mini_format.c/.h` is reused from IH01A's BSP/Console formatter.

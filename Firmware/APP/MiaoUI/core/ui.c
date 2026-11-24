@@ -480,7 +480,7 @@ default:
 #endif
 }
 
-/* The original Collar-Radio dissolve sent eight blocking frames.
+/* Collar-Radio used a partial dissolve for overlays and a full dissolve for page changes.
  * PB10A has a single 1024-byte framebuffer shared with asynchronous SPI DMA.
  * Render one dissolve stage per MiaoUI pass, after the previous DMA finishes,
  * and defer changing the page until the last stage is fully transmitted. */
@@ -493,15 +493,38 @@ static uint8_t UI_FadeRandomByte(void) {
     s_fade_rng=x;
     return (uint8_t)x;
 }
+static uint8_t UI_FadeKeepsPage(const ui_t *ui) {
+    const ui_item_t *item = ui->nowItem;
+    if (ui->fadeAction != UI_ACTION_ENTER || ui->menuState != UI_PAGE_RUNING ||
+        !item || !item->page.location || item->page.location->type != UI_PAGE_TEXT ||
+        item->itemType != UI_ITEM_DATA || item->itemFunction || !item->element ||
+        !item->element->data)
+        return 0u;
+
+    const ui_data_t *data = item->element->data;
+    return data->actionType == UI_DATA_ACTION_RW &&
+           (data->dataType == UI_DATA_INT || data->dataType == UI_DATA_FLOAT);
+}
+
 static void UI_FadeFrame(ui_t *ui, uint8_t step) {
     const uint16_t len=(uint16_t)(8u*Disp_GetBufferTileHeight()*
                                   Disp_GetBufferTileWidth());
     uint8_t *const p=Disp_GetBufferPtr();
+    const uint8_t keep_page = UI_FadeKeepsPage(ui);
     uint16_t i;
     if(!p)return;
     for(i=0u;i<len;i++) {
         uint8_t a,b,drop;
-        if(step>=7u)drop=0xffu;
+        if (keep_page) {
+            /* Spread Collar-Radio's partial mask over all eight frames.
+             * Four passes at 1/16 and four at 1/8 leave about 45% of the page pixels. */
+            drop = UI_FadeRandomByte();
+            drop &= UI_FadeRandomByte();
+            drop &= UI_FadeRandomByte();
+            if (step < 4u)
+                drop &= UI_FadeRandomByte();
+        } else if (step >= 7u)
+            drop = 0xffu;
         else {
             a=UI_FadeRandomByte();
             b=UI_FadeRandomByte();

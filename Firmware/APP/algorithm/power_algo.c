@@ -164,7 +164,7 @@ void PowerAlgo_BackgroundAbort(void) {
 }
 
 
-/************************* 附加 A 口与 ADC1 DMA *************************/
+/************************* 附加 A 口与 ADC DMA *************************/
 /* ADC rank order: PA0 current, PA5 divided voltage, die temperature,
  * VREFINT. Collar-Radio-style averaging: sixteen spaced IRQ-backed DMA
  * scans per 500 ms, mean raw values before conversions to physical
@@ -173,8 +173,8 @@ void PowerAlgo_BackgroundAbort(void) {
 #define AUX_A_VDIV_LOW  220u
 #define AUX_A_CURRENT_MV_PER_A 500u
 
-static uint16_t s_dma[4] __attribute__((aligned(4)));
-static uint32_t s_adc_accumulator[4]; /* 16 * 4095 per rank fits uint32_t */
+static uint16_t s_dma[PB_ADC_SCAN_COUNT] __attribute__((aligned(4)));
+static uint32_t s_adc_accumulator[PB_ADC_SCAN_COUNT]; /* 16 * 4095 per rank fits uint32_t */
 static uint8_t s_adc_sample_count;
 static uint8_t s_active,s_suspended,s_adc_initialized;
 static uint8_t s_aux_inserted,s_aux_enabled,s_system_adc_valid;
@@ -188,7 +188,8 @@ static pm_hook_result_t power_adc_suspend(void *ctx) {
     (void)ctx;
     s_suspended = 1u;
     s_active = 0u;
-    if (!ADC1_ScanStop()) return PM_HOOK_ERROR;
+    if (!ADC_ScanStop())
+        return PM_HOOK_ERROR;
     LL_GPIO_ResetOutputPin(SUB_EN_GPIO_Port,SUB_EN_Pin);
     s_aux_enabled=0u;
     s_system_adc_valid=0u;
@@ -219,7 +220,7 @@ void PowerAlgo_AdcInit(void) {
     s_vdda_mv=0;s_die_temp_c10=0;s_system_adc_valid=0u;
     s_adc_sample_count=0u;
     memset(s_adc_accumulator,0,sizeof(s_adc_accumulator));
-    s_adc_initialized = ADC1_Calibrate();
+    s_adc_initialized = ADC_Calibrate();
 }
 
 uint8_t PowerAlgo_AdcIsSuspended(void){return s_suspended;}
@@ -234,11 +235,11 @@ void PowerAlgo_AdcBatchBegin(void) {
 
 uint8_t PowerAlgo_AdcBeginScan(void) {
     if (s_suspended || !s_adc_initialized || s_active) return 0u;
-    if (!ADC1_ScanStart(s_dma)) {
+    if (!ADC_ScanStart(s_dma)) {
         s_adc_sample_count = 0u;
         memset(s_adc_accumulator, 0, sizeof(s_adc_accumulator));
         s_system_adc_valid = 0u;
-        (void)ADC1_ScanStop();
+        (void)ADC_ScanStop();
         return 0u;
     }
     s_active = 1u;
@@ -250,37 +251,39 @@ uint8_t PowerAlgo_AdcBeginScan(void) {
  * No timeout or retry is needed for this on-chip ADC DMA path. */
 uint8_t PowerAlgo_AdcScanSettled(void) {
     uint32_t pin_voltage_mv,pin_current_mv;
-    uint16_t avg[4];
+    uint16_t avg[PB_ADC_SCAN_COUNT];
     int32_t cal_span,scaled_temp10;
     uint8_t i;
     if(s_suspended || !s_active)return 1u;
-    ADC1_ScanStatus result = ADC1_ScanState();
-    if (result == ADC1_SCAN_BUSY) return 0u;
+    ADC_ScanStatus result = ADC_ScanState();
+    if (result == ADC_SCAN_BUSY)
+        return 0u;
     s_active = 0u;
-    if (result != ADC1_SCAN_DONE || s_dma[3] == 0u) {
-        (void)ADC1_ScanStop();
+    if (result != ADC_SCAN_DONE || s_dma[PB_ADC_VREF_SLOT] == 0u) {
+        (void)ADC_ScanStop();
         s_adc_sample_count=0u;
         memset(s_adc_accumulator,0,sizeof(s_adc_accumulator));
         s_system_adc_valid=0u;
         return 1u;
     }
-    for(i=0u;i<4u;i++)s_adc_accumulator[i]+=(uint32_t)s_dma[i];
+    for (i = 0u; i < PB_ADC_SCAN_COUNT; i++)
+        s_adc_accumulator[i] += (uint32_t)s_dma[i];
     if(++s_adc_sample_count<POWER_ADC_AVERAGE_SAMPLES)
         return 1u;
-    for(i=0u;i<4u;i++)
+    for (i = 0u; i < PB_ADC_SCAN_COUNT; i++)
         avg[i]=(uint16_t)((s_adc_accumulator[i]+
             POWER_ADC_AVERAGE_SAMPLES/2u)/POWER_ADC_AVERAGE_SAMPLES);
     s_adc_sample_count=0u;
     memset(s_adc_accumulator,0,sizeof(s_adc_accumulator));
     /* VREFINT rank uses the raw average; every derived channel shares
      * the same measured VDDA instead of assuming a fixed 3300 mV. */
-    if(avg[3]==0u) {
+    if (avg[PB_ADC_VREF_SLOT] == 0u) {
         s_system_adc_valid=0u;
         return 1u;
     }
-    s_vdda_mv = (int)__LL_ADC_CALC_VREFANALOG_VOLTAGE(avg[3], LL_ADC_RESOLUTION_12B);
-    pin_current_mv=((uint32_t)avg[0]*(uint32_t)s_vdda_mv+2047u)/4095u;
-    pin_voltage_mv=((uint32_t)avg[1]*(uint32_t)s_vdda_mv+2047u)/4095u;
+    s_vdda_mv = (int)__LL_ADC_CALC_VREFANALOG_VOLTAGE(avg[PB_ADC_VREF_SLOT], LL_ADC_RESOLUTION_12B);
+    pin_current_mv = ((uint32_t)avg[PB_ADC_AUX_CURRENT_SLOT] * (uint32_t)s_vdda_mv + 2047u) / 4095u;
+    pin_voltage_mv = ((uint32_t)avg[PB_ADC_AUX_VOLTAGE_SLOT] * (uint32_t)s_vdda_mv + 2047u) / 4095u;
     /* PA0: 0.5 V/A (500 mV/A). PA5: 680 k / 220 k divider. */
     s_aux_current_ma=(int)(pin_current_mv*1000u/AUX_A_CURRENT_MV_PER_A);
     s_aux_voltage_mv=(int)((pin_voltage_mv*
@@ -289,8 +292,9 @@ uint8_t PowerAlgo_AdcScanSettled(void) {
     /* Retain tenths of a degree using the factory TS_CAL1/TS_CAL2 values. */
     cal_span=(int32_t)*TEMPSENSOR_CAL2_ADDR-(int32_t)*TEMPSENSOR_CAL1_ADDR;
     if(cal_span!=0) {
-        scaled_temp10=(int32_t)(((uint32_t)avg[2]*(uint32_t)s_vdda_mv*10u+
-            TEMPSENSOR_CAL_VREFANALOG/2u)/TEMPSENSOR_CAL_VREFANALOG);
+        scaled_temp10 = (int32_t)(((uint32_t)avg[PB_ADC_TEMPERATURE_SLOT] * (uint32_t)s_vdda_mv * 10u +
+                                   TEMPSENSOR_CAL_VREFANALOG / 2u) /
+                                  TEMPSENSOR_CAL_VREFANALOG);
         s_die_temp_c10=(int)(TEMPSENSOR_CAL1_TEMP*10+
             (scaled_temp10-(int32_t)*TEMPSENSOR_CAL1_ADDR*10)*
             (TEMPSENSOR_CAL2_TEMP-TEMPSENSOR_CAL1_TEMP)/cal_span);

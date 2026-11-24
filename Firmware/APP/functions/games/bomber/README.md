@@ -66,8 +66,6 @@ music and blocking note delays are not played.
   player collision, packed destructible map and nonblocking state machine.
 - `bomber_assets.c/.h`: eight original byte-for-byte arrays in const Flash.
 - `LICENSE-GPL-3.0`: unchanged original `COPYING.txt`.
-- `tests/`: GCC/Clang host tests, CRC32 asset fingerprints, runtime
-  collision, life and frame handling, including ASan/UBSan runs.
 
 Device display and ARMClang integration still require physical verification.
 
@@ -90,7 +88,7 @@ SRAM image for random collision tests. The separate 14-byte destructible
 map remains in `bomber_game_t`. The `0xFE` drawing/collision sentinel
 and PB10A's 40x40 cross size remain unchanged, with wall-aware propagation. On UI leave, the core
 unbinds and the owner-checked resource cache is zeroed; STOP1 does not
-release it. Original resource CRC32s are asserted in host tests.
+release it.
  
 ## Fixed-wall / destructible-wall blast occlusion
 

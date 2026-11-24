@@ -224,118 +224,118 @@ void MX_ADC1_Init(void)
    LL_ADC_ClearFlag_CCRDY(ADC1);
   LL_ADC_SetChannelSamplingTime(ADC1, LL_ADC_CHANNEL_VREFINT, LL_ADC_SAMPLINGTIME_COMMON_2);
   /* USER CODE BEGIN ADC1_Init 2 */
-    LL_DMA_SetPeriphAddress(DMA1, LL_DMA_CHANNEL_2, LL_ADC_DMA_GetRegAddr(ADC1, LL_ADC_DMA_REG_REGULAR_DATA));
-    LL_DMA_EnableIT_TC(DMA1, LL_DMA_CHANNEL_2);
-    LL_DMA_EnableIT_TE(DMA1, LL_DMA_CHANNEL_2);
+    LL_DMA_SetPeriphAddress(PB_ADC_DMA_INSTANCE, PB_ADC_DMA_CHANNEL, LL_ADC_DMA_GetRegAddr(PB_ADC_INSTANCE, LL_ADC_DMA_REG_REGULAR_DATA));
+    LL_DMA_EnableIT_TC(PB_ADC_DMA_INSTANCE, PB_ADC_DMA_CHANNEL);
+    LL_DMA_EnableIT_TE(PB_ADC_DMA_INSTANCE, PB_ADC_DMA_CHANNEL);
   /* USER CODE END ADC1_Init 2 */
 
 }
 
 /* USER CODE BEGIN 1 */
-#define ADC1_CONTROL_TIMEOUT_MS 2u
-#define ADC1_CALIBRATION_TIMEOUT_MS 3u
-#define ADC1_CLOCK_HZ 16000000u
+#define ADC_CONTROL_TIMEOUT_MS 2u
+#define ADC_CALIBRATION_TIMEOUT_MS 3u
+#define ADC_CLOCK_HZ 16000000u
 
-static volatile ADC1_ScanStatus s_scan_state;
+static volatile ADC_ScanStatus s_scan_state;
 
-static void adc1_wait_cycles(uint32_t cycles) {
+static void adc_wait_cycles(uint32_t cycles) {
     while (cycles--) __NOP();
 }
 
-static uint8_t adc1_enable(void) {
-    LL_ADC_ClearFlag_ADRDY(ADC1);
-    LL_ADC_Enable(ADC1);
+static uint8_t adc_enable(void) {
+    LL_ADC_ClearFlag_ADRDY(PB_ADC_INSTANCE);
+    LL_ADC_Enable(PB_ADC_INSTANCE);
     uint32_t start = Millis();
-    while (!LL_ADC_IsActiveFlag_ADRDY(ADC1)) {
-        if ((uint32_t)(Millis() - start) > ADC1_CONTROL_TIMEOUT_MS)
-            return (uint8_t)LL_ADC_IsActiveFlag_ADRDY(ADC1);
+    while (!LL_ADC_IsActiveFlag_ADRDY(PB_ADC_INSTANCE)) {
+        if ((uint32_t)(Millis() - start) > ADC_CONTROL_TIMEOUT_MS)
+            return (uint8_t)LL_ADC_IsActiveFlag_ADRDY(PB_ADC_INSTANCE);
     }
     return 1u;
 }
 
-static void adc1_stop_dma(void) {
-    LL_DMA_DisableChannel(DMA1, LL_DMA_CHANNEL_2);
-    LL_DMA_ClearFlag_GI2(DMA1);
+static void adc_stop_dma(void) {
+    LL_DMA_DisableChannel(PB_ADC_DMA_INSTANCE, PB_ADC_DMA_CHANNEL);
+    WRITE_REG(PB_ADC_DMA_INSTANCE->IFCR, PB_DMA_CHANNEL_FLAGS(PB_ADC_DMA_CHANNEL, DMA_IFCR_CGIF1));
 }
 
-uint8_t ADC1_ScanStop(void) {
-    s_scan_state = ADC1_SCAN_IDLE;
-    if (LL_ADC_REG_IsConversionOngoing(ADC1) && !LL_ADC_REG_IsStopConversionOngoing(ADC1))
-        LL_ADC_REG_StopConversion(ADC1);
+uint8_t ADC_ScanStop(void) {
+    s_scan_state = ADC_SCAN_IDLE;
+    if (LL_ADC_REG_IsConversionOngoing(PB_ADC_INSTANCE) && !LL_ADC_REG_IsStopConversionOngoing(PB_ADC_INSTANCE))
+        LL_ADC_REG_StopConversion(PB_ADC_INSTANCE);
     uint32_t start = Millis();
-    while (READ_BIT(ADC1->CR, ADC_CR_ADSTART | ADC_CR_ADSTP)) {
-        if ((uint32_t)(Millis() - start) > ADC1_CONTROL_TIMEOUT_MS) {
-            if (!READ_BIT(ADC1->CR, ADC_CR_ADSTART | ADC_CR_ADSTP)) break;
-            adc1_stop_dma();
+    while (READ_BIT(PB_ADC_INSTANCE->CR, ADC_CR_ADSTART | ADC_CR_ADSTP)) {
+        if ((uint32_t)(Millis() - start) > ADC_CONTROL_TIMEOUT_MS) {
+            if (!READ_BIT(PB_ADC_INSTANCE->CR, ADC_CR_ADSTART | ADC_CR_ADSTP)) break;
+            adc_stop_dma();
             return 0u;
         }
     }
-    adc1_stop_dma();
+    adc_stop_dma();
 
-    if (LL_ADC_IsEnabled(ADC1) && !LL_ADC_IsDisableOngoing(ADC1)) LL_ADC_Disable(ADC1);
+    if (LL_ADC_IsEnabled(PB_ADC_INSTANCE) && !LL_ADC_IsDisableOngoing(PB_ADC_INSTANCE)) LL_ADC_Disable(PB_ADC_INSTANCE);
     start = Millis();
-    while (LL_ADC_IsEnabled(ADC1)) {
-        if ((uint32_t)(Millis() - start) > ADC1_CONTROL_TIMEOUT_MS && LL_ADC_IsEnabled(ADC1)) return 0u;
+    while (LL_ADC_IsEnabled(PB_ADC_INSTANCE)) {
+        if ((uint32_t)(Millis() - start) > ADC_CONTROL_TIMEOUT_MS && LL_ADC_IsEnabled(PB_ADC_INSTANCE)) return 0u;
     }
-    LL_ADC_REG_SetDMATransfer(ADC1, LL_ADC_REG_DMA_TRANSFER_NONE);
-    WRITE_REG(ADC1->ISR, ADC_ISR_EOC | ADC_ISR_EOS | ADC_ISR_OVR);
+    LL_ADC_REG_SetDMATransfer(PB_ADC_INSTANCE, LL_ADC_REG_DMA_TRANSFER_NONE);
+    WRITE_REG(PB_ADC_INSTANCE->ISR, ADC_ISR_EOC | ADC_ISR_EOS | ADC_ISR_OVR);
     return 1u;
 }
 
-uint8_t ADC1_Calibrate(void) {
-    if (!ADC1_ScanStop()) return 0u;
+uint8_t ADC_Calibrate(void) {
+    if (!ADC_ScanStop()) return 0u;
 
     /* Preserve the G0 HAL's eight-sample calibration and +1 correction. */
     uint32_t sum = 0u;
     uint32_t start = Millis();
     for (uint8_t i = 0u; i < 8u; ++i) {
-        LL_ADC_StartCalibration(ADC1);
-        while (LL_ADC_IsCalibrationOnGoing(ADC1)) {
-            if ((uint32_t)(Millis() - start) > ADC1_CALIBRATION_TIMEOUT_MS &&
-                LL_ADC_IsCalibrationOnGoing(ADC1)) return 0u;
+        LL_ADC_StartCalibration(PB_ADC_INSTANCE);
+        while (LL_ADC_IsCalibrationOnGoing(PB_ADC_INSTANCE)) {
+            if ((uint32_t)(Millis() - start) > ADC_CALIBRATION_TIMEOUT_MS &&
+                LL_ADC_IsCalibrationOnGoing(PB_ADC_INSTANCE)) return 0u;
         }
-        sum += LL_ADC_GetCalibrationFactor(ADC1) + 1u;
+        sum += LL_ADC_GetCalibrationFactor(PB_ADC_INSTANCE) + 1u;
     }
-    adc1_wait_cycles(LL_ADC_DELAY_CALIB_ENABLE_ADC_CYCLES *
-                     ((SystemCoreClock + ADC1_CLOCK_HZ - 1u) / ADC1_CLOCK_HZ));
-    if (!adc1_enable()) return 0u;
-    LL_ADC_SetCalibrationFactor(ADC1, (sum + 4u) / 8u);
-    return ADC1_ScanStop();
+    adc_wait_cycles(LL_ADC_DELAY_CALIB_ENABLE_ADC_CYCLES *
+                     ((SystemCoreClock + ADC_CLOCK_HZ - 1u) / ADC_CLOCK_HZ));
+    if (!adc_enable()) return 0u;
+    LL_ADC_SetCalibrationFactor(PB_ADC_INSTANCE, (sum + 4u) / 8u);
+    return ADC_ScanStop();
 }
 
-uint8_t ADC1_ScanStart(uint16_t samples[4]) {
-    if (s_scan_state == ADC1_SCAN_BUSY || READ_BIT(ADC1->CR, ADC_CR_ADSTART | ADC_CR_ADSTP | ADC_CR_ADDIS))
+uint8_t ADC_ScanStart(uint16_t samples[PB_ADC_SCAN_COUNT]) {
+    if (s_scan_state == ADC_SCAN_BUSY || READ_BIT(PB_ADC_INSTANCE->CR, ADC_CR_ADSTART | ADC_CR_ADSTP | ADC_CR_ADDIS))
         return 0u;
-    if (!LL_ADC_IsEnabled(ADC1)) {
+    if (!LL_ADC_IsEnabled(PB_ADC_INSTANCE)) {
         /* The PM platform restores TSEN/VREFEN before the next scan. */
-        adc1_wait_cycles(LL_ADC_DELAY_TEMPSENSOR_STAB_US * (SystemCoreClock / 1000000u));
-        LL_ADC_REG_SetDMATransfer(ADC1, LL_ADC_REG_DMA_TRANSFER_LIMITED);
-        if (!adc1_enable()) return 0u;
+        adc_wait_cycles(LL_ADC_DELAY_TEMPSENSOR_STAB_US * (SystemCoreClock / 1000000u));
+        LL_ADC_REG_SetDMATransfer(PB_ADC_INSTANCE, LL_ADC_REG_DMA_TRANSFER_LIMITED);
+        if (!adc_enable()) return 0u;
     }
 
-    WRITE_REG(ADC1->ISR, ADC_ISR_EOC | ADC_ISR_EOS | ADC_ISR_OVR);
-    LL_DMA_ClearFlag_GI2(DMA1);
-    LL_DMA_SetMemoryAddress(DMA1, LL_DMA_CHANNEL_2, (uint32_t)(uintptr_t)samples);
-    LL_DMA_SetDataLength(DMA1, LL_DMA_CHANNEL_2, 4u);
-    s_scan_state = ADC1_SCAN_BUSY;
-    LL_DMA_EnableChannel(DMA1, LL_DMA_CHANNEL_2);
-    LL_ADC_REG_StartConversion(ADC1);
+    WRITE_REG(PB_ADC_INSTANCE->ISR, ADC_ISR_EOC | ADC_ISR_EOS | ADC_ISR_OVR);
+    WRITE_REG(PB_ADC_DMA_INSTANCE->IFCR, PB_DMA_CHANNEL_FLAGS(PB_ADC_DMA_CHANNEL, DMA_IFCR_CGIF1));
+    LL_DMA_SetMemoryAddress(PB_ADC_DMA_INSTANCE, PB_ADC_DMA_CHANNEL, (uint32_t)(uintptr_t)samples);
+    LL_DMA_SetDataLength(PB_ADC_DMA_INSTANCE, PB_ADC_DMA_CHANNEL, PB_ADC_SCAN_COUNT);
+    s_scan_state = ADC_SCAN_BUSY;
+    LL_DMA_EnableChannel(PB_ADC_DMA_INSTANCE, PB_ADC_DMA_CHANNEL);
+    LL_ADC_REG_StartConversion(PB_ADC_INSTANCE);
     return 1u;
 }
 
-ADC1_ScanStatus ADC1_ScanState(void) {
-    ADC1_ScanStatus state = s_scan_state;
-    if (state == ADC1_SCAN_DONE) __DMB();
-    return state == ADC1_SCAN_BUSY && LL_ADC_IsActiveFlag_OVR(ADC1) ? ADC1_SCAN_ERROR : state;
+ADC_ScanStatus ADC_ScanState(void) {
+    ADC_ScanStatus state = s_scan_state;
+    if (state == ADC_SCAN_DONE) __DMB();
+    return state == ADC_SCAN_BUSY && LL_ADC_IsActiveFlag_OVR(PB_ADC_INSTANCE) ? ADC_SCAN_ERROR : state;
 }
 
-void ADC1_DmaIRQ(void) {
-    uint32_t flags = READ_REG(DMA1->ISR) & (DMA_ISR_TCIF2 | DMA_ISR_TEIF2);
+void ADC_DmaIRQ(void) {
+    uint32_t flags = READ_REG(PB_ADC_DMA_INSTANCE->ISR) & (PB_DMA_CHANNEL_FLAGS(PB_ADC_DMA_CHANNEL, DMA_ISR_TCIF1) | PB_DMA_CHANNEL_FLAGS(PB_ADC_DMA_CHANNEL, DMA_ISR_TEIF1));
     if (!flags) return;
-    adc1_stop_dma();
-    if (s_scan_state == ADC1_SCAN_BUSY) {
-        s_scan_state = (flags & DMA_ISR_TEIF2) || LL_ADC_IsActiveFlag_OVR(ADC1)
-                           ? ADC1_SCAN_ERROR : ADC1_SCAN_DONE;
+    adc_stop_dma();
+    if (s_scan_state == ADC_SCAN_BUSY) {
+        s_scan_state = (flags & PB_DMA_CHANNEL_FLAGS(PB_ADC_DMA_CHANNEL, DMA_ISR_TEIF1)) || LL_ADC_IsActiveFlag_OVR(PB_ADC_INSTANCE)
+                           ? ADC_SCAN_ERROR : ADC_SCAN_DONE;
     }
 }
 /* USER CODE END 1 */

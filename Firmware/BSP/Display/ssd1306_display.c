@@ -39,17 +39,17 @@ static uint8_t OLED_U8X8Gpio(u8x8_t *u8x8,uint8_t msg,uint8_t arg_int,void *arg_
 }
 
 static uint8_t oled_start(const uint8_t *data,uint16_t length,uint8_t data_mode,uint8_t phase) {
-    if(s_dma_phase!=OLED_PHASE_IDLE || SPI1_DmaTxState()!=SPI1_DMA_IDLE) {
+    if (s_dma_phase != OLED_PHASE_IDLE || SPI_DmaTxState() != SPI_DMA_IDLE) {
         ++s_stats.dma_busy;
         return 0u;
     }
     if(data_mode) LL_GPIO_SetOutputPin(D_C_GPIO_Port,D_C_Pin);
     else LL_GPIO_ResetOutputPin(D_C_GPIO_Port,D_C_Pin);
     s_dma_started_ms=Millis();
-    if(!SPI1_DmaTxStart(data,length)) {
+    if (!SPI_DmaTxStart(data, length)) {
         ++s_stats.dma_start_failed;
-        if(SPI1_DmaTxState()==SPI1_DMA_ERROR)
-            (void)SPI1_DmaTxAbortAsync();
+        if (SPI_DmaTxState() == SPI_DMA_ERROR)
+            (void)SPI_DmaTxAbortAsync();
         return 0u;
     }
     s_dma_phase=phase;
@@ -108,39 +108,43 @@ void SSD1306_Display_RequestPowerSave(uint8_t enable) {
 
 uint8_t SSD1306_Display_PowerSettled(uint8_t off) {
     return (uint8_t)(s_ready && !s_init_pending &&
-        s_power_save==(off?1u:0u) && !s_power_dirty &&
-        s_dma_phase==OLED_PHASE_IDLE && !s_frame &&
-        SPI1_DmaTxState()==SPI1_DMA_IDLE &&
-        (off?!s_cpen_on:s_cpen_on));
+                     s_power_save == (off ? 1u : 0u) && !s_power_dirty &&
+                     s_dma_phase == OLED_PHASE_IDLE && !s_frame &&
+                     SPI_DmaTxState() == SPI_DMA_IDLE &&
+                     (off ? !s_cpen_on : s_cpen_on));
 }
 
 void SSD1306_Display_Service(void) {
-    SPI1_DmaState status;
+    SPI_DmaState status;
     uint8_t phase;
-    SPI1_DmaTxService();
+    SPI_DmaTxService();
     if(!s_screen || s_init_failed)return;
     if(s_dma_phase!=OLED_PHASE_IDLE) {
         phase=s_dma_phase;
-        status=SPI1_DmaTxState();
-        if(status==SPI1_DMA_BUSY) {
+        status = SPI_DmaTxState();
+        if (status == SPI_DMA_BUSY) {
             if((uint32_t)(Millis()-s_dma_started_ms)<=OLED_TX_TIMEOUT_MS)
                 return;
             ++s_stats.dma_runtime_timeouts;
-            if(!SPI1_DmaTxAbortAsync())oled_failed(phase);
+            if (!SPI_DmaTxAbortAsync())
+                oled_failed(phase);
             return;
         }
-        if(status==SPI1_DMA_ABORTING)return;
-        if(status==SPI1_DMA_ERROR) {
+        if (status == SPI_DMA_ABORTING)
+            return;
+        if (status == SPI_DMA_ERROR) {
             ++s_stats.dma_irq_errors;
-            if(!SPI1_DmaTxAbortAsync())oled_failed(phase);
+            if (!SPI_DmaTxAbortAsync())
+                oled_failed(phase);
             return;
         }
-        if(status==SPI1_DMA_IDLE) {
+        if (status == SPI_DMA_IDLE) {
             oled_failed(phase);
             return;
         }
-        if(status!=SPI1_DMA_DONE)return;
-        (void)SPI1_DmaTxRelease();
+        if (status != SPI_DMA_DONE)
+            return;
+        (void)SPI_DmaTxRelease();
         s_dma_phase=OLED_PHASE_IDLE;
         switch(phase) {
         case OLED_PHASE_INIT:
@@ -172,10 +176,13 @@ void SSD1306_Display_Service(void) {
     }
     if(s_init_pending) {
         if((int32_t)(Millis()-s_power_ready_ms)<0)return;
-        status=SPI1_DmaTxState();
-        if(status==SPI1_DMA_ABORTING || status==SPI1_DMA_BUSY)return;
-        if(status==SPI1_DMA_ERROR)
-            { (void)SPI1_DmaTxAbortAsync();return; }
+        status = SPI_DmaTxState();
+        if (status == SPI_DMA_ABORTING || status == SPI_DMA_BUSY)
+            return;
+        if (status == SPI_DMA_ERROR) {
+            (void)SPI_DmaTxAbortAsync();
+            return;
+        }
         if(!oled_start(s_init_cmd,sizeof(s_init_cmd),0u,OLED_PHASE_INIT))
             if(++s_init_attempts>=OLED_INIT_MAX_ATTEMPTS)
                 {s_init_pending=0u;s_init_failed=1u;}

@@ -22,7 +22,6 @@ games/
     <name>_assets.c/.h     Original const data and its own 30x30 index icon
     README.md              Controls, behavior, deviations, tests
     LICENSE-...            Source license, original author attribution
-    tests/                 Host core/adapter regression tests and stubs
 ```
 
 Do not create a separate generic game engine, thread, full-size image buffer,

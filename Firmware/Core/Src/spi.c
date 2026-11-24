@@ -21,6 +21,7 @@
 #include "spi.h"
 
 /* USER CODE BEGIN 0 */
+#include "peripheral_map.h"
 #include "millis.h"
 /* USER CODE END 0 */
 
@@ -106,106 +107,106 @@ void MX_SPI1_Init(void)
   LL_SPI_EnableNSSPulseMgt(SPI1);
   /* USER CODE BEGIN SPI1_Init 2 */
     /* Keep hardware NSS asserted across OLED bytes. */
-    LL_SPI_DisableNSSPulseMgt(SPI1);
-    LL_DMA_SetPeriphAddress(DMA1, LL_DMA_CHANNEL_1, LL_SPI_DMA_GetRegAddr(SPI1));
-    LL_DMA_EnableIT_TC(DMA1, LL_DMA_CHANNEL_1);
-    LL_DMA_EnableIT_TE(DMA1, LL_DMA_CHANNEL_1);
+    LL_SPI_DisableNSSPulseMgt(PB_SPI_INSTANCE);
+    LL_DMA_SetPeriphAddress(PB_SPI_TX_DMA_INSTANCE, PB_SPI_TX_DMA_CHANNEL, LL_SPI_DMA_GetRegAddr(PB_SPI_INSTANCE));
+    LL_DMA_EnableIT_TC(PB_SPI_TX_DMA_INSTANCE, PB_SPI_TX_DMA_CHANNEL);
+    LL_DMA_EnableIT_TE(PB_SPI_TX_DMA_INSTANCE, PB_SPI_TX_DMA_CHANNEL);
   /* USER CODE END SPI1_Init 2 */
 
 }
 
 /* USER CODE BEGIN 1 */
 /* The FIFO and shift register should drain well within one scheduler tick. */
-#define SPI1_ABORT_DRAIN_MS 2u
+#define SPI_ABORT_DRAIN_MS 2u
 
-enum { SPI1_DMA_NO_EVENT, SPI1_DMA_TC, SPI1_DMA_TE };
+enum { SPI_DMA_NO_EVENT, SPI_DMA_TC, SPI_DMA_TE };
 static volatile uint8_t s_dma_event;
-static SPI1_DmaState s_tx_state;
+static SPI_DmaState s_tx_state;
 static uint32_t s_abort_started_ms;
 
-static void spi1_stop_dma(void) {
-    LL_SPI_DisableDMAReq_TX(SPI1);
-    LL_DMA_DisableChannel(DMA1, LL_DMA_CHANNEL_1);
-    LL_DMA_ClearFlag_GI1(DMA1);
+static void spi_stop_dma(void) {
+    LL_SPI_DisableDMAReq_TX(PB_SPI_INSTANCE);
+    LL_DMA_DisableChannel(PB_SPI_TX_DMA_INSTANCE, PB_SPI_TX_DMA_CHANNEL);
+    WRITE_REG(PB_SPI_TX_DMA_INSTANCE->IFCR, PB_DMA_CHANNEL_FLAGS(PB_SPI_TX_DMA_CHANNEL, DMA_IFCR_CGIF1));
 }
 
-static uint8_t spi1_wire_idle(void) {
-    return (uint8_t)(LL_SPI_GetTxFIFOLevel(SPI1) == LL_SPI_TX_FIFO_EMPTY &&
-                     !LL_SPI_IsActiveFlag_BSY(SPI1));
+static uint8_t spi_wire_idle(void) {
+    return (uint8_t)(LL_SPI_GetTxFIFOLevel(PB_SPI_INSTANCE) == LL_SPI_TX_FIFO_EMPTY &&
+                     !LL_SPI_IsActiveFlag_BSY(PB_SPI_INSTANCE));
 }
 
-static void spi1_discard_rx(void) {
+static void spi_discard_rx(void) {
     /* Full-duplex clocking still fills RX FIFO on this TX-only bus. */
-    while (LL_SPI_GetRxFIFOLevel(SPI1) != LL_SPI_RX_FIFO_EMPTY) {
-        (void)LL_SPI_ReceiveData8(SPI1);
+    while (LL_SPI_GetRxFIFOLevel(PB_SPI_INSTANCE) != LL_SPI_RX_FIFO_EMPTY) {
+        (void)LL_SPI_ReceiveData8(PB_SPI_INSTANCE);
     }
-    if (LL_SPI_IsActiveFlag_OVR(SPI1)) LL_SPI_ClearFlag_OVR(SPI1);
+    if (LL_SPI_IsActiveFlag_OVR(PB_SPI_INSTANCE)) LL_SPI_ClearFlag_OVR(PB_SPI_INSTANCE);
 }
 
-uint8_t SPI1_DmaTxStart(const uint8_t *bytes, uint16_t count) {
-    if (!bytes || !count || s_tx_state != SPI1_DMA_IDLE) return 0u;
+uint8_t SPI_DmaTxStart(const uint8_t *bytes, uint16_t count) {
+    if (!bytes || !count || s_tx_state != SPI_DMA_IDLE) return 0u;
 
-    LL_DMA_ClearFlag_GI1(DMA1);
-    LL_DMA_SetMemoryAddress(DMA1, LL_DMA_CHANNEL_1, (uint32_t)(uintptr_t)bytes);
-    LL_DMA_SetDataLength(DMA1, LL_DMA_CHANNEL_1, count);
-    s_dma_event = SPI1_DMA_NO_EVENT;
-    s_tx_state = SPI1_DMA_BUSY;
+    WRITE_REG(PB_SPI_TX_DMA_INSTANCE->IFCR, PB_DMA_CHANNEL_FLAGS(PB_SPI_TX_DMA_CHANNEL, DMA_IFCR_CGIF1));
+    LL_DMA_SetMemoryAddress(PB_SPI_TX_DMA_INSTANCE, PB_SPI_TX_DMA_CHANNEL, (uint32_t)(uintptr_t)bytes);
+    LL_DMA_SetDataLength(PB_SPI_TX_DMA_INSTANCE, PB_SPI_TX_DMA_CHANNEL, count);
+    s_dma_event = SPI_DMA_NO_EVENT;
+    s_tx_state = SPI_DMA_BUSY;
 
     __DMB();
-    LL_DMA_EnableChannel(DMA1, LL_DMA_CHANNEL_1);
-    LL_SPI_Enable(SPI1);
-    LL_SPI_EnableDMAReq_TX(SPI1);
+    LL_DMA_EnableChannel(PB_SPI_TX_DMA_INSTANCE, PB_SPI_TX_DMA_CHANNEL);
+    LL_SPI_Enable(PB_SPI_INSTANCE);
+    LL_SPI_EnableDMAReq_TX(PB_SPI_INSTANCE);
     return 1u;
 }
 
-void SPI1_DmaTxIRQ(void) {
-    uint32_t flags = READ_REG(DMA1->ISR) & (DMA_ISR_TCIF1 | DMA_ISR_TEIF1);
+void SPI_DmaTxIRQ(void) {
+    uint32_t flags = READ_REG(PB_SPI_TX_DMA_INSTANCE->ISR) & (PB_DMA_CHANNEL_FLAGS(PB_SPI_TX_DMA_CHANNEL, DMA_ISR_TCIF1) | PB_DMA_CHANNEL_FLAGS(PB_SPI_TX_DMA_CHANNEL, DMA_ISR_TEIF1));
     if (!flags) return;
-    spi1_stop_dma();
-    s_dma_event = (flags & DMA_ISR_TEIF1) ? SPI1_DMA_TE : SPI1_DMA_TC;
+    spi_stop_dma();
+    s_dma_event = (flags & PB_DMA_CHANNEL_FLAGS(PB_SPI_TX_DMA_CHANNEL, DMA_ISR_TEIF1)) ? SPI_DMA_TE : SPI_DMA_TC;
 }
 
-void SPI1_DmaTxService(void) {
-    if (s_tx_state == SPI1_DMA_BUSY) {
+void SPI_DmaTxService(void) {
+    if (s_tx_state == SPI_DMA_BUSY) {
         uint8_t event = s_dma_event;
-        if (event == SPI1_DMA_TE || LL_SPI_IsActiveFlag_MODF(SPI1)) {
-            s_tx_state = SPI1_DMA_ERROR;
-        } else if (event == SPI1_DMA_TC && spi1_wire_idle()) {
+        if (event == SPI_DMA_TE || LL_SPI_IsActiveFlag_MODF(PB_SPI_INSTANCE)) {
+            s_tx_state = SPI_DMA_ERROR;
+        } else if (event == SPI_DMA_TC && spi_wire_idle()) {
             /* SPI stays enabled, so hardware NSS keeps its existing level. */
-            spi1_discard_rx();
-            s_tx_state = SPI1_DMA_DONE;
+            spi_discard_rx();
+            s_tx_state = SPI_DMA_DONE;
         }
-    } else if (s_tx_state == SPI1_DMA_ABORTING) {
-        uint8_t idle = spi1_wire_idle();
-        if (LL_SPI_IsActiveFlag_MODF(SPI1) ||
-            (!idle && (uint32_t)(Millis() - s_abort_started_ms) >= SPI1_ABORT_DRAIN_MS)) {
-            /* DMA is stopped. Reset only SPI1 if it cannot drain normally. */
-            (void)LL_SPI_DeInit(SPI1);
-            MX_SPI1_Init();
+    } else if (s_tx_state == SPI_DMA_ABORTING) {
+        uint8_t idle = spi_wire_idle();
+        if (LL_SPI_IsActiveFlag_MODF(PB_SPI_INSTANCE) ||
+            (!idle && (uint32_t)(Millis() - s_abort_started_ms) >= SPI_ABORT_DRAIN_MS)) {
+            /* DMA is stopped. Reset the SPI peripheral if it cannot drain normally. */
+            (void)LL_SPI_DeInit(PB_SPI_INSTANCE);
+            PB_SPI_INIT();
         } else if (idle) {
-            spi1_discard_rx();
+            spi_discard_rx();
         } else {
             return;
         }
-        s_tx_state = SPI1_DMA_IDLE;
+        s_tx_state = SPI_DMA_IDLE;
     }
 }
 
-SPI1_DmaState SPI1_DmaTxState(void) {
+SPI_DmaState SPI_DmaTxState(void) {
     return s_tx_state;
 }
 
-uint8_t SPI1_DmaTxRelease(void) {
-    if (s_tx_state != SPI1_DMA_DONE) return 0u;
-    s_tx_state = SPI1_DMA_IDLE;
+uint8_t SPI_DmaTxRelease(void) {
+    if (s_tx_state != SPI_DMA_DONE) return 0u;
+    s_tx_state = SPI_DMA_IDLE;
     return 1u;
 }
 
-uint8_t SPI1_DmaTxAbortAsync(void) {
-    if (s_tx_state != SPI1_DMA_BUSY && s_tx_state != SPI1_DMA_ERROR) return 0u;
-    spi1_stop_dma();
+uint8_t SPI_DmaTxAbortAsync(void) {
+    if (s_tx_state != SPI_DMA_BUSY && s_tx_state != SPI_DMA_ERROR) return 0u;
+    spi_stop_dma();
     s_abort_started_ms = Millis();
-    s_tx_state = SPI1_DMA_ABORTING;
+    s_tx_state = SPI_DMA_ABORTING;
     return 1u;
 }
 /* USER CODE END 1 */

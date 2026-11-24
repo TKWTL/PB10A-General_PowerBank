@@ -56,8 +56,7 @@ but is **not** played to avoid prolonged exclusive buzzer use.
   original characters/fruits/music.
 - `LICENSE-GPL-3.0` full upstream license (GPL-3.0-or-later).
 
-Host tests check array bounds, original asset hashes/sizes, collision and
-lifecycle. Keil compilation and STOP1 device validation remain to be done.
+Keil compilation and STOP1 device validation remain to be done.
 
 ## Game-index icon
 

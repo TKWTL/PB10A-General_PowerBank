@@ -101,15 +101,8 @@ uint8_t diapInit(void) {
     return 1u;
 }
 
-static uint32_t s_flush_count = 0u;
-
 void Disp_SendBuffer(void) {
-    s_flush_count++;
     SSD1306_Display_RequestFlush(u8g2_GetBufferPtr(&u8g2));
-}
-
-uint32_t Disp_GetFlushCount(void) {
-    return s_flush_count;
 }
 
 void Disp_UpdateDisplayArea(uint8_t tx, uint8_t ty, uint8_t tw, uint8_t th) {

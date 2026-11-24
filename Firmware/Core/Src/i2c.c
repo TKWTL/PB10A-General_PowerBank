@@ -21,6 +21,7 @@
 #include "i2c.h"
 
 /* USER CODE BEGIN 0 */
+#include "peripheral_map.h"
 #include "millis.h"
 #include "pt.h"
 /* USER CODE END 0 */
@@ -121,7 +122,7 @@ static uint8_t s_failed;
 
 uint8_t I2C_BusIsLocked(void) {
     return (uint8_t)(s_lock_depth != 0u || s_state == I2C_BUSY || s_state == I2C_ABORTING ||
-                     s_state == I2C_POISONED || LL_I2C_IsActiveFlag_BUSY(I2C1));
+                     s_state == I2C_POISONED || LL_I2C_IsActiveFlag_BUSY(PB_I2C_INSTANCE));
 }
 
 uint8_t I2C_TransactionBegin(void) {
@@ -136,11 +137,11 @@ void I2C_TransactionEnd(void) {
 
 /* Shared by IRQ completion and the timeout service with interrupts masked. */
 static void i2c_finish(uint8_t success, uint8_t poisoned) {
-    CLEAR_BIT(I2C1->CR1, PB_I2C_DATA_IRQS | PB_I2C_END_IRQS);
+    CLEAR_BIT(PB_I2C_INSTANCE->CR1, PB_I2C_DATA_IRQS | PB_I2C_END_IRQS);
     if (!poisoned) {
-        WRITE_REG(I2C1->CR2, 0u);
-        if (READ_BIT(I2C1->ISR, I2C_ISR_RXNE)) (void)LL_I2C_ReceiveData8(I2C1);
-        LL_I2C_ClearFlag_TXE(I2C1);
+        WRITE_REG(PB_I2C_INSTANCE->CR2, 0u);
+        if (READ_BIT(PB_I2C_INSTANCE->ISR, I2C_ISR_RXNE)) (void)LL_I2C_ReceiveData8(PB_I2C_INSTANCE);
+        LL_I2C_ClearFlag_TXE(PB_I2C_INSTANCE);
     }
     if (s_async_flag) {
         *s_async_flag = success ? I2C_ASYNC_DONE : I2C_ASYNC_ERROR;
@@ -152,11 +153,11 @@ static void i2c_finish(uint8_t success, uint8_t poisoned) {
 }
 
 static void i2c_abort(uint32_t now) {
-    CLEAR_BIT(I2C1->CR1, PB_I2C_DATA_IRQS);
+    CLEAR_BIT(PB_I2C_INSTANCE->CR1, PB_I2C_DATA_IRQS);
     s_start_ms = now;
     s_state = I2C_ABORTING;
     /* Match the HAL master abort: leave reload mode and request STOP. */
-    LL_I2C_HandleTransfer(I2C1, s_address, LL_I2C_ADDRESSING_MODE_7BIT, 1u,
+    LL_I2C_HandleTransfer(PB_I2C_INSTANCE, s_address, LL_I2C_ADDRESSING_MODE_7BIT, 1u,
                           LL_I2C_MODE_AUTOEND, LL_I2C_GENERATE_STOP);
 }
 
@@ -168,7 +169,7 @@ static void i2c_load_chunk(uint32_t request) {
         count = 255u;
         end_mode = LL_I2C_MODE_RELOAD;
     }
-    LL_I2C_HandleTransfer(I2C1, s_address, LL_I2C_ADDRESSING_MODE_7BIT, count, end_mode, request);
+    LL_I2C_HandleTransfer(PB_I2C_INSTANCE, s_address, LL_I2C_ADDRESSING_MODE_7BIT, count, end_mode, request);
 }
 
 static void i2c_start(i2c_op_t op, uint16_t address, uint8_t reg, uint8_t *data, uint16_t count,
@@ -187,50 +188,50 @@ static void i2c_start(i2c_op_t op, uint16_t address, uint8_t reg, uint8_t *data,
     s_start_ms = Millis();
     s_state = I2C_BUSY;
 
-    WRITE_REG(I2C1->ICR, I2C_ICR_STOPCF | I2C_ICR_NACKCF | I2C_ICR_BERRCF | I2C_ICR_ARLOCF | I2C_ICR_OVRCF);
+    WRITE_REG(PB_I2C_INSTANCE->ICR, I2C_ICR_STOPCF | I2C_ICR_NACKCF | I2C_ICR_BERRCF | I2C_ICR_ARLOCF | I2C_ICR_OVRCF);
     if (s_restart_read) {
-        LL_I2C_HandleTransfer(I2C1, address, LL_I2C_ADDRESSING_MODE_7BIT, 1u,
+        LL_I2C_HandleTransfer(PB_I2C_INSTANCE, address, LL_I2C_ADDRESSING_MODE_7BIT, 1u,
                               LL_I2C_MODE_SOFTEND, LL_I2C_GENERATE_START_WRITE);
     } else {
         i2c_load_chunk(op == I2C_MASTER_RX ? LL_I2C_GENERATE_START_READ : LL_I2C_GENERATE_START_WRITE);
     }
     __COMPILER_BARRIER();
-    SET_BIT(I2C1->CR1, data_irqs | PB_I2C_END_IRQS);
+    SET_BIT(PB_I2C_INSTANCE->CR1, data_irqs | PB_I2C_END_IRQS);
 }
 
 void I2C_TransferIRQ(void) {
-    uint32_t flags = READ_REG(I2C1->ISR);
-    uint32_t enabled = READ_REG(I2C1->CR1);
+    uint32_t flags = READ_REG(PB_I2C_INSTANCE->ISR);
+    uint32_t enabled = READ_REG(PB_I2C_INSTANCE->CR1);
 
     if (s_state != I2C_BUSY && s_state != I2C_ABORTING) return;
 
     /* STM32G070 ES0468: a master-mode BERR can be spurious. */
-    if (flags & I2C_ISR_BERR) LL_I2C_ClearFlag_BERR(I2C1);
+    if (flags & I2C_ISR_BERR) LL_I2C_ClearFlag_BERR(PB_I2C_INSTANCE);
     if (flags & I2C_ISR_ARLO) {
-        LL_I2C_ClearFlag_ARLO(I2C1);
+        LL_I2C_ClearFlag_ARLO(PB_I2C_INSTANCE);
         /* The winning master owns the bus. */
         i2c_finish(0u, 0u);
         return;
     }
     if (flags & I2C_ISR_OVR) {
-        LL_I2C_ClearFlag_OVR(I2C1);
+        LL_I2C_ClearFlag_OVR(PB_I2C_INSTANCE);
         s_failed = 1u;
         if (s_state == I2C_BUSY && !(flags & (I2C_ISR_STOPF | I2C_ISR_NACKF))) i2c_abort(Millis());
     }
     if (flags & I2C_ISR_NACKF) {
-        LL_I2C_ClearFlag_NACK(I2C1);
-        CLEAR_BIT(I2C1->CR1, PB_I2C_DATA_IRQS);
+        LL_I2C_ClearFlag_NACK(PB_I2C_INSTANCE);
+        CLEAR_BIT(PB_I2C_INSTANCE->CR1, PB_I2C_DATA_IRQS);
         s_failed = 1u;
     }
 
     /* RXNE can accompany STOPF on the last byte. */
     if (s_state == I2C_BUSY && !s_failed && s_remaining &&
         (enabled & I2C_CR1_RXIE) && (flags & I2C_ISR_RXNE)) {
-        *s_data++ = LL_I2C_ReceiveData8(I2C1);
+        *s_data++ = LL_I2C_ReceiveData8(PB_I2C_INSTANCE);
         --s_remaining;
     }
     if (flags & I2C_ISR_STOPF) {
-        LL_I2C_ClearFlag_STOP(I2C1);
+        LL_I2C_ClearFlag_STOP(PB_I2C_INSTANCE);
         uint8_t complete = (uint8_t)(s_state == I2C_BUSY && !s_failed && !s_remaining &&
                                      !s_send_register && !s_restart_read);
         i2c_finish(complete, 0u);
@@ -240,10 +241,10 @@ void I2C_TransferIRQ(void) {
 
     if ((enabled & I2C_CR1_TXIE) && (flags & I2C_ISR_TXIS)) {
         if (s_send_register) {
-            LL_I2C_TransmitData8(I2C1, s_register);
+            LL_I2C_TransmitData8(PB_I2C_INSTANCE, s_register);
             s_send_register = 0u;
         } else if (!s_restart_read && s_remaining) {
-            LL_I2C_TransmitData8(I2C1, *s_data++);
+            LL_I2C_TransmitData8(PB_I2C_INSTANCE, *s_data++);
             --s_remaining;
         }
     }
@@ -251,7 +252,7 @@ void I2C_TransferIRQ(void) {
         i2c_load_chunk(LL_I2C_GENERATE_NOSTARTSTOP);
     } else if ((flags & I2C_ISR_TC) && s_restart_read) {
         s_restart_read = 0u;
-        MODIFY_REG(I2C1->CR1, I2C_CR1_TXIE, I2C_CR1_RXIE);
+        MODIFY_REG(PB_I2C_INSTANCE->CR1, I2C_CR1_TXIE, I2C_CR1_RXIE);
         i2c_load_chunk(LL_I2C_GENERATE_RESTART_7BIT_READ);
     }
 }
@@ -269,10 +270,10 @@ void I2C_AsyncService(void) {
     /* Recheck after masking: the IRQ may have completed the transaction. */
     uint32_t now = Millis();
     if (s_state == I2C_BUSY && (uint32_t)(now - s_start_ms) >= PB_I2C_TIMEOUT_MS) {
-        if (READ_BIT(I2C1->ISR, I2C_ISR_STOPF | I2C_ISR_ARLO)) I2C_TransferIRQ();
+        if (READ_BIT(PB_I2C_INSTANCE->ISR, I2C_ISR_STOPF | I2C_ISR_ARLO)) I2C_TransferIRQ();
         if (s_state == I2C_BUSY) i2c_abort(now);
     } else if (s_state == I2C_ABORTING && (uint32_t)(now - s_start_ms) >= PB_I2C_ABORT_TIMEOUT_MS) {
-        if (READ_BIT(I2C1->ISR, I2C_ISR_STOPF | I2C_ISR_ARLO)) I2C_TransferIRQ();
+        if (READ_BIT(PB_I2C_INSTANCE->ISR, I2C_ISR_STOPF | I2C_ISR_ARLO)) I2C_TransferIRQ();
         if (s_state == I2C_ABORTING) i2c_finish(0u, 1u);
     }
     __set_PRIMASK(irq_mask);
@@ -286,7 +287,7 @@ static uint8_t i2c_submit(i2c_op_t op, uint16_t address, uint8_t reg, uint8_t *d
         return 1u;
     }
     if (s_state != I2C_IDLE || s_lock_depth) return 0u;
-    if (LL_I2C_IsActiveFlag_BUSY(I2C1)) {
+    if (LL_I2C_IsActiveFlag_BUSY(PB_I2C_INSTANCE)) {
         *flag = I2C_ASYNC_ERROR;
         return 1u;
     }
@@ -324,7 +325,7 @@ uint8_t I2C_AsyncProbe(uint16_t a, volatile uint8_t *flag) {
 
 /* Blocking callers use the same IRQ engine and hold the transaction lock. */
 static uint8_t i2c_sync(i2c_op_t op, uint16_t address, uint8_t reg, uint8_t *data, uint16_t count) {
-    if (s_state != I2C_IDLE || LL_I2C_IsActiveFlag_BUSY(I2C1)) return I2C_ERROR;
+    if (s_state != I2C_IDLE || LL_I2C_IsActiveFlag_BUSY(PB_I2C_INSTANCE)) return I2C_ERROR;
     i2c_start(op, address, reg, data, count, 0);
     while (s_state == I2C_BUSY || s_state == I2C_ABORTING) I2C_AsyncService();
     uint8_t result = (uint8_t)(s_state == I2C_DONE ? I2C_OK : I2C_ERROR);

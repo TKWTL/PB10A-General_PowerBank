@@ -18,23 +18,21 @@ them.
   UFO and one-projectile held-UP shooting. Nonblocking 33ms game logic,
   original page rendering in existing OLED DMA buffer, normal auto STOP1.
   LEFT/RIGHT move; hold UP to fire; CONF short release starts, hold pauses
-  and long hold exits. See [README](games/invaders/README.md) and
-  [host tests](games/invaders/tests/).
+  and long hold exits. See [README](games/invaders/README.md).
 
 - `games/bomber/`: GPL-3.0-or-later Tiny Bomber port by Daniel C.
   Original landscape 128x64 bitmaps, five characters, one bomb, fixed cross
   blast and three 14-byte destructible maps. Four random-wall-turn enemies,
   three lives and accelerated enemies after all three maps. Native OLED DMA,
   CONF short-release bomb / hold-to-pause / long-hold exit, normal auto STOP1.
-  See [documentation](games/bomber/README.md) and [tests](games/bomber/tests/).
+  See [documentation](games/bomber/README.md).
 
 - `games/pacman/`: GPL-3.0-or-later TinyPacman port based on Daniel C's
   Tinyjoypad source. Original page-packed 128x64 artwork, pixel collision
   and four random-turn ghosts; 22ms logic step, 44ms MiaoUI render request.
   Turn the board 90 degrees counterclockwise to view portrait maze.
   Hold CONF to pause, long-hold to exit. All mutable session state stays in
-  RAM. Automatic STOP1 is allowed. See [game documentation](games/pacman/README.md)
-  and [tests](games/pacman/tests/).
+  RAM. Automatic STOP1 is allowed. See [game documentation](games/pacman/README.md).
 
 - `games/breakout/`: 8x5 Breakout with nine preset maps and random maps from
   stage 10. The existing MIT license remains alongside its own sources.

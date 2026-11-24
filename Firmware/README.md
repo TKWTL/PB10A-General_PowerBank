@@ -27,6 +27,18 @@ APP (framework / algorithm / functions)
 - **新增源文件后必须同步工程**：在 `MDK-ARM/PB10A-General_PowerBank.uvprojx` 里加入对应 Group，新目录要补 `IncludePath`，否则编译不到。
 - **目录深度**：`Firmware/` 下最多两层，不再新增同义目录（例如不要再建 `Module/`、`Src2/`）。
 
+## 外设移植
+
+[peripheral_map.h](Core/Inc/peripheral_map.h) 集中定义运行时绑定。先在 CubeMX 更新引脚、时钟、DMA 请求、ADC 扫描顺序和中断，再更新对应宏。
+
+| 用途 | 当前绑定 |
+| --- | --- |
+| OLED 发送 | SPI1、DMA1 通道 1 |
+| 传感器和 SW6306 总线 | I²C1 中断 |
+| ADC 扫描 | ADC1、DMA1 通道 2，依次采集 Aux-A 电流、Aux-A 电压、片内温度和 VREFINT |
+
+重新生成后，在对应的 `USER CODE` 区保留 SPI / ADC 的 DMA 地址初始化。DMA 中断调用 `DMA_TransferIRQ()` 并传入该向量的 IRQ 编号。I²C 中断调用 `I2C_TransferIRQ()`。
+
 ## Keil 工程
 
 | 项 | 值 |

@@ -23,6 +23,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "adc.h"
+#include "peripheral_map.h"
 #include "i2c.h"
 #include "pm_api.h"
 #include "spi.h"
@@ -57,7 +58,10 @@
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+static void DMA_TransferIRQ(IRQn_Type irq) {
+    if (irq == PB_SPI_TX_DMA_IRQ) SPI_DmaTxIRQ();
+    if (irq == PB_ADC_DMA_IRQ) ADC_DmaIRQ();
+}
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
@@ -255,7 +259,7 @@ void EXTI4_15_IRQHandler(void)
 void DMA1_Channel1_IRQHandler(void)
 {
   /* USER CODE BEGIN DMA1_Channel1_IRQn 0 */
-  SPI1_DmaTxIRQ();
+  DMA_TransferIRQ(DMA1_Channel1_IRQn);
   /* USER CODE END DMA1_Channel1_IRQn 0 */
   /* USER CODE BEGIN DMA1_Channel1_IRQn 1 */
 
@@ -268,7 +272,7 @@ void DMA1_Channel1_IRQHandler(void)
 void DMA1_Channel2_3_IRQHandler(void)
 {
   /* USER CODE BEGIN DMA1_Channel2_3_IRQn 0 */
-  ADC1_DmaIRQ();
+  DMA_TransferIRQ(DMA1_Channel2_3_IRQn);
   /* USER CODE END DMA1_Channel2_3_IRQn 0 */
   /* USER CODE BEGIN DMA1_Channel2_3_IRQn 1 */
 

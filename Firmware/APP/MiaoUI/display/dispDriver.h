@@ -15,7 +15,6 @@ uint8_t diapInit(void); /* accepts asynchronous panel initialization */
 void Disp_SendBuffer(void);
 /* Frames handed to the transport so far; see dispDriver.c for the page cache
  * use case (a page must re-send when another page flushed in between). */
-uint32_t Disp_GetFlushCount(void);
 void Disp_UpdateDisplayArea(uint8_t tx, uint8_t ty, uint8_t tw, uint8_t th);
 void Disp_SetContrast(ui_t *ui);
 void Disp_SetContrast2(uint8_t contrast);
