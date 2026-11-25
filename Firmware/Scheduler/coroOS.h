@@ -6,6 +6,12 @@
 #include "pt.h"
 #include "pt-sem.h"
 
+/* Optional interrupt-driven polling: sleep once after every full round.
+ * Platforms enabling this must provide CoroOS_PortIdle() in coroOS_port.h. */
+#ifndef COROOS_USE_IDLE_SLEEP
+#define COROOS_USE_IDLE_SLEEP 0
+#endif
+
 /* Handheld-Fan-style coroOS wrapper over Adam Dunkels' Protothreads 1.4.
  * Stackless coroutines do not retain automatic locals through a yield.
  * The single sub-PT per coroutine is used sequentially, never in parallel.
