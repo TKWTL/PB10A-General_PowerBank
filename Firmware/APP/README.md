@@ -56,13 +56,15 @@ Powerbank, Radio, Game, Tools, Settings and Statistics appear in that order. Sta
 Settings lists PowerLimit, Ports, Protocol#1 and Protocol#2 before Display.
 Those four pages currently contain a Back entry for navigation.
 
-The dashboard aligns BUS, battery and Aux-A power above their voltages.
-It shows the SW6306 NTC at the right and the RTC time/date at the bottom.
+The dashboard's second row shows power, the third row voltage, and the
+fourth row protocol, battery percentage and NTC temperature. The BUS and
+Aux-A discharge arrows require at least 100 mW of measured output. The BUS
+arrow additionally requires a real port path. RTC time/date are at the bottom.
 ETA uses filtered battery power and measured full/remaining energy. It first
 appears after 5 seconds of stable mode at 200 mW or more, is recalculated
 every 10 seconds, and counts down between estimates. END adds ETA to RTC
 time and appends a day offset when needed. The two LED brightness lines
-show the temperature-limited WLED brightness. The dashboard
+show the effective WLED brightness. The dashboard
 requests 5 ms during the slide and 50 ms after it settles. Published readings
 stay visible during refresh and wake-up. Failed transfers clear the affected
 SW6306 fields until a fresh result arrives.
@@ -94,16 +96,20 @@ insertion wake. A protection shutdown waits for a new request.
 
 ### WLED and external load metering
 
-In the Powerbank dashboard, RIGHT raises brightness and turns WLED on
-at level 12. LEFT lowers brightness and turns it off below level 4.
-TIM1 CH4 drives PA11 at 62.5 kHz (64 MHz timer clock, ARR 1023). PWM
-compare follows level squared over levels 4–25 and changes over 160 ms.
+In the Powerbank dashboard, RIGHT raises brightness and LEFT lowers
+it. A debounced press changes a level immediately, then repeats every
+80 ms while held. A RIGHT press that starts from off is limited to
+level 2 until a new press. LEFT reaches zero without a press limit.
+TIM1 CH4 drives PA11 at 3.90625 kHz (64 MHz timer clock, PSC 15,
+ARR 1023). Levels 1–32 use squared compare values capped at 1023
+and the existing 160 ms ramp. Level 1 has a 250 ns minimum high pulse.
 The SOS API is available to firmware with no dashboard shortcut.
 
 WLED and Aux-A use fresh SW6306 battery voltage, capacity, NTC and
 fault status. They stop on confirmed cutoff or lost protection telemetry.
-The temperature lockout trips at 60 °C and clears at 45 °C. WLED uses
-the PB02B derating table and turns off if the limit falls below level 4.
+The temperature lockout trips at 60 °C and clears at 45 °C.
+For thermal imaging, WLED_ENABLE_THERMAL_DERATING defaults to 0 in
+wled_algo.h. Set it to 1 to restore the PB02B derating table.
 
 The SW6306 owner reuses a live path or requests a shared A1 insertion
 and then confirms it by rereading port status. Explicit A1 removal

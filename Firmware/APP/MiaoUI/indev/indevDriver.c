@@ -11,7 +11,7 @@
 #define KEY_EVENT_ENTER ((uint8_t)KeyIndex_Max)
 #define KEY_EVENT_BACK ((uint8_t)(KeyIndex_Max+1u))
 static uint8_t queue[KEY_QUEUE_SIZE],head,tail;
-static uint8_t conf_valid, conf_long, suppressed, action_repeat;
+static uint8_t conf_valid, conf_long, suppressed, action_repeat, s_continuous_lr;
 static void clear_events(void){head=0u;tail=0u;}
 void indevClearPending(void) {
     clear_events();
@@ -33,8 +33,10 @@ void indevInit(void) {
     conf_valid=0u;conf_long=0u;suppressed=0u;
 }
 
-void indevService_10ms(void) {
-    uint8_t i,blocked;
+uint8_t indevService_10ms(uint8_t continuous_lr) {
+    uint8_t i, blocked, held = 0u;
+    uint8_t mode_changed = s_continuous_lr != continuous_lr;
+    s_continuous_lr = continuous_lr;
     KeyEdge_t edge;
     Key_DebounceService_10ms();Key_Scand();
     blocked=(uint8_t)(pm_api_ui_should_block() || pm_api_is_unstable_wake());
@@ -46,6 +48,18 @@ void indevService_10ms(void) {
         if(state==KeyState_Release || state==KeyState_None)
             suppressed&=(uint8_t)~bit;
         else if(blocked)suppressed|=bit;
+
+        if (i == KeyIndex_LEFT || i == KeyIndex_RIGHT) {
+            if (mode_changed && edge != KeyEdge_Rising &&
+                (state == KeyState_ShortPress || state == KeyState_LongPress))
+                suppressed |= bit;
+            if (continuous_lr) {
+                if (!blocked && !(suppressed & bit) &&
+                    (state == KeyState_ShortPress || state == KeyState_LongPress))
+                    held |= bit;
+                continue;
+            }
+        }
         if(i==KeyIndex_CONF) {
             if(edge==KeyEdge_Rising)
                 {conf_valid=(uint8_t)(!blocked && !(suppressed&bit));conf_long=0u;}
@@ -70,6 +84,7 @@ void indevService_10ms(void) {
         }
     }
     if(blocked)conf_valid=0u;
+    return held;
 }
 
 static UI_ACTION translate(uint8_t event,const ui_t *ui) {

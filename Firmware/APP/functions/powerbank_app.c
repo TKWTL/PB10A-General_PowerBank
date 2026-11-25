@@ -4,6 +4,9 @@
 #include "display/dispDriver.h"
 #include "fonts/fonts.h"
 #include "indev/indevDriver.h"
+#include "buttons.h"
+#include "pm_api.h"
+#include "beep_service.h"
 #include "millis.h"
 #include "mini_format.h"
 #include "power_algo.h"
@@ -17,9 +20,9 @@
 #define PB_COL_AUX 90u
 
 #define PB_ROW_TITLE 10u
-#define PB_ROW_INFO 22u
-#define PB_ROW_POWER 34u
-#define PB_ROW_VOLTAGE 46u
+#define PB_ROW_POWER 22u
+#define PB_ROW_VOLTAGE 34u
+#define PB_ROW_INFO 46u
 #define PB_DIVIDER_Y 49u
 #define PB_TOP_END 48u
 #define PB_FOOTER_TOP 51u
@@ -27,17 +30,21 @@
 #define PB_DATE_Y 63u
 
 #define PB_BUS_END 45u
-#define PB_BAT_END 88u
+#define PB_BAT_END 84u
+#define PB_AUX_ARROW_X 85u
+#define PB_DISCHARGE_ARROW_MW 100u
 #define PB_BUS_CENTER (PB_COL_BUS + 18u)
 #define PB_BAT_CENTER (PB_COL_BAT + 18u)
 #define PB_AUX_CENTER (PB_COL_AUX + 18u)
 #define PB_ANIM_START UI_FX(48)
 #define PB_ANIM_FRAME_MS 5u
 #define PB_STEADY_FRAME_MS 50u
+#define PB_DIM_STEP_MS 80u
 
 static int32_t s_remaining_q;
 static ui_animation_param_t s_slide_pid;
-static uint8_t s_active;
+static uint8_t s_active, s_dim_held;
+static uint32_t s_dim_at;
 
 static const char *short_protocol(const char *protocol) {
     static const struct {
@@ -81,9 +88,12 @@ static void draw_quantity(uint16_t x, uint16_t y, uint32_t milli, char unit, uin
     Disp_DrawStr(x, y, text);
 }
 
+static uint32_t power_mw(uint16_t mv, uint16_t ma) {
+    return ((uint32_t)mv * ma + 500u) / 1000u;
+}
+
 static void draw_measurements(uint16_t x, uint16_t mv, uint16_t ma, uint8_t valid) {
-    uint32_t mw = ((uint32_t)mv * ma + 500u) / 1000u;
-    draw_quantity(x, PB_ROW_POWER, mw, 'W', valid);
+    draw_quantity(x, PB_ROW_POWER, power_mw(mv, ma), 'W', valid);
     draw_quantity(x, PB_ROW_VOLTAGE, mv, 'V', valid);
 }
 
@@ -98,8 +108,11 @@ static void draw_bus(const power_monitor_t *power) {
         draw_centered(PB_BUS_CENTER, PB_ROW_INFO, "--");
     } else {
         uint8_t c = power->c1_on || power->charging;
-        if (power->charging || power->discharging)
-            Disp_DrawStr(39u, PB_ROW_TITLE, power->charging ? ">" : "<");
+        if (power->charging)
+            Disp_DrawStr(39u, PB_ROW_TITLE, ">");
+        else if (power->discharging && (power->a1_on || power->c1_on) &&
+                 power_mw(power->vbus_mv, power->ibus_ma) >= PB_DISCHARGE_ARROW_MW)
+            Disp_DrawStr(39u, PB_ROW_TITLE, "<");
         if (power->a1_on && c) {
             draw_centered(PB_BUS_CENTER, PB_ROW_INFO, "A+C");
         } else if (power->a1_on || c) {
@@ -144,6 +157,9 @@ static void draw_aux(const power_monitor_t *power, uint8_t bg, uint8_t fg) {
     }
     draw_centered(PB_AUX_CENTER, PB_ROW_TITLE, "AUX-A");
     Disp_SetDrawColor(&fg);
+    if (power->aux_enabled && power->aux_valid &&
+        power_mw(power->aux_mv, power->aux_ma) >= PB_DISCHARGE_ARROW_MW)
+        Disp_DrawStr(PB_AUX_ARROW_X, PB_ROW_TITLE, ">");
     if (power->ntc_valid) {
         char text[8]; /* Up to six glyphs, with two bytes for °. */
         int c10 = power->ntc_c10;
@@ -241,6 +257,31 @@ static int displacement(int distance) {
     return (int)((s_remaining_q * distance + PB_ANIM_START / 2) / PB_ANIM_START);
 }
 
+uint8_t Powerbank_AppIsRunning(const ui_t *ui) {
+    return ui && ui->nowItem && ui->nowItem->itemFunction == Powerbank_AppRun &&
+           ui->fadePhase == 0u &&
+           (ui->menuState == UI_ITEM_DRAWING || ui->menuState == UI_ITEM_RUNING);
+}
+
+void Powerbank_AppDimKeys(uint8_t held, uint32_t now) {
+    const uint8_t left = 1u << KeyIndex_LEFT;
+    const uint8_t right = 1u << KeyIndex_RIGHT;
+    uint8_t first = held & (uint8_t)~s_dim_held;
+    /* Track both physical presses even if their directions cancel.
+     * Releasing LEFT while RIGHT stays held must never unlock RIGHT. */
+    s_dim_held = held;
+    if (held != left && held != right)
+        return;
+    if (!(first & held) && (uint32_t)(now - s_dim_at) < PB_DIM_STEP_MS)
+        return;
+
+    s_dim_at = now;
+    WLED_AlgoRequestStep(held == right ? 1 : -1, (uint8_t)((first & held) == 0u));
+    pm_api_refresh_idle();
+    if (first & held)
+        beep_key_click();
+}
+
 void Powerbank_AppOnLeave(ui_t *ui) {
     (void)ui;
     s_active = 0u;
@@ -249,13 +290,9 @@ void Powerbank_AppOnLeave(ui_t *ui) {
 void Powerbank_AppRun(ui_t *ui) {
     if (!ui || ui->action == UI_ACTION_ENTER || ui->action == UI_ACTION_BACK)
         return;
-    /* Icon-page mappings: DOWN -> PLUS, LEFT -> UP, RIGHT -> DOWN. */
+    /* DOWN toggles AUX. The 10 ms key service owns continuous dimming. */
     if (ui->action == UI_ACTION_PLUS && !indevActionIsRepeat())
         PowerAlgo_AuxA_Request(AUX_CMD_TOGGLE);
-    else if (ui->action == UI_ACTION_UP)
-        WLED_AlgoRequestStep(-1, indevActionIsRepeat());
-    else if (ui->action == UI_ACTION_DOWN)
-        WLED_AlgoRequestStep(1, indevActionIsRepeat());
     ui->action = UI_ACTION_NONE;
     if (!s_active) {
         s_active = 1u;

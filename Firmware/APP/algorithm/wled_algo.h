@@ -3,6 +3,12 @@
 
 #include <stdint.h>
 
+/* Thermal imaging: measure the board at the full PWM range. The common
+ * external-load overtemperature cutoff remains active. */
+#ifndef WLED_ENABLE_THERMAL_DERATING
+#define WLED_ENABLE_THERMAL_DERATING 0
+#endif
+
 void WLED_AlgoRequestStep(int8_t step, uint8_t repeat);
 void WLED_AlgoRequestSOS(uint8_t enable);
 void WLED_AlgoService(uint32_t now);

@@ -3,12 +3,13 @@
 #include "power_algo.h"
 #include "tim.h"
 
-#define WLED_MIN_LEVEL 4u
-#define WLED_DEFAULT_LEVEL 12u
-#define WLED_MAX_LEVEL 25u
+#define WLED_MIN_LEVEL 1u
+#define WLED_START_PRESS_LIMIT 2u
+#define WLED_MAX_LEVEL 32u
+#define WLED_PWM_MAX 1023u
 #define WLED_RAMP_MS 160u
-#define WLED_MIN_PULSE (WLED_MIN_LEVEL * WLED_MIN_LEVEL)
 
+#if WLED_ENABLE_THERMAL_DERATING
 static const uint8_t s_thermal_limit[] = {
     25,
     25,
@@ -42,8 +43,10 @@ static const uint8_t s_thermal_limit[] = {
     2,
     0,
 };
+#endif
 
 static int8_t s_step_request;
+static uint8_t s_raise_limit;
 static uint8_t s_sos_request, s_sos;
 static uint8_t s_level, s_output_level, s_active;
 static uint16_t s_pwm, s_ramp_from, s_target;
@@ -68,6 +71,8 @@ void WLED_AlgoStop(void) {
 void WLED_AlgoRequestStep(int8_t step, uint8_t repeat) {
     if (repeat && !s_level)
         return;
+    if (step > 0 && !repeat)
+        s_raise_limit = s_level ? WLED_MAX_LEVEL : WLED_START_PRESS_LIMIT;
     int requested = s_step_request + step;
     if (requested >= -(int)WLED_MAX_LEVEL && requested <= (int)WLED_MAX_LEVEL)
         s_step_request = (int8_t)requested;
@@ -95,11 +100,16 @@ static void wled_request(uint32_t now) {
         next_level = WLED_MAX_LEVEL;
         s_sos = 1u;
         s_sos_at = now;
-    } else if (!s_level && s_step_request > 0) {
-        next_level = WLED_DEFAULT_LEVEL;
-    } else if (s_level) {
+    } else if (s_step_request > 0) {
         int requested = s_level + s_step_request;
-        next_level = requested<(int)WLED_MIN_LEVEL ? 0u : requested>(int) WLED_MAX_LEVEL ? WLED_MAX_LEVEL : (uint8_t)requested;
+        next_level = requested > s_raise_limit ? s_raise_limit : (uint8_t)requested;
+        /* LEFT may change brightness while RIGHT is held. A capped RIGHT
+         * press must never lower a level it did not request. */
+        if (next_level < s_level)
+            next_level = s_level;
+    } else if (s_level && s_step_request < 0) {
+        int requested = s_level + s_step_request;
+        next_level = requested < (int)WLED_MIN_LEVEL ? 0u : (uint8_t)requested;
     }
 
     s_sos_request = 0u;
@@ -116,6 +126,11 @@ static void wled_request(uint32_t now) {
         s_wait_at = now;
     }
     s_level = next_level;
+}
+
+static uint16_t wled_level_to_pwm(uint8_t level) {
+    uint16_t pwm = (uint16_t)(level * level);
+    return pwm > WLED_PWM_MAX ? WLED_PWM_MAX : pwm;
 }
 
 static uint16_t sos_pwm(uint32_t now, uint16_t peak) {
@@ -152,16 +167,18 @@ void WLED_AlgoService(uint32_t now) {
         return;
     }
 
+    uint8_t limit = WLED_MAX_LEVEL;
+#if WLED_ENABLE_THERMAL_DERATING
     int16_t c10 = PowerAlgo_ExtLoadTemperature();
-    uint8_t limit = s_thermal_limit[c10 > 0 ? (unsigned)c10 / 20u : 0u];
-    if (limit < WLED_MIN_LEVEL) {
-        /* At 62.5 kHz, levels below 4 cannot reliably start EN/PWM. */
+    limit = s_thermal_limit[c10 > 0 ? (unsigned)c10 / 20u : 0u];
+    if (!limit) {
         WLED_AlgoStop();
         return;
     }
+#endif
     uint8_t output_level = s_level < limit ? s_level : limit;
-    uint16_t cap = (uint16_t)(limit * limit);
-    uint16_t target = (uint16_t)(output_level * output_level);
+    uint16_t cap = wled_level_to_pwm(limit);
+    uint16_t target = wled_level_to_pwm(output_level);
     if (!s_active) {
         PowerAlgo_ExtLoadSetActive(EXT_LOAD_WLED, 1u);
         s_active = 1u;
@@ -186,7 +203,7 @@ void WLED_AlgoService(uint32_t now) {
     } else {
         int32_t delta = (int32_t)s_target - s_ramp_from;
         uint16_t pwm = (uint16_t)(s_ramp_from + delta * (int32_t)elapsed / (int32_t)WLED_RAMP_MS);
-        /* Keep the first high pulse at or above 250 ns. */
-        apply_pwm(pwm < WLED_MIN_PULSE ? WLED_MIN_PULSE : pwm);
+        /* PSC=15 gives a 250 ns high pulse at CCR4=1. */
+        apply_pwm(pwm ? pwm : 1u);
     }
 }
