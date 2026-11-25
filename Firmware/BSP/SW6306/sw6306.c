@@ -434,7 +434,7 @@ uint8_t SW6306_ConnectedPortMask(void) {
 
 /* 运输模式安全门：重新读取实时端口状态；任一读操作失败即拒绝。
  * A口禁止VBUS插拔检测，不能识别所有已插但未供电的被动A口连接；
- * 已打开A1、检测到A1在线的情况禁止运输；物理端口存在标志不能表示设备插入。
+ * 已打开A1/A2、检测到A1/A2在线的情况禁止运输；物理端口存在标志不能表示设备插入。
  * 独立于SW6306缓存镜像，避免利用500ms前的旧数据。 */
 uint8_t SW6306_TransportPortsIdle(void) {
     uint8_t sys = 0u, typec = 0u, port = 0u;
@@ -461,11 +461,13 @@ uint8_t SW6306_TransportPortsIdle(void) {
     if (!ok)
         return 0u;
 #endif
-    return ((sys & (SW6306_SYS_STAT_CHGING|SW6306_SYS_STAT_DISCHGING|
-        SW6306_SYS_STAT_C1ON|SW6306_SYS_STAT_A1ON))==0u &&
-        (typec & (SW6306_TYPEC_C1MSK|SW6306_TYPEC_C1_CC1|SW6306_TYPEC_C1_CC2))==0u &&
-        (port & (SW6306_PORT_STA_C1SRC|SW6306_PORT_STA_C1SNK|
-        SW6306_PORT_STA_C1OL|SW6306_PORT_STA_A1OL))==0u) ? 1u:0u;
+    return ((sys & (SW6306_SYS_STAT_CHGING | SW6306_SYS_STAT_DISCHGING |
+                    SW6306_SYS_STAT_C1ON | SW6306_SYS_STAT_A1ON | SW6306_SYS_STAT_A2ON)) == 0u &&
+            (typec & (SW6306_TYPEC_C1MSK | SW6306_TYPEC_C1_CC1 | SW6306_TYPEC_C1_CC2)) == 0u &&
+            (port & (SW6306_PORT_STA_C1SRC | SW6306_PORT_STA_C1SNK |
+                     SW6306_PORT_STA_C1OL | SW6306_PORT_STA_A1OL | SW6306_PORT_STA_A2OL)) == 0u)
+               ? 1u
+               : 0u;
 }
 
 uint8_t SW6306_IsPortC1ON(void) {
@@ -1270,7 +1272,7 @@ SW6306_RET SW6306_PortA1Remove(SW6306_NOARG)//触发A1口拔出事件
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
-/* 仅调整A1硬件空载关断；WLED假A1计量或小电流模式时临时禁用。 */
+/* 仅调整A1硬件空载关断。 */
 SW6306_RET SW6306_A1AutoOffSet(SW6306_ARGS(uint8_t enable)) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
@@ -1619,11 +1621,11 @@ SW6306_NOINLINE SW6306_RET SW6306_Init(SW6306_NOARG) {
     SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_DCDC2, SW6306_DCDC2_MSK, SW6306_DCDC2_TEMP_REGSET|SW6306_DCDC2_62368_REGSET|SW6306_DCDC2_CT_REGSET);
     //禁止A口插入检测
     SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_INDET0, SW6306_INDET0_MSK, SW6306_INDET0_NOA1VBUS|SW6306_INDET0_NOA2VBUS);
-    //A1恢复硬件空载检测；C1通过CC检测真实插拔，保留原空载策略；A2/C2无物理口
+    //A1启用硬件空载检测；C1保留原策略；A2专用于外部负载计量，禁止空载关断
     SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_INDET1, SW6306_INDET1_MSK, SW6306_INDET1_NOC1NL|SW6306_INDET1_NOC2NL|SW6306_INDET1_NOA2NL);
     //高压时拔出检测电流减半
     SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_INDET2, SW6306_INDET2_HVHALFNL|SW6306_INDET2_SPNL_MSK, SW6306_INDET2_HVHALFNL|SW6306_INDET2_SPNL_32S);
-    //A1空载检测20mA，A2保持60mA；低电流/WLED计量时可临时屏蔽A1空载关断
+    //A1空载检测20mA，A2阈值保持60mA（A2空载关断已禁用）
     SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_INDET3, SW6306_INDET3_A1_20|SW6306_INDET3_A2_60);
     //端口快充全部使能
     SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_PORTQC, SW6306_PORTQC_MSK, 0x00);

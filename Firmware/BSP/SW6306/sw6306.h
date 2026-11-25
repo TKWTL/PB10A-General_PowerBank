@@ -67,16 +67,12 @@ extern "C" {
  * No run-time float shunt adaptation. Battery 5mOhm matches reference:
  * 5mOhm/5mOhm = 1/1.
  *
- * BUS gain is TEMPORARY MEASUREMENT compensation, NOT the hardware
- * resistor calibration or a change to the SW6306 internal current limit.
- * Measured 15.017V/3.423A PD input vs SW6306 14.672V/1.652A BUS:
- * a ~2.07 discrepancy. Use 2/1 provisionally, verify at multiple
- * loads before treating it as calibrated. Datasheet raw IBUS=4mA/LSB.
+ * BUS uses the datasheet raw IBUS=4mA/LSB without extra gain.
  * No factors here affect charger current-limit register writes.
  */
 #define SW6306_BATT_CURRENT_NUM         1U
 #define SW6306_BATT_CURRENT_DEN         1U
-#define SW6306_BUS_CURRENT_NUM          2U
+#define SW6306_BUS_CURRENT_NUM 1U
 #define SW6306_BUS_CURRENT_DEN          1U
 #if (SW6306_BATT_CURRENT_NUM == 0U) || (SW6306_BATT_CURRENT_DEN == 0U) || \
     (SW6306_BUS_CURRENT_NUM == 0U) || (SW6306_BUS_CURRENT_DEN == 0U)

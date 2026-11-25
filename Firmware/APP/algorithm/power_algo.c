@@ -278,7 +278,6 @@ void PowerAlgo_AddProtocolItems(ui_page_t *page, uint8_t group) {
 #define METER_RELEASE_MS 200u
 #define METER_HANDOVER_MS 1000u
 #define METER_RETRY_MS 1000u
-#define METER_BUS_LOAD_MA 20u
 
 typedef enum { EXT_ADC,
                EXT_NTC,
@@ -293,22 +292,21 @@ enum { EXT_INHIBIT_DATA = 1u,
        EXT_INHIBIT_FAULT = 8u,
        EXT_INHIBIT_PM = 16u };
 
-typedef enum { A1_FREE,
-               A1_INSERT_PENDING,
-               A1_METER_OWNED,
-               A1_REMOVE_PENDING,
-               A1_UNCERTAIN } meter_a1_t;
+typedef enum { A2_FREE,
+               A2_INSERT_PENDING,
+               A2_METER_OWNED,
+               A2_REMOVE_PENDING,
+               A2_UNCERTAIN } meter_a2_t;
 
 static uint8_t s_ext_requested, s_ext_active, s_ext_valid, s_ext_hot, s_ext_fault;
 static uint8_t s_ext_pm_closing, s_ext_pm_work;
 static uint16_t s_ext_vbat_mv, s_ext_ibus_ma;
 static uint32_t s_ext_stamp[EXT_SAMPLE_COUNT], s_ext_release_at, s_ext_pm_at;
-static meter_a1_t s_meter_a1;
-static uint8_t s_meter_a1_on, s_meter_c_path, s_meter_c_present, s_meter_a1_online;
-static uint8_t s_meter_ports_valid, s_meter_auto_off_dirty, s_meter_auto_off_held;
-static uint8_t s_meter_preserve_a1, s_meter_a1_loaded;
+static meter_a2_t s_meter_a2;
+static uint8_t s_meter_a1_on, s_meter_real_path, s_meter_real_present;
+static uint8_t s_meter_ports_valid;
 static uint32_t s_meter_ports_at, s_meter_attempt_at, s_meter_command_at;
-static uint32_t s_meter_c_at, s_meter_a1_load_at;
+static uint32_t s_meter_real_at;
 
 static uint8_t ext_loads(void) {
     return (uint8_t)(s_ext_requested | s_ext_active);
@@ -351,8 +349,7 @@ static uint8_t meter_ports_fresh(uint32_t now) {
 
 static uint8_t meter_ready(uint32_t now) {
     return !s_bus_force_off && meter_ports_fresh(now) &&
-           (s_meter_c_path || (s_meter_a1_on && (s_meter_a1 == A1_FREE ||
-                                                 (s_meter_a1 == A1_METER_OWNED && s_meter_auto_off_held))));
+           (s_meter_real_path || s_meter_a2 == A2_METER_OWNED);
 }
 
 uint8_t PowerAlgo_ExtLoadRequest(uint8_t load) {
@@ -402,68 +399,50 @@ int16_t PowerAlgo_ExtLoadTemperature(void) {
 
 static void meter_note_ports(uint32_t now) {
     uint8_t connections = SW6306_ConnectedPortMask();
-    uint8_t c_path = SW6306_IsPortC1ON() || SW6306_IsCharging();
-    if (c_path && (!s_meter_c_path || !meter_ports_fresh(now)))
-        s_meter_c_at = now;
-    s_meter_c_path = c_path;
-    s_meter_c_present = c_path || (connections & SW6306_CONNECTED_C1);
+    uint8_t a2_on = SW6306_IsPortA2ON() != 0u;
+    uint8_t a2_online = (connections & SW6306_CONNECTED_A2) != 0u;
     s_meter_a1_on = SW6306_IsPortA1ON() != 0u;
-    s_meter_a1_online = (connections & SW6306_CONNECTED_A1) != 0u;
+    uint8_t real_path = SW6306_IsPortC1ON() || SW6306_IsCharging() || s_meter_a1_on;
+    if (real_path && (!s_meter_real_path || !meter_ports_fresh(now)))
+        s_meter_real_at = now;
+    s_meter_real_path = real_path;
+    s_meter_real_present = real_path || (connections & (SW6306_CONNECTED_C1 | SW6306_CONNECTED_A1));
     s_meter_ports_at = now;
     s_meter_ports_valid = 1u;
 
-    /* Only a successful Insert followed by a new port snapshot gives
-     * removal rights. Failed writes may still have reached the silicon. */
-    if (s_meter_a1 == A1_INSERT_PENDING && s_meter_a1_on)
-        s_meter_a1 = A1_METER_OWNED;
-    if (s_meter_a1_on && s_meter_a1 == A1_REMOVE_PENDING &&
-        (uint32_t)(now - s_meter_command_at) >= METER_RETRY_MS)
-        s_meter_a1 = A1_METER_OWNED;
-    if (!s_meter_a1_on && (s_meter_a1 == A1_METER_OWNED || s_meter_a1 == A1_REMOVE_PENDING ||
-                           (uint32_t)(now - s_meter_command_at) >= METER_RETRY_MS)) {
-        s_meter_a1 = A1_FREE;
-        s_meter_preserve_a1 = 0u;
+    /* A2 has no physical connector. An unexpected active A2 can be
+     * removed, but only a confirmed insertion permits external loads. */
+    uint8_t settled = (uint32_t)(now - s_meter_command_at) >= METER_RETRY_MS;
+    if (a2_on && s_meter_a2 == A2_INSERT_PENDING) {
+        s_meter_a2 = A2_METER_OWNED;
+    } else if (!a2_on && !a2_online) {
+        if ((s_meter_a2 != A2_INSERT_PENDING && s_meter_a2 != A2_UNCERTAIN) || settled)
+            s_meter_a2 = A2_FREE;
+    } else if (s_meter_a2 == A2_FREE ||
+               (s_meter_a2 == A2_METER_OWNED && !a2_on) ||
+               (settled && (s_meter_a2 == A2_INSERT_PENDING || s_meter_a2 == A2_REMOVE_PENDING))) {
+        s_meter_a2 = A2_UNCERTAIN;
     }
-
-    /* Shared BUS current provides A1 evidence only with C1 disconnected. */
-    if (s_meter_a1 != A1_FREE && s_meter_a1_on && !s_meter_c_present &&
-        ext_sample_fresh(EXT_ADC, now)) {
-        if (s_ext_ibus_ma >= METER_BUS_LOAD_MA) {
-            if (!s_meter_a1_loaded)
-                s_meter_a1_load_at = now;
-            s_meter_a1_loaded = 1u;
-            if ((uint32_t)(now - s_meter_a1_load_at) >= METER_HANDOVER_MS &&
-                (int32_t)(s_ext_stamp[EXT_ADC] - s_meter_a1_load_at) > 0) {
-                s_meter_a1 = A1_FREE; /* A1 now belongs to the physical load. */
-                s_meter_preserve_a1 = 0u;
-            }
-            return;
-        }
-        if (s_meter_a1 == A1_METER_OWNED)
-            s_meter_preserve_a1 = 0u;
-    }
-    s_meter_a1_loaded = 0u;
 }
 
-static uint8_t meter_should_hold_a1(uint32_t now) {
-    return ext_loads() && s_meter_a1 == A1_METER_OWNED &&
-           (!s_meter_c_path || (uint32_t)(now - s_meter_c_at) < METER_HANDOVER_MS);
+static uint8_t meter_remove_due(uint32_t now) {
+    if (s_meter_a2 != A2_METER_OWNED && s_meter_a2 != A2_UNCERTAIN)
+        return 0u;
+    if (!ext_loads())
+        return (uint32_t)(now - s_ext_release_at) >= METER_RELEASE_MS;
+    if (s_meter_real_path)
+        return (uint32_t)(now - s_meter_real_at) >= METER_HANDOVER_MS;
+    return s_meter_a2 == A2_UNCERTAIN && !ext_inhibit(now);
 }
 
 static uint8_t meter_due(uint32_t now) {
     if ((uint32_t)(now - s_meter_attempt_at) < METER_RETRY_MS)
         return 0u;
-    if (ext_loads()) {
-        if (ext_inhibit(now))
-            return 0u;
-        if (s_meter_a1 == A1_UNCERTAIN && s_meter_auto_off_dirty)
-            return 1u;
-        if (s_meter_auto_off_dirty && !meter_should_hold_a1(now) && meter_ready(now))
-            return 1u;
-        return !meter_ready(now);
-    }
-    return (uint32_t)(now - s_ext_release_at) >= METER_RELEASE_MS &&
-           (s_meter_auto_off_dirty || (s_meter_a1 != A1_FREE && !s_meter_preserve_a1));
+    if (meter_remove_due(now))
+        return 1u;
+    if (ext_loads())
+        return !ext_inhibit(now) && !meter_ready(now);
+    return (uint32_t)(now - s_ext_release_at) >= METER_RELEASE_MS && s_meter_a2 != A2_FREE;
 }
 
 static void ext_cache_adc(void) {
@@ -510,9 +489,7 @@ static void sw6306_display_read_failed(void) {
 /* An insertion is a 0->1 transition in a successful live port snapshot.
  * The initial snapshot is only a baseline, not a synthetic insert event. */
 static void sw6306_connection_update(void) {
-    uint8_t connected=SW6306_ConnectedPortMask();
-    if (s_meter_a1 != A1_FREE)
-        connected &= (uint8_t)~SW6306_CONNECTED_A1;
+    uint8_t connected = SW6306_ConnectedPortMask() & (uint8_t)~SW6306_CONNECTED_A2;
     if(s_port_baseline_valid) {
         uint8_t newly_connected=(uint8_t)(connected &
             (uint8_t)~s_previous_connections);
@@ -820,12 +797,10 @@ static pm_hook_result_t ext_load_prepare(void *ctx) {
         WLED_AlgoStop();
         aux_disable();
         s_aux_command_pending = 0u;
-        s_meter_preserve_a1 = 0u; /* Re-evaluate before a new sleep request. */
-        /* An existing in-flight A1 operation must settle before sleep. */
+        /* An existing in-flight A2 operation must settle before sleep. */
         s_meter_attempt_at = s_ext_pm_at - METER_RETRY_MS;
     }
-    if (!s_meter_auto_off_dirty && !s_sw_owner_busy &&
-        (s_meter_a1 == A1_FREE || s_meter_preserve_a1)) {
+    if (!s_sw_owner_busy && s_meter_a2 == A2_FREE) {
         s_ext_pm_work = 0u;
         return PM_HOOK_DONE;
     }
@@ -1194,73 +1169,29 @@ THRD_DECLARE(meter_read_ports) {
 THRD_DECLARE(meter_step) {
     THRD_BEGIN;
     s_meter_attempt_at = Millis();
-    if (!ext_loads() && s_meter_a1 == A1_METER_OWNED) {
-        /* Use an ADC read from this step to decide whether removal is safe. */
-        SW6306_OperationReset();
-        THRD_SPAWN_NOARG(SW6306_ADCLoad);
-        ext_cache_adc();
-    }
-
     THRD_SPAWN_NOARG(meter_read_ports);
     if (!s_meter_ports_valid)
         PT_EXIT(pt);
 
-    if (ext_loads() && !ext_inhibit(Millis()) && !s_meter_c_present &&
-        (s_meter_a1 == A1_METER_OWNED ||
-         (s_meter_a1 == A1_FREE && !s_meter_a1_on && !s_meter_a1_online))) {
-        if (!s_meter_auto_off_held) {
-            s_meter_auto_off_dirty = 1u; /* A failed write still needs cleanup. */
-            SW6306_OperationReset();
-            THRD_SPAWN_ARGS(SW6306_A1AutoOffSet, 0u);
-            s_meter_auto_off_held = SW6306_LastOperationOK();
-        }
-        if (s_meter_auto_off_held && s_meter_a1 == A1_FREE &&
-            ext_loads() && !ext_inhibit(Millis())) {
-            /* Recheck the port after the A1 policy write. */
-            THRD_SPAWN_NOARG(meter_read_ports);
-            if (!s_meter_ports_valid)
-                PT_EXIT(pt);
-            if (ext_loads() && !ext_inhibit(Millis()) && !s_meter_c_present &&
-                !s_meter_a1_on && !s_meter_a1_online) {
-                s_meter_a1 = A1_UNCERTAIN;
-                s_meter_preserve_a1 = 0u;
-                SW6306_OperationReset();
-                THRD_SPAWN_NOARG(SW6306_PortA1Insert);
-                s_meter_command_at = Millis();
-                if (SW6306_LastOperationOK())
-                    s_meter_a1 = A1_INSERT_PENDING;
-                THRD_SPAWN_NOARG(meter_read_ports);
-            }
-        }
-        PT_EXIT(pt);
-    }
-
-    if (!ext_loads() && (uint32_t)(Millis() - s_ext_release_at) >= METER_RELEASE_MS) {
-        if (s_meter_a1 == A1_METER_OWNED) {
-            if (s_meter_c_present || !ext_sample_fresh(EXT_ADC, Millis()) ||
-                s_ext_ibus_ma >= METER_BUS_LOAD_MA) {
-                /* Defer to hardware auto-off when A1 usage is ambiguous. */
-                s_meter_preserve_a1 = 1u;
-            } else {
-                SW6306_OperationReset();
-                THRD_SPAWN_NOARG(SW6306_PortA1Remove);
-                s_meter_command_at = Millis();
-                if (SW6306_LastOperationOK())
-                    s_meter_a1 = A1_REMOVE_PENDING;
-                THRD_SPAWN_NOARG(meter_read_ports);
-            }
-        } else if (s_meter_a1 == A1_UNCERTAIN && s_meter_a1_on) {
-            s_meter_preserve_a1 = 1u;
-        }
-    }
-
-    if (s_meter_auto_off_dirty && s_meter_a1 != A1_INSERT_PENDING &&
-        !meter_should_hold_a1(Millis())) {
-        s_meter_auto_off_held = 0u;
+    if (meter_remove_due(Millis())) {
+        s_meter_a2 = A2_UNCERTAIN;
         SW6306_OperationReset();
-        THRD_SPAWN_ARGS(SW6306_A1AutoOffSet, 1u);
+        THRD_SPAWN_NOARG(SW6306_PortA2Remove);
+        s_meter_command_at = Millis();
         if (SW6306_LastOperationOK())
-            s_meter_auto_off_dirty = 0u;
+            s_meter_a2 = A2_REMOVE_PENDING;
+        THRD_SPAWN_NOARG(meter_read_ports);
+    } else if (ext_loads() && !ext_inhibit(Millis()) &&
+               !s_meter_real_present && s_meter_a2 == A2_FREE) {
+        /* A2 auto-off is already disabled by SW6306_Init. A1 keeps its
+         * normal hardware idle policy throughout external metering. */
+        s_meter_a2 = A2_UNCERTAIN;
+        SW6306_OperationReset();
+        THRD_SPAWN_NOARG(SW6306_PortA2Insert);
+        s_meter_command_at = Millis();
+        if (SW6306_LastOperationOK())
+            s_meter_a2 = A2_INSERT_PENDING;
+        THRD_SPAWN_NOARG(meter_read_ports);
     }
     THRD_END;
 }
@@ -1269,7 +1200,7 @@ THRD_DECLARE(meter_step) {
  * power transaction per service slot leaves the monitor and ADC responsive. */
 static uint8_t config_ports_idle(uint32_t now) {
     return s_idle_verified && meter_ports_fresh(now) && SW6306_TransportPortsIdle() &&
-           !ext_loads() && s_meter_a1 == A1_FREE && !s_meter_auto_off_dirty;
+           !ext_loads() && s_meter_a2 == A2_FREE;
 }
 
 static uint32_t config_eligible(uint32_t now) {
@@ -1358,7 +1289,7 @@ static uint8_t bus_idle_due(uint32_t now) {
         !SW6306_IsInitialized() || !s_cycle_ok || !s_adc_fresh || !s_status_fresh ||
         !ext_sample_fresh(EXT_ADC, now) || !ext_sample_fresh(EXT_STATUS, now) ||
         !meter_ports_fresh(now) || SW6306_IsCharging() || SW6306_IsLowCurrentMode() ||
-        ext_loads() || s_meter_a1 != A1_FREE || s_meter_auto_off_dirty ||
+        ext_loads() || s_meter_a2 != A2_FREE ||
         (!SW6306_IsPortC1ON() && !SW6306_IsPortA1ON()) ||
         s_ext_ibus_ma > (unsigned)s_idle_threshold) {
         idle_reset();
@@ -1399,9 +1330,8 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
         if(!SW6306_IsInitialized()) {
             s_ext_valid = 0u;
             s_meter_ports_valid = 0u;
-            s_meter_auto_off_held = 0u;
-            if (s_meter_a1 != A1_FREE)
-                s_meter_a1 = A1_UNCERTAIN;
+            if (s_meter_a2 != A2_FREE)
+                s_meter_a2 = A2_UNCERTAIN;
             s_adc_fresh = 0u;
             s_monitor.initialized=0u;
             s_monitor.valid=0u;
@@ -1424,8 +1354,7 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
                 THRD_DELAY(100u);
                 continue;
             }
-            s_sw_low_power=0u;
-            s_meter_auto_off_dirty = 0u; /* Init restores A1 auto-off. */
+            s_sw_low_power = 0u;
             s_sw_phase=0u;
             s_capacity_div=1u;
             s_status_fresh=0u;
@@ -1612,7 +1541,7 @@ void PowerAlgo_GetDisplayMonitor(power_monitor_t *out) {
         return;
     *out = s_monitor;
     out->valid = s_bus_display_valid;
-    out->a1_on = s_meter_a1 == A1_FREE && s_meter_a1_on;
+    out->a1_on = s_meter_a1_on;
     out->capacity_valid = s_battery_data[BATTERY_CHARGE].ptr != NULL;
     out->capacity_pct = (uint8_t)s_battery_values[BATTERY_CHARGE];
     sw6306_count_down_eta(out, Millis());

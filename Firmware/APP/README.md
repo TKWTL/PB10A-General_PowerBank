@@ -132,13 +132,13 @@ The temperature lockout trips at 60 °C and clears at 45 °C.
 For thermal imaging, WLED_ENABLE_THERMAL_DERATING defaults to 0 in
 wled_algo.h. Set it to 1 to restore the PB02B derating table.
 
-The SW6306 owner reuses a live path or requests a shared A1 insertion
-and then confirms it by rereading port status. Explicit A1 removal
-requires ownership and a fresh standalone BUS current below 20 mA.
-The hardware A1 idle policy is restored on cleanup or confirmed
-handover. A1 may remain on when C1 prevents independent attribution.
-Firmware suppresses a synthetic A1 in automatic navigation and the
-dashboard. ETA pauses during simultaneous charging and external load.
+The SW6306 owner reuses a live C1/A1 path or requests a shared
+synthetic A2 insertion, confirmed by rereading port status. A2 has
+no physical connector and its hardware auto-off is disabled in Init.
+It is removed after both external loads stop or a real path takes over.
+Physical A1 retains its normal auto-off policy. A2 does not trigger
+automatic navigation or appear as a dashboard port. ETA pauses during
+simultaneous charging and external load.
 
 
 The current CubeMX-generated configuration uses ADC1 HSI clock DIV1,
@@ -180,10 +180,9 @@ The old runtime floating-point battery SHUNT configuration
 (`SetBattRShunt(float)` / `GetBattRShunt()`) was removed from
 PB10A. Current scale uses four compile-time integers in
 `BSP/SW6306/sw6306.h`: BAT numerator/denominator **1/1** and
-BUS readout numerator/denominator provisionally **2/1**. The BUS
-ratio only modifies the **reported current**; it is based on one
-instrument comparison and must be checked against several load
-points. Internal SW6306 BUS current limits are unaffected. The
+BUS readout numerator/denominator **1/1**. The previous temporary
+2/1 BUS compensation has been removed. Internal SW6306 BUS current
+limits are unaffected. The
 separate energy calculation still uses float for fractional mWh,
 not for a mutable SHUNT coefficient. See the
 [SW6306 debug note](../../Docs/Debug/2026-11-19_sw6306_monitor.md).
