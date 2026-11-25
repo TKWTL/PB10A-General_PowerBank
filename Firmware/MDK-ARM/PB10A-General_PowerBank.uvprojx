@@ -935,6 +935,11 @@
               <FilePath>../APP/functions/games/arkanoid/game_arkanoid.c</FilePath>
             </File>
             <File>
+              <FileName>arkanoid_assets.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/functions/games/arkanoid/arkanoid_assets.c</FilePath>
+            </File>
+            <File>
               <FileName>game_tetris.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/functions/games/tetris/game_tetris.c</FilePath>

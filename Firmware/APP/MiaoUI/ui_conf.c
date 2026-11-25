@@ -8,6 +8,7 @@
 #include "miaoui.h"
 #include "time_service.h"
 #include "apps.h"
+#include "games/arkanoid/arkanoid_assets.h"
 #include "games/pacman/pacman_assets.h"
 #include "games/bomber/bomber_assets.h"
 #include "games/invaders/invaders_assets.h"
@@ -89,7 +90,7 @@ void Create_Parameter(ui_t *ui) {
 
 void Create_Text(ui_t *ui) {
     (void)ui;
-    s_about_text.ptr="PB10A General Powerbank\nSTM32G070 / MiaoUI\nTKWTL open firmware";
+    s_about_text.ptr="PB10A Power Bank\n100W PD/PPS/UFCS\nhttps://github.com/TKWTL/PB10A-General_PowerBank";
     s_about_text.font=UI_FONT;s_about_text.fontHight=UI_FONT_HIGHT;
     s_about_text.fontWidth=UI_FONT_WIDTH;
     s_about_el.text = &s_about_text;
@@ -112,7 +113,7 @@ void Create_MenuTree(ui_t *ui) {
 
     AddPage("[Game]",&s_game,UI_PAGE_ICON,&s_home);
         add_return(&s_game,&s_home,&s_game_back,0);
-        AddItem("-Arkanoid",UI_ITEM_WORD,img_games,&s_arkanoid,&s_game,0,Game_ArkanoidRun);
+        AddItem("-Arkanoid",UI_ITEM_WORD,img_arkanoid,&s_arkanoid,&s_game,0,Game_ArkanoidRun);
         UI_SetLeaveHook(&s_arkanoid,Game_ArkanoidOnLeave);
         AddItem("-Tetris",UI_ITEM_WORD,img_tetris,&s_tetris,&s_game,0,Game_TetrisRun);
         UI_SetLeaveHook(&s_tetris,Game_TetrisOnLeave);
