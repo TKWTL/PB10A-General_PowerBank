@@ -129,37 +129,37 @@ typedef struct {
 
 #define PROTO(name, proto, dir) {name, SET_PROTOCOL, SW6306_PROTO_##proto, SW6306_PROTO_DIR_##dir}
 static const setting_desc_t s_settings[CFG_COUNT] = {
-    [CFG_OUTPUT] = {" Output W", SET_NUMBER},
-    [CFG_INPUT] = {" Input W", SET_NUMBER},
-    [CFG_C1_INPUT] = {" C1 Input Fast", SET_PORT, SW6306_PORT_C1, SW6306_PORT_DIR_IN},
-    [CFG_C1_OUTPUT] = {" C1 Output Fast", SET_PORT, SW6306_PORT_C1, SW6306_PORT_DIR_OUT},
-    [CFG_A1_OUTPUT] = {" A1 Output Fast", SET_PORT, SW6306_PORT_A1, SW6306_PORT_DIR_OUT},
-    [CFG_IDLE_TIMEOUT] = {" Idle Timeout", SET_ENUM},
-    [CFG_IDLE_THRESHOLD] = {" Idle Threshold", SET_NUMBER},
-    [CFG_AUX_ENABLE] = {" Aux-A Enable", SET_AUX_SWITCH},
-    [CFG_AUX_THRESHOLD] = {" Aux Idle Current", SET_NUMBER},
-    [CFG_PD_OUT] = PROTO(" PD out", PD, SOURCE),
-    [CFG_PD_IN] = PROTO(" PD in", PD, SINK),
-    [CFG_PD_SCP] = {" PD to SCP", SET_PD_YIELD},
-    [CFG_PD_VOOC] = {" PD to VOOC", SET_PD_YIELD},
-    [CFG_PD_UFCS] = {" PD to UFCS", SET_PD_YIELD},
+    [CFG_OUTPUT] = {" Output Power Limit W", SET_NUMBER},
+    [CFG_INPUT] = {" Input Power Limit W", SET_NUMBER},
+    [CFG_C1_INPUT] = {" C1 Input Fast Charge", SET_PORT, SW6306_PORT_C1, SW6306_PORT_DIR_IN},
+    [CFG_C1_OUTPUT] = {" C1 Output Fast Charge", SET_PORT, SW6306_PORT_C1, SW6306_PORT_DIR_OUT},
+    [CFG_A1_OUTPUT] = {" A1 Output Fast Charge", SET_PORT, SW6306_PORT_A1, SW6306_PORT_DIR_OUT},
+    [CFG_IDLE_TIMEOUT] = {" Idle Shutdown Timeout", SET_ENUM},
+    [CFG_IDLE_THRESHOLD] = {" Idle Shutdown Current mA", SET_NUMBER},
+    [CFG_AUX_ENABLE] = {" Aux-A Port Enable", SET_AUX_SWITCH},
+    [CFG_AUX_THRESHOLD] = {" Aux-A Idle Current mA", SET_NUMBER},
+    [CFG_PD_OUT] = PROTO(" PD Output", PD, SOURCE),
+    [CFG_PD_IN] = PROTO(" PD Input", PD, SINK),
+    [CFG_PD_SCP] = {" PD Yield to SCP", SET_PD_YIELD},
+    [CFG_PD_VOOC] = {" PD Yield to VOOC", SET_PD_YIELD},
+    [CFG_PD_UFCS] = {" PD Yield to UFCS", SET_PD_YIELD},
     [CFG_PPS_BROADCAST] = {" PPS Broadcast", SET_BROADCAST},
     [CFG_PPS_11] = {" 11V PPS", SET_PPS, SW6306_PPS_1},
     [CFG_PPS_21] = {" 21V PPS", SET_PPS, SW6306_PPS_3},
     [CFG_UFCS_BROADCAST] = {" UFCS Broadcast", SET_BROADCAST},
-    [CFG_UFCS_OUT] = PROTO(" UFCS out", UFCS, SOURCE),
-    [CFG_UFCS_IN] = PROTO(" UFCS in", UFCS, SINK),
+    [CFG_UFCS_OUT] = PROTO(" UFCS Output", UFCS, SOURCE),
+    [CFG_UFCS_IN] = PROTO(" UFCS Input", UFCS, SINK),
     [CFG_QC] = PROTO(" QC", QC, SOURCE),
     [CFG_FCP] = PROTO(" FCP", FCP, SOURCE),
-    [CFG_AFC_OUT] = PROTO(" AFC out", AFC, SOURCE),
-    [CFG_AFC_IN] = PROTO(" AFC in", AFC, SINK),
-    [CFG_HVSCP] = {" HVSCP out", SET_SCP},
-    [CFG_LVSCP] = {" LVSCP out", SET_SCP},
-    [CFG_SCP_IN] = PROTO(" SCP in", SCP, SINK),
+    [CFG_AFC_OUT] = PROTO(" AFC Output", AFC, SOURCE),
+    [CFG_AFC_IN] = PROTO(" AFC Input", AFC, SINK),
+    [CFG_HVSCP] = {" HVSCP Output", SET_SCP},
+    [CFG_LVSCP] = {" LVSCP Output", SET_SCP},
+    [CFG_SCP_IN] = PROTO(" SCP Input", SCP, SINK),
     [CFG_PE] = PROTO(" PE", PE, SOURCE),
     [CFG_SFCP] = PROTO(" SFCP", SFCP, SOURCE),
-    [CFG_VOOC_OUT] = PROTO(" VOOC out", VOOC, SOURCE),
-    [CFG_VOOC_IN] = PROTO(" VOOC in", VOOC, SINK),
+    [CFG_VOOC_OUT] = PROTO(" VOOC Output", VOOC, SOURCE),
+    [CFG_VOOC_IN] = PROTO(" VOOC Input", VOOC, SINK),
     [CFG_SVOOC] = PROTO(" SVOOC", SVOOC, SOURCE),
 };
 #undef PROTO
@@ -219,6 +219,7 @@ static void add_settings(ui_page_t *page, unsigned first, unsigned end) {
             switch (i) {
             case CFG_OUTPUT:
             case CFG_INPUT:
+                data->name = i == CFG_OUTPUT ? "Output W" : "Input W";
                 data->ptr = i == CFG_OUTPUT ? &s_output_w : &s_input_w;
                 data->min = 5;
                 data->max = i == CFG_OUTPUT ? SW6306_OUTPUT_POWER_MAX : SW6306_INPUT_POWER_MAX;
@@ -321,7 +322,8 @@ enum {
     FAULT_METER,
     FAULT_BATTERY,
     FAULT_NTC,
-    FAULT_OFFLINE
+    FAULT_OFFLINE,
+    FAULT_WLED
 };
 enum {
     NOTICE_LEARN_DONE = 100u,
@@ -374,6 +376,8 @@ const char *PowerAlgo_NoticeText(uint8_t code) {
         return "AUX SHORT";
     case 21:
         return "AUX ADC ERROR";
+    case 30:
+        return "WLED TEMP LIMIT";
     case 40:
         return "METER TIMEOUT";
     case 41:
@@ -692,6 +696,9 @@ void PowerAlgo_GetFaultView(power_fault_view_t *out) {
     case FAULT_OFFLINE:
         out->active = s_fault_offline;
         break;
+    case FAULT_WLED:
+        out->active = WLED_AlgoThermalBlocked();
+        break;
     default:
         /* Non-latched AUX / meter errors are history after shutdown. */
         break;
@@ -782,6 +789,15 @@ ext_load_state_t PowerAlgo_ExtLoadState(uint8_t load, uint32_t now) {
 
 int16_t PowerAlgo_ExtLoadTemperature(void) {
     return s_monitor.ntc_c10;
+}
+
+uint8_t PowerAlgo_GetExtLoadTemperature(int16_t *c10) {
+    *c10 = s_monitor.ntc_c10;
+    return SW6306_IsInitialized() && ext_sample_fresh(EXT_NTC, Millis());
+}
+
+void PowerAlgo_ReportWLEDOverheat(void) {
+    fault_report(30u, FAULT_WLED);
 }
 
 static void meter_note_ports(uint32_t now) {
@@ -1411,7 +1427,7 @@ void PowerAlgo_AdcPoll(void) {
 }
 
 void PowerAlgo_AddStatisticsItems(ui_page_t *page) {
-    static const char *const names[POWER_ITEM_COUNT] = {" BUS V", " BUS A", " Aux-A V", " Aux-A A", " Chip Temp °C"};
+    static const char *const names[POWER_ITEM_COUNT] = {" BUS Voltage V", " BUS Current A", " Aux-A Voltage V", " Aux-A Current A", " Chip Temperature°C"};
     for (unsigned i = 0; i < POWER_ITEM_COUNT; ++i) {
         s_power_data[i].name = names[i];
         s_power_data[i].ptr = (i == POWER_AUX_VOLTAGE || i == POWER_AUX_CURRENT) ? &s_power_values[i] : NULL;
@@ -1453,8 +1469,8 @@ static void battery_publish_lifetime(void) {
 
 void PowerAlgo_AddBatteryItems(ui_page_t *page) {
     static const char *const names[BATTERY_ITEM_COUNT] = {
-        " Charge %", " Battery V", " Max Wh", " Remain Wh", " Batt Temp °C",
-        " SOH %", " EFC", " Learn"};
+        " Charge Level %", " Battery Voltage V", " Full Energy Wh", " Remaining Energy Wh", " Battery Temperature°C",
+        " State of Health %", " Equivalent Full Cycles", " Capacity Learning"};
     for (unsigned i = 0; i < BATTERY_ITEM_COUNT; ++i) {
         s_battery_data[i].name = names[i];
         s_battery_data[i].dataType = i == BATTERY_LEARN ? UI_DATA_STRING : i == BATTERY_CHARGE ? UI_DATA_INT

@@ -53,13 +53,13 @@ static uint8_t radio_power_permitted(void) {
 }
 void RadioAlgo_AddSleepWakeItems(ui_page_t *page) {
     if(!page)return;
-    s_keep_awake_data.name=" Radio Keep Awake";
+    s_keep_awake_data.name = " Keep Radio Awake";
     s_keep_awake_data.ptr=&s_keep_awake_radio;
     s_keep_awake_data.dataType=UI_DATA_SWITCH;
     s_keep_awake_data.actionType=UI_DATA_ACTION_RW;
     s_keep_awake_element.data=&s_keep_awake_data;
     Create_element(&s_keep_awake_item,&s_keep_awake_element);
-    AddItem(" Radio Keep Awake",UI_ITEM_DATA,0,&s_keep_awake_item,page,0,0);
+    AddItem(" Keep Radio Awake", UI_ITEM_DATA, 0, &s_keep_awake_item, page, 0, 0);
 }
 static void radio_clock_enable(void) {
     LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE, LL_RCC_MCO1_DIV_1);

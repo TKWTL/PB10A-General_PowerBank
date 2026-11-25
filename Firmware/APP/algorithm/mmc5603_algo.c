@@ -89,7 +89,7 @@ void MMC5603Algo_Init(void) {
 }
 
 void MMC5603Algo_AddStatisticsItems(ui_page_t *page) {
-    static const char *const names[3]={" Mag X mG"," Mag Y mG"," Mag Z mG"};
+    static const char *const names[3] = {" Magnetic Field X mG", " Magnetic Field Y mG", " Magnetic Field Z mG"};
     uint8_t i;
     if(!page)return;
     for(i=0u;i<3u;i++) {

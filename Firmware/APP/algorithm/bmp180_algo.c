@@ -94,7 +94,7 @@ void BMP180Algo_Init(void) {
     (void)pm_device_register(&s_node);
 }
 void BMP180Algo_AddStatisticsItems(ui_page_t *page) {
-    static const char *const names[2] = {" Temp °C", " Press hPa"};
+    static const char *const names[2] = {" Air Temperature°C", " Air Pressure hPa"};
     int *values[2]={&s_temp10,&s_pressure_hpa10};
     uint8_t i;
     if(!page)return;

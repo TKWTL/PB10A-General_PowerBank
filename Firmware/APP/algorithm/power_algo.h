@@ -71,6 +71,8 @@ void PowerAlgo_ExtLoadSetActive(uint8_t load, uint8_t active);
 void PowerAlgo_ExtLoadRelease(uint8_t load);
 ext_load_state_t PowerAlgo_ExtLoadState(uint8_t load, uint32_t now);
 int16_t PowerAlgo_ExtLoadTemperature(void);
+uint8_t PowerAlgo_GetExtLoadTemperature(int16_t *c10);
+void PowerAlgo_ReportWLEDOverheat(void);
 
 /* ADC_RTC_AuxAThread owns the ADC and SUB_EN. */
 typedef enum { AUX_CMD_ENABLE,

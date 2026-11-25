@@ -91,50 +91,50 @@ __attribute__((noinline)) void System_AddSettingsItems(ui_page_t *page) {
     Create_element(&s_volume_item, &s_volume_element);
     AddItem(" Beep Volume", UI_ITEM_DATA, 0, &s_volume_item, page, 0, 0);
     AddItem(" Play Music", UI_ITEM_ONCE_FUNCTION, 0, &s_play_music_item, page, 0, system_play_music);
-    s_radio_auto_data.name=" Headphone Auto UI";
+    s_radio_auto_data.name = " Headphone Auto Navigation";
     s_radio_auto_data.ptr=&s_radio_auto;
     s_radio_auto_data.dataType=UI_DATA_SWITCH;
     s_radio_auto_data.actionType=UI_DATA_ACTION_RW;
     s_radio_auto_element.data=&s_radio_auto_data;
     Create_element(&s_radio_auto_item,&s_radio_auto_element);
-    AddItem(" Headphone Auto UI",UI_ITEM_DATA,0,&s_radio_auto_item,page,0,0);
+    AddItem(" Headphone Auto Navigation", UI_ITEM_DATA, 0, &s_radio_auto_item, page, 0, 0);
 
-    s_power_auto_data.name=" Port Auto UI";
+    s_power_auto_data.name = " USB Port Auto Navigation";
     s_power_auto_data.ptr=&s_power_auto;
     s_power_auto_data.dataType=UI_DATA_SWITCH;
     s_power_auto_data.actionType=UI_DATA_ACTION_RW;
     s_power_auto_element.data=&s_power_auto_data;
     Create_element(&s_power_auto_item,&s_power_auto_element);
-    AddItem(" Port Auto UI",UI_ITEM_DATA,0,&s_power_auto_item,page,0,0);
+    AddItem(" USB Port Auto Navigation", UI_ITEM_DATA, 0, &s_power_auto_item, page, 0, 0);
 
-    s_aux_auto_data.name=" Aux-A Auto UI";
+    s_aux_auto_data.name = " Aux-A Auto Navigation";
     s_aux_auto_data.ptr=&s_aux_auto;
     s_aux_auto_data.dataType=UI_DATA_SWITCH;
     s_aux_auto_data.actionType=UI_DATA_ACTION_RW;
     s_aux_auto_element.data=&s_aux_auto_data;
     Create_element(&s_aux_auto_item,&s_aux_auto_element);
-    AddItem(" Aux-A Auto UI",UI_ITEM_DATA,0,&s_aux_auto_item,page,0,0);
+    AddItem(" Aux-A Auto Navigation", UI_ITEM_DATA, 0, &s_aux_auto_item, page, 0, 0);
 
     AddItem(" System Reset",UI_ITEM_ONCE_FUNCTION,0,&s_reset_item,page,0,system_reset_selected);
 }
 
 void System_AddStatisticsItems(ui_page_t *page) {
     if(!page)return;
-    s_vdda_data.name = " VDDA V";
+    s_vdda_data.name = " Supply Voltage V";
     s_vdda_data.ptr = &s_vdda_cv;
     s_vdda_data.dataType = UI_DATA_FLOAT;
     s_vdda_data.decimals = 2u;
     s_vdda_data.actionType = UI_DATA_ACTION_RO;
     s_vdda_element.data=&s_vdda_data;
     Create_element(&s_vdda_item,&s_vdda_element);
-    AddItem(" VDDA V", UI_ITEM_DATA, 0, &s_vdda_item, page, 0, 0);
-    s_temp_data.name = " Die Temp °C";
+    AddItem(" Supply Voltage V", UI_ITEM_DATA, 0, &s_vdda_item, page, 0, 0);
+    s_temp_data.name = " MCU Temp°C";
     s_temp_data.ptr = &s_die_temp_c10;
     s_temp_data.dataType=UI_DATA_FLOAT;s_temp_data.actionType=UI_DATA_ACTION_RO;
     s_temp_data.decimals=1u;
     s_temp_element.data=&s_temp_data;
     Create_element(&s_temp_item,&s_temp_element);
-    AddItem(" Die Temp °C", UI_ITEM_DATA, 0, &s_temp_item, page, 0, 0);
+    AddItem(" MCU Temp°C", UI_ITEM_DATA, 0, &s_temp_item, page, 0, 0);
 }
 
 void System_Poll(void) {

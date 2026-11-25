@@ -920,6 +920,11 @@
               <FilePath>../APP/functions/powerbank_app.c</FilePath>
             </File>
             <File>
+              <FileName>sos_app.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/functions/sos_app.c</FilePath>
+            </File>
+            <File>
               <FileName>radio_app.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/functions/radio_app.c</FilePath>

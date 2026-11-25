@@ -11,5 +11,6 @@
 #include "powerbank_app.h"
 #include "radio_app.h"
 #include "tools_motion_app.h"
+#include "sos_app.h"
 
 #endif

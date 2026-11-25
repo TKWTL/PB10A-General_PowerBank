@@ -450,7 +450,7 @@ void SC7A20Algo_AddWakeSettingsItems(ui_page_t *page) {
 }
 
 void SC7A20Algo_AddStatisticsItems(ui_page_t *page) {
-    static const char *const names[3]={" Acc X mg"," Acc Y mg"," Acc Z mg"};
+    static const char *const names[3] = {" Acceleration X mg", " Acceleration Y mg", " Acceleration Z mg"};
     uint8_t i;
     if(!page)return;
     for(i=0u;i<3u;i++) {

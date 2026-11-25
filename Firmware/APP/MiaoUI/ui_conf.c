@@ -27,7 +27,7 @@ static ui_item_t s_power_limit_back, s_ports_back, s_protocol1_back, s_protocol2
 static ui_item_t s_display_item,s_sleep_wake_item,s_system_item,s_display_back,s_sleep_wake_back,s_system_back;
 static ui_item_t s_stat_power_item, s_stat_battery_item, s_stat_sensors_item, s_stat_fault_item, s_stat_system_item;
 static ui_item_t s_stat_power_back, s_stat_battery_back, s_stat_sensors_back, s_stat_fault_back, s_stat_system_back;
-static ui_item_t s_arkanoid, s_tetris, s_pacman, s_bomber, s_invaders, s_scanner, s_leveler, s_accel_cal;
+static ui_item_t s_arkanoid, s_tetris, s_pacman, s_bomber, s_invaders, s_scanner, s_leveler, s_accel_cal, s_sos;
 static ui_item_t s_sleep_options_item,s_sleep_options_back,s_sleep_items[9];
 static ui_data_t s_sleep_data[9];
 static ui_element_t s_sleep_elements[9];
@@ -90,7 +90,7 @@ void Create_Parameter(ui_t *ui) {
 
 void Create_Text(ui_t *ui) {
     (void)ui;
-    s_about_text.ptr="  PB10A Power Bank\n  100W PD/PPS/UFCS\nhttps://github.com/TKWTL/PB10A-General_PowerBank";
+    s_about_text.ptr = "  PB10A Power Bank\n  PD/PPS/UFCS\nhttps://github.com/TKWTL/PB10A-General_PowerBank";
     s_about_text.font=UI_FONT;s_about_text.fontHight=UI_FONT_HIGHT;
     s_about_text.fontWidth=UI_FONT_WIDTH;
     s_about_el.text = &s_about_text;
@@ -133,19 +133,21 @@ void Create_MenuTree(ui_t *ui) {
             &s_accel_cal,&s_tools,0,Motion_CalibrationRun);
         UI_SetLeaveHook(&s_accel_cal,Motion_CalibrationOnLeave);
         AddItem("-I2C Scanner",UI_ITEM_WORD,img_scan,&s_scanner,&s_tools,0,i2c_Scanner);
+        AddItem("-SOS Blink",UI_ITEM_WORD,img_sos,&s_sos,&s_tools,0,SOS_AppRun);
+        UI_SetLeaveHook(&s_sos,SOS_AppOnLeave);
 
     AddPage("[Settings]",&s_settings,UI_PAGE_TEXT,&s_home);
         add_return(&s_settings,&s_home,&s_settings_back,0);
-        AddItem("-PowerLimit",UI_ITEM_PARENTS,0,&s_power_limit_item,&s_settings,&s_power_limit,0);
+        AddItem("-Power Limits",UI_ITEM_PARENTS,0,&s_power_limit_item,&s_settings,&s_power_limit,0);
         AddItem("-Ports",UI_ITEM_PARENTS,0,&s_ports_item,&s_settings,&s_ports,0);
         AddItem("-Protocol#1",UI_ITEM_PARENTS,0,&s_protocol1_item,&s_settings,&s_protocol1,0);
         AddItem("-Protocol#2",UI_ITEM_PARENTS,0,&s_protocol2_item,&s_settings,&s_protocol2,0);
         AddItem("-Display",UI_ITEM_PARENTS,0,&s_display_item,&s_settings,&s_display,0);
-        AddItem("-Sleep&Wake",UI_ITEM_PARENTS,0,&s_sleep_wake_item,&s_settings,&s_sleep_wake,0);
+        AddItem("-Sleep & Wake",UI_ITEM_PARENTS,0,&s_sleep_wake_item,&s_settings,&s_sleep_wake,0);
         Add_TimeSet_Items(&s_settings);
         AddItem("-System",UI_ITEM_PARENTS,0,&s_system_item,&s_settings,&s_sys,0);
 
-        AddPage("[PowerLimit]",&s_power_limit,UI_PAGE_TEXT,&s_settings);
+        AddPage("[Power Limits]",&s_power_limit,UI_PAGE_TEXT,&s_settings);
             add_return(&s_power_limit,&s_settings,&s_power_limit_back,0);
             PowerAlgo_AddPowerLimitItems(&s_power_limit);
 
@@ -165,7 +167,7 @@ void Create_MenuTree(ui_t *ui) {
             add_return(&s_display,&s_settings,&s_display_back,0);
             Add_Disp_Items(&s_display);
 
-        AddPage("[Sleep&Wake]",&s_sleep_wake,UI_PAGE_TEXT,&s_settings);
+        AddPage("[Sleep & Wake]",&s_sleep_wake,UI_PAGE_TEXT,&s_settings);
             add_return(&s_sleep_wake,&s_settings,&s_sleep_wake_back,0);
             add_sleep_options(&s_sleep_wake);
             SC7A20Algo_AddWakeSettingsItems(&s_sleep_wake);
@@ -182,6 +184,7 @@ void Create_MenuTree(ui_t *ui) {
         AddItem("-Sensors",UI_ITEM_PARENTS,0,&s_stat_sensors_item,&s_stats,&s_stat_sensors,0);
         AddItem("-Fault",UI_ITEM_PARENTS,0,&s_stat_fault_item,&s_stats,&s_stat_fault,0);
         AddItem("-System",UI_ITEM_PARENTS,0,&s_stat_system_item,&s_stats,&s_stat_system,0);
+        AddItem("-About", UI_ITEM_WORD, 0, &s_about, &s_stats, 0, 0);
 
         AddPage("[Power]",&s_stat_power,UI_PAGE_TEXT,&s_stats);
             add_return(&s_stat_power,&s_stats,&s_stat_power_back,0);
@@ -204,7 +207,6 @@ void Create_MenuTree(ui_t *ui) {
         AddPage("[System]",&s_stat_system,UI_PAGE_TEXT,&s_stats);
             add_return(&s_stat_system,&s_stats,&s_stat_system_back,0);
             System_AddStatisticsItems(&s_stat_system);
-            AddItem("-About", UI_ITEM_WORD, 0, &s_about, &s_stat_system, 0, 0);
 }
 // clang-format on
 

@@ -51,12 +51,12 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 
 ### Home menu
 
-Powerbank, Radio, Game, Tools, Settings and Statistics appear in that order. Statistics contains Power, Battery, Sensors and System. Open About from Statistics → System. After reset the firmware first opens the Powerbank dashboard. Short or long CONF opens the home menu from the dashboard.
+Powerbank, Radio, Game, Tools, Settings and Statistics appear in that order. Statistics contains Power, Battery, Sensors, Fault, System and About. After reset the firmware first opens the Powerbank dashboard. Short or long CONF opens the home menu from the dashboard.
 
-Settings lists PowerLimit, Ports, Protocol#1 and Protocol#2 before Display.
+Settings lists Power Limits, Ports, Protocol#1 and Protocol#2 before Display.
 They expose 32 RAM-only settings and actions derived from PB02B.
 
-- PowerLimit: output 5–105 W, input 5–100 W, both in 5 W steps.
+- Power Limits: experimental input/output requests 5–120 W, both in 5 W steps. The SW6306V register manual specifies 100 W; actual power remains hardware/protocol-limited. A clamped register readback between 100 W and the requested setting is remembered for reset detection.
 - Ports: C1 input/output and A1 output fast-charge switches, BUS Idle
   Timeout (Off by default), Idle Threshold (0–100 mA, 4 mA steps, default 12),
   Aux-A Enable (on by default), and Aux Idle Current (10–100 mA, default 50).
@@ -122,15 +122,35 @@ it. A debounced press changes a level immediately, then repeats every
 80 ms while held. A RIGHT press that starts from off is limited to
 level 2 until a new press. LEFT reaches zero without a press limit.
 TIM1 CH4 drives PA11 at 62.5 kHz (64 MHz timer clock, PSC 0,
-ARR 1023). Levels 1–32 use squared compare values capped at 1023
-and the existing 160 ms ramp. Level 1 uses compare 1.
-The SOS API is available to firmware with no dashboard shortcut.
+ARR 1023). Manual requests have 19 levels with the existing square-law
+PWM and 160 ms ramp; the display uses the actual limited level / 19.
+The physical level 32 is reserved for SOS.
+The first continuous RIGHT press from off remains limited to level 2.
 
-WLED and Aux-A use fresh SW6306 battery voltage, capacity, NTC and
-fault status. They stop on confirmed cutoff or lost protection telemetry.
-The temperature lockout trips at 60 °C and clears at 45 °C.
-For thermal imaging, WLED_ENABLE_THERMAL_DERATING defaults to 0 in
-wled_algo.h. Set it to 1 to restore the PB02B derating table.
+At 30 °C ambient, hardware measurements at levels 8/16/24 are
+1.346/3.208/7.023 W with 58/75/125 °C hotspots. Interpolate power
+by PWM compare and hotspot rise by power. Because MCU/NTC follow
+ambient rather than the hotspot, the default continuous cap follows
+the estimated 70 °C steady-state envelope (level 14 at 30 °C), not
+a fabricated transient model. A calibrated hotspot input can instead
+be supplied through WLED_READ_HOTSPOT_C10. Derating lowers the cap
+immediately, restores at most one level per 5 s with 2 °C margin,
+and a predicted/measured 78 °C cutoff clears the request (E30).
+It never automatically turns the LED back on.
+The independent common battery NTC 60 °C/45 °C cutoff is unchanged.
+
+Tools → SOS Blink: CONF starts/stops, long CONF returns, and leaving
+the tool stops SOS without disabling unrelated manual lighting.
+SOS uses level 32, 100 ms dots and 300 ms dashes, 1.5 s nominal
+on-time in a 2.7 s transmission. A provisional WLED_SOS_PEAK_MW
+of 15000 and WLED_SOS_AVG_MW of 2500 yield a 9.54 s minimum
+cycle, including 90 ms of nominal service-edge margin. Lower
+allowed average power extends cooldown; a thermal pause holds the
+external-load request but drives PWM low. A meter interruption
+or restart cannot skip the previous group's budgeted cooling interval.
+The full-power pulses are experimental by user choice. Peak power,
+transient thermal response and the <80 °C hotspot limit require
+actual bench verification; the steady-state model does not prove them.
 
 The SW6306 owner reuses a live C1/A1 path or requests a shared
 synthetic A2 insertion, confirmed by rereading port status. A2 has
@@ -164,10 +184,10 @@ Statistics → Battery shows charge percentage, pack voltage in volts,
 full and remaining energy in Wh, and Batt Temp °C from the SW6306 NTC to one
 decimal place. The SW6306 service supplies the readings from its ADC, status
 and capacity caches. Unavailable readings display as `--`.
-SOH %, EFC and Learn are appended to this page.
+State of Health %, Equivalent Full Cycles and Capacity Learning are appended to this page.
 
-Statistics → System shows VDDA in volts to two decimal places, die temperature
-to one decimal place and About. Die temperature uses VREFINT-corrected ADC
+Statistics → System shows Supply Voltage V to two decimal places and MCU Temp°C
+to one decimal place. MCU temperature uses VREFINT-corrected ADC
 rank 3 and STM32G0 factory TS_CAL1/TS_CAL2.
 
 The reproduced G0 calibration failure (`hadc1.State=0x13`,
@@ -210,7 +230,7 @@ counting a persistent event again. Fault bits are acknowledged here;
 capacity learning and scene changes have separate consumers. N01
 (capacity learned) does not increment the fault count. Events coalesced by the chip cannot be counted separately.
 
-AUX undervoltage/short cutoff reports E20; shared meter startup timeout
+AUX undervoltage/short cutoff reports E20; WLED thermal-envelope cutoff reports E30; shared meter startup timeout
 reports E40; battery protection uses E01/E04/E41 or the corresponding
 SW6306 battery fault code. E50 reports confirmed loss of SW6306 initialization
 or repeated initialization failure. Duplicate software notices from the
@@ -276,7 +296,7 @@ a cable plugged into an inactive A port may not be detectable.
 
 **Verify hardware configuration before connecting real loads:** the
 current SW6306 BSP initialization includes 5S/4.2V cells,
-5 mΩ battery shunt scaling, 100W input and experimental 105W output configuration following PB10A changes. These are existing driver
+5 mΩ battery shunt scaling and experimental 120 W input/output requests following PB10A changes. The protocol current limits and battery current limits are unchanged. These are existing driver
 defaults, not independently confirmed PB10A battery/hardware specs.
 
 ### Key input (Collar-Radio Buttons DAS)

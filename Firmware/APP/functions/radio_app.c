@@ -95,9 +95,9 @@ void Radio_AppDraw(ui_t *ui) {
     /* Collar-Radio radio.c: every top status widget uses y-slide. */
     Disp_DrawXBMP(1u,(uint16_t)(1-slide),7u,9u,s_signal_icon);
     (void)mini_snprintf(buf,sizeof(buf),":%u",(unsigned)s_snapshot.rssi);
-    Disp_DrawStr(8u,(uint16_t)(10-slide),buf);
-    Disp_DrawStr(48u,(uint16_t)(10-slide),
-        LL_GPIO_IsInputPinSet(MIC_INDET_GPIO_Port,MIC_INDET_Pin)?"OFF":"ON");
+    Disp_DrawStr(16u, (uint16_t)(10 - slide), buf);
+    Disp_DrawStr(44u, (uint16_t)(10 - slide),
+                 LL_GPIO_IsInputPinSet(MIC_INDET_GPIO_Port, MIC_INDET_Pin) ? "OFF" : "ON");
     Disp_DrawXBMP(69u,(uint16_t)(1-slide),6u,9u,s_speaker_icon);
     (void)mini_snprintf(buf,sizeof(buf),":%u%%",
         (unsigned)(((uint16_t)s_snapshot.volume+1u)*100u/16u));
