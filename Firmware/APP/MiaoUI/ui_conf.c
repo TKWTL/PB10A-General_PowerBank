@@ -146,15 +146,19 @@ void Create_MenuTree(ui_t *ui) {
 
         AddPage("[PowerLimit]",&s_power_limit,UI_PAGE_TEXT,&s_settings);
             add_return(&s_power_limit,&s_settings,&s_power_limit_back,0);
+            PowerAlgo_AddPowerLimitItems(&s_power_limit);
 
         AddPage("[Ports]",&s_ports,UI_PAGE_TEXT,&s_settings);
             add_return(&s_ports,&s_settings,&s_ports_back,0);
+            PowerAlgo_AddPortItems(&s_ports);
 
         AddPage("[Protocol#1]",&s_protocol1,UI_PAGE_TEXT,&s_settings);
             add_return(&s_protocol1,&s_settings,&s_protocol1_back,0);
+            PowerAlgo_AddProtocolItems(&s_protocol1,1u);
 
         AddPage("[Protocol#2]",&s_protocol2,UI_PAGE_TEXT,&s_settings);
             add_return(&s_protocol2,&s_settings,&s_protocol2_back,0);
+            PowerAlgo_AddProtocolItems(&s_protocol2,2u);
 
         AddPage("[Display]",&s_display,UI_PAGE_TEXT,&s_settings);
             add_return(&s_display,&s_settings,&s_display_back,0);

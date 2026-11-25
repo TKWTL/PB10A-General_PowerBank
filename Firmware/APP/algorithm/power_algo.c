@@ -56,6 +56,220 @@ static uint8_t s_radio_battery_adc_ok,s_radio_battery_pct;
 static uint8_t s_bg_radio_reads_allowed;
 static uint16_t s_radio_battery_mv;
 
+/************************* Powerbank RAM settings *************************/
+typedef enum {
+    CFG_OUTPUT,
+    CFG_INPUT,
+    CFG_C1_INPUT,
+    CFG_C1_OUTPUT,
+    CFG_A1_OUTPUT,
+    CFG_IDLE_TIMEOUT,
+    CFG_IDLE_THRESHOLD,
+    CFG_AUX_ENABLE,
+    CFG_AUX_THRESHOLD,
+    CFG_PD_OUT,
+    CFG_PD_IN,
+    CFG_PD_SCP,
+    CFG_PD_VOOC,
+    CFG_PD_UFCS,
+    CFG_PPS_BROADCAST,
+    CFG_PPS_11,
+    CFG_PPS_21,
+    CFG_UFCS_BROADCAST,
+    CFG_UFCS_OUT,
+    CFG_UFCS_IN,
+    CFG_QC,
+    CFG_FCP,
+    CFG_AFC_OUT,
+    CFG_AFC_IN,
+    CFG_HVSCP,
+    CFG_LVSCP,
+    CFG_SCP_IN,
+    CFG_PE,
+    CFG_SFCP,
+    CFG_VOOC_OUT,
+    CFG_VOOC_IN,
+    CFG_SVOOC,
+    CFG_COUNT
+} power_setting_t;
+
+#define CFG_BIT(i) (UINT32_C(1) << (i))
+#define CFG_POWER_MASK (CFG_BIT(CFG_OUTPUT) | CFG_BIT(CFG_INPUT))
+#define CFG_BROADCAST_MASK (CFG_BIT(CFG_PPS_BROADCAST) | CFG_BIT(CFG_UFCS_BROADCAST))
+#define CFG_YIELD_MASK (CFG_BIT(CFG_PD_SCP) | CFG_BIT(CFG_PD_VOOC) | CFG_BIT(CFG_PD_UFCS))
+#define CFG_SCP_MASK (CFG_BIT(CFG_HVSCP) | CFG_BIT(CFG_LVSCP))
+#define CFG_PORT_MASK (CFG_BIT(CFG_C1_INPUT) | CFG_BIT(CFG_C1_OUTPUT) | CFG_BIT(CFG_A1_OUTPUT))
+#define CFG_PROTOCOL_MASK ((UINT32_MAX << CFG_PD_OUT) & ~CFG_BROADCAST_MASK)
+#define CFG_CHIP_SWITCH_MASK (CFG_PORT_MASK | CFG_PROTOCOL_MASK)
+_Static_assert(CFG_COUNT == 32, "settings command mask covers one bit per item");
+
+typedef enum {
+    SET_NUMBER,
+    SET_ENUM,
+    SET_AUX_SWITCH,
+    SET_PORT,
+    SET_PROTOCOL,
+    SET_PD_YIELD,
+    SET_PPS,
+    SET_SCP,
+    SET_BROADCAST
+} setting_kind_t;
+
+typedef struct {
+    const char *name;
+    uint8_t kind, arg0, arg1;
+} setting_desc_t;
+
+#define PROTO(name, proto, dir) {name, SET_PROTOCOL, SW6306_PROTO_##proto, SW6306_PROTO_DIR_##dir}
+static const setting_desc_t s_settings[CFG_COUNT] = {
+    [CFG_OUTPUT] = {" Output W", SET_NUMBER},
+    [CFG_INPUT] = {" Input W", SET_NUMBER},
+    [CFG_C1_INPUT] = {" C1 Input Fast", SET_PORT, SW6306_PORT_C1, SW6306_PORT_DIR_IN},
+    [CFG_C1_OUTPUT] = {" C1 Output Fast", SET_PORT, SW6306_PORT_C1, SW6306_PORT_DIR_OUT},
+    [CFG_A1_OUTPUT] = {" A1 Output Fast", SET_PORT, SW6306_PORT_A1, SW6306_PORT_DIR_OUT},
+    [CFG_IDLE_TIMEOUT] = {" Idle Timeout", SET_ENUM},
+    [CFG_IDLE_THRESHOLD] = {" Idle Threshold", SET_NUMBER},
+    [CFG_AUX_ENABLE] = {" Aux-A Enable", SET_AUX_SWITCH},
+    [CFG_AUX_THRESHOLD] = {" Aux Idle Current", SET_NUMBER},
+    [CFG_PD_OUT] = PROTO(" PD out", PD, SOURCE),
+    [CFG_PD_IN] = PROTO(" PD in", PD, SINK),
+    [CFG_PD_SCP] = {" PD to SCP", SET_PD_YIELD},
+    [CFG_PD_VOOC] = {" PD to VOOC", SET_PD_YIELD},
+    [CFG_PD_UFCS] = {" PD to UFCS", SET_PD_YIELD},
+    [CFG_PPS_BROADCAST] = {" PPS Broadcast", SET_BROADCAST},
+    [CFG_PPS_11] = {" 11V PPS", SET_PPS, SW6306_PPS_1},
+    [CFG_PPS_21] = {" 21V PPS", SET_PPS, SW6306_PPS_3},
+    [CFG_UFCS_BROADCAST] = {" UFCS Broadcast", SET_BROADCAST},
+    [CFG_UFCS_OUT] = PROTO(" UFCS out", UFCS, SOURCE),
+    [CFG_UFCS_IN] = PROTO(" UFCS in", UFCS, SINK),
+    [CFG_QC] = PROTO(" QC", QC, SOURCE),
+    [CFG_FCP] = PROTO(" FCP", FCP, SOURCE),
+    [CFG_AFC_OUT] = PROTO(" AFC out", AFC, SOURCE),
+    [CFG_AFC_IN] = PROTO(" AFC in", AFC, SINK),
+    [CFG_HVSCP] = {" HVSCP out", SET_SCP},
+    [CFG_LVSCP] = {" LVSCP out", SET_SCP},
+    [CFG_SCP_IN] = PROTO(" SCP in", SCP, SINK),
+    [CFG_PE] = PROTO(" PE", PE, SOURCE),
+    [CFG_SFCP] = PROTO(" SFCP", SFCP, SOURCE),
+    [CFG_VOOC_OUT] = PROTO(" VOOC out", VOOC, SOURCE),
+    [CFG_VOOC_IN] = PROTO(" VOOC in", VOOC, SINK),
+    [CFG_SVOOC] = PROTO(" SVOOC", SVOOC, SOURCE),
+};
+#undef PROTO
+
+static const unsigned s_idle_seconds[] = {5u, 10u, 30u, 60u, 300u, 900u, 1800u};
+static const char *const s_idle_labels[] = {"5s", "10s", "30s", "1min", "5min", "15min", "30min", "Off"};
+static int s_output_w = SW6306_OUTPUT_POWER_MAX, s_input_w = SW6306_INPUT_POWER_MAX;
+static uint8_t s_output_requested = SW6306_OUTPUT_POWER_MAX, s_input_requested = SW6306_INPUT_POWER_MAX;
+static int s_idle_timeout = 7, s_idle_threshold = 12, s_aux_threshold = 50;
+static uint8_t s_setting_switch[CFG_COUNT] = {[CFG_AUX_ENABLE] = 1u};
+#define s_aux_allowed (s_setting_switch[CFG_AUX_ENABLE])
+
+static ui_item_t s_setting_items[CFG_COUNT];
+static ui_element_t s_setting_elements[CFG_COUNT - 2u];
+static ui_data_t s_setting_data[CFG_COUNT - 2u];
+static unsigned s_setting_data_count;
+static uint32_t s_config_dirty;
+static uint8_t s_idle_running, s_idle_fired;
+static uint32_t s_idle_since;
+static uint8_t s_bus_force_off;
+
+static void idle_reset(void) {
+    s_idle_running = s_idle_fired = 0u;
+}
+
+static void setting_changed(ui_t *ui) {
+    unsigned index = (unsigned)(ui->nowItem - s_setting_items);
+    if (index == CFG_AUX_THRESHOLD) {
+        PowerAlgo_AuxA_SetAutoOffCurrent((unsigned)s_aux_threshold);
+    } else if (index == CFG_IDLE_TIMEOUT || index == CFG_IDLE_THRESHOLD) {
+        idle_reset();
+    } else {
+        if (index == CFG_OUTPUT)
+            s_output_requested = (uint8_t)s_output_w;
+        else if (index == CFG_INPUT)
+            s_input_requested = (uint8_t)s_input_w;
+        s_config_dirty |= CFG_BIT(index);
+    }
+}
+
+static void add_settings(ui_page_t *page, unsigned first, unsigned end) {
+    for (unsigned i = first; i < end; ++i) {
+        const setting_desc_t *desc = &s_settings[i];
+        if (desc->kind == SET_BROADCAST) {
+            AddItem(desc->name, UI_ITEM_ONCE_FUNCTION, 0, &s_setting_items[i], page, 0, setting_changed);
+            continue;
+        }
+
+        unsigned slot = s_setting_data_count++;
+        ui_data_t *data = &s_setting_data[slot];
+        data->name = desc->name;
+        data->actionType = UI_DATA_ACTION_RW;
+        data->function = i == CFG_AUX_ENABLE ? NULL : setting_changed;
+        data->functionType = UI_DATA_FUNCTION_EXIT_EXECUTE;
+        if (desc->kind == SET_NUMBER || desc->kind == SET_ENUM) {
+            data->dataType = UI_DATA_INT;
+            switch (i) {
+            case CFG_OUTPUT:
+            case CFG_INPUT:
+                data->ptr = i == CFG_OUTPUT ? &s_output_w : &s_input_w;
+                data->min = 5;
+                data->max = i == CFG_OUTPUT ? SW6306_OUTPUT_POWER_MAX : SW6306_INPUT_POWER_MAX;
+                data->step = 5;
+                break;
+            case CFG_IDLE_TIMEOUT:
+                data->name = "Timeout";
+                data->ptr = &s_idle_timeout;
+                data->dataType = UI_DATA_ENUM;
+                data->options = s_idle_labels;
+                data->max = 7;
+                data->step = 1;
+                break;
+            case CFG_IDLE_THRESHOLD:
+                data->name = "Idle mA";
+                data->ptr = &s_idle_threshold;
+                data->max = 100;
+                data->step = 4;
+                break;
+            case CFG_AUX_THRESHOLD:
+                data->name = "Aux Idle mA";
+                data->ptr = &s_aux_threshold;
+                data->min = 10;
+                data->max = 100;
+                data->step = 10;
+                break;
+            default:
+                break;
+            }
+        } else {
+            data->dataType = UI_DATA_SWITCH;
+            data->ptr = &s_setting_switch[i];
+            s_setting_switch[i] = 1u;
+        }
+        if (i == CFG_IDLE_THRESHOLD || i == CFG_IDLE_TIMEOUT || i == CFG_AUX_THRESHOLD)
+            data->functionType = UI_DATA_FUNCTION_STEP_EXECUTE;
+        s_setting_elements[slot].data = data;
+        Create_element(&s_setting_items[i], &s_setting_elements[slot]);
+        AddItem(desc->name, UI_ITEM_DATA, 0, &s_setting_items[i], page, 0, 0);
+    }
+}
+
+void PowerAlgo_AddPowerLimitItems(ui_page_t *page) {
+    add_settings(page, CFG_OUTPUT, CFG_C1_INPUT);
+}
+
+void PowerAlgo_AddPortItems(ui_page_t *page) {
+    add_settings(page, CFG_C1_INPUT, CFG_PD_OUT);
+}
+
+void PowerAlgo_AddProtocolItems(ui_page_t *page, uint8_t group) {
+    if (group == 1u)
+        add_settings(page, CFG_PD_OUT, CFG_QC);
+    else
+        add_settings(page, CFG_QC, CFG_COUNT);
+}
+
+
 /************************ WLED / Aux-A common policy ************************/
 #define EXT_LOAD_PM_BLOCK 0x40u
 #define EXT_BATTERY_MIN_MV 14000u /* Five cells x configured 2.8 V UVLO. */
@@ -136,7 +350,7 @@ static uint8_t meter_ports_fresh(uint32_t now) {
 }
 
 static uint8_t meter_ready(uint32_t now) {
-    return meter_ports_fresh(now) &&
+    return !s_bus_force_off && meter_ports_fresh(now) &&
            (s_meter_c_path || (s_meter_a1_on && (s_meter_a1 == A1_FREE ||
                                                  (s_meter_a1 == A1_METER_OWNED && s_meter_auto_off_held))));
 }
@@ -147,6 +361,7 @@ uint8_t PowerAlgo_ExtLoadRequest(uint8_t load) {
     if (ext_inhibit(Millis()) & ~EXT_INHIBIT_DATA)
         return 0u;
     s_ext_requested |= load;
+    idle_reset();
     pm_api_set_sleep_block(EXT_LOAD_PM_BLOCK, 1u);
     return 1u;
 }
@@ -279,6 +494,7 @@ static void ext_cache_status(void) {
 
 static void sw6306_bus_read_failed(void) {
     s_cycle_ok = s_bus_display_valid = s_monitor.eta_valid = 0u;
+    idle_reset();
 }
 
 static void sw6306_display_read_failed(void) {
@@ -400,6 +616,8 @@ static pm_hook_result_t sw_resume(void *ctx) {
     if(PT_SCHEDULE(result))return PM_HOOK_PENDING;
     s_sw_resume_started=0u;
     s_sw_low_power=0u;
+    s_meter_ports_valid = 0u;
+    idle_reset();
     s_idle_verified=0u;
     s_monitor.valid=0u;
     s_monitor.capacity_valid = 0u;
@@ -499,7 +717,7 @@ static void adc_batch_begin(uint32_t now) {
 }
 
 static void aux_enable(void) {
-    if (s_aux_state != AUX_STATE_OFF || !s_adc_initialized ||
+    if (!s_aux_allowed || s_aux_state != AUX_STATE_OFF || !s_adc_initialized ||
         !PowerAlgo_ExtLoadRequest(EXT_LOAD_AUX))
         return;
     s_aux_state = AUX_STATE_WAIT_METER;
@@ -520,6 +738,8 @@ static void aux_start(void) {
 }
 
 void PowerAlgo_AuxA_Request(aux_command_t command) {
+    if (!s_aux_allowed)
+        return;
     s_aux_command = command;
     s_aux_command_pending = 1u;
 }
@@ -530,19 +750,26 @@ void PowerAlgo_AuxA_SetAutoOffCurrent(unsigned threshold_ma) {
 }
 
 void PowerAlgo_AuxA_OnEvents(uint8_t events) {
-    if ((events & PM_WAKE_SUB_INDET) && !s_aux_latched) {
+    if (s_aux_allowed && (events & PM_WAKE_SUB_INDET) && !s_aux_latched) {
         s_aux_edge_at = Millis();
         s_aux_candidate = 1u;
     }
 }
 
 uint8_t PowerAlgo_AuxA_TakeInserted(void) {
-    uint8_t inserted = s_aux_inserted;
+    uint8_t inserted = s_aux_allowed && s_aux_inserted;
     s_aux_inserted = 0u;
     return inserted;
 }
 
 static void aux_service(uint32_t now) {
+    if (!s_aux_allowed) {
+        s_aux_candidate = s_aux_command_pending = s_aux_inserted = 0u;
+        s_aux_latched = !LL_GPIO_IsInputPinSet(SUB_INDET_GPIO_Port, SUB_INDET_Pin);
+        if (s_aux_state != AUX_STATE_OFF)
+            aux_disable();
+        return;
+    }
     if (LL_GPIO_IsInputPinSet(SUB_INDET_GPIO_Port, SUB_INDET_Pin)) {
         s_aux_candidate = 0u;
         s_aux_latched = 0u;
@@ -587,6 +814,7 @@ static void aux_service(uint32_t now) {
 static pm_hook_result_t ext_load_prepare(void *ctx) {
     (void)ctx;
     if (!s_ext_pm_closing) {
+        idle_reset();
         s_ext_pm_closing = 1u;
         s_ext_pm_at = Millis();
         WLED_AlgoStop();
@@ -1037,6 +1265,115 @@ THRD_DECLARE(meter_step) {
     THRD_END;
 }
 
+/* Only the SW6306 owner consumes dirty bits. One register operation or
+ * power transaction per service slot leaves the monitor and ADC responsive. */
+static uint8_t config_ports_idle(uint32_t now) {
+    return s_idle_verified && meter_ports_fresh(now) && SW6306_TransportPortsIdle() &&
+           !ext_loads() && s_meter_a1 == A1_FREE && !s_meter_auto_off_dirty;
+}
+
+static uint32_t config_eligible(uint32_t now) {
+    uint32_t mask = CFG_POWER_MASK | CFG_BROADCAST_MASK;
+    if (config_ports_idle(now))
+        mask |= CFG_CHIP_SWITCH_MASK;
+    return s_config_dirty & mask;
+}
+
+static void config_restore_switches(void) {
+    /* Init writes the ON baseline. Replay any user-disabled switches once
+     * the ports are idle again. Pending UI requests survive reinit. */
+    for (unsigned i = CFG_C1_INPUT; i < CFG_COUNT; ++i) {
+        uint32_t bit = CFG_BIT(i);
+        if ((CFG_CHIP_SWITCH_MASK & bit) && !s_setting_switch[i])
+            s_config_dirty |= bit;
+    }
+}
+
+THRD_DECLARE(config_step) {
+    static uint32_t selected;
+    static unsigned index;
+    static const setting_desc_t *desc;
+    static uint8_t value, value2, value3;
+    THRD_BEGIN;
+
+    selected = config_eligible(Millis());
+    if (!selected)
+        PT_EXIT(pt);
+    /* Power and explicit broadcasts are independent of the deferred switches. */
+    if (selected & (CFG_POWER_MASK | CFG_BROADCAST_MASK))
+        selected &= CFG_POWER_MASK | CFG_BROADCAST_MASK;
+    for (index = 0u; !(selected & CFG_BIT(index)); ++index) {
+    }
+    selected = CFG_BIT(index);
+    desc = &s_settings[index];
+    value = s_setting_switch[index];
+    if (desc->kind == SET_PD_YIELD) {
+        selected = CFG_YIELD_MASK;
+        value = s_setting_switch[CFG_PD_SCP];
+        value2 = s_setting_switch[CFG_PD_VOOC];
+        value3 = s_setting_switch[CFG_PD_UFCS];
+    } else if (desc->kind == SET_SCP) {
+        selected = CFG_SCP_MASK;
+        value = s_setting_switch[CFG_HVSCP];
+        value2 = s_setting_switch[CFG_LVSCP];
+    } else if (index == CFG_OUTPUT) {
+        value = s_output_requested;
+    } else if (index == CFG_INPUT) {
+        value = s_input_requested;
+    }
+
+    /* Snapshot before yielding; a new UI change sets its bit again. */
+    s_config_dirty &= ~selected;
+    SW6306_OperationReset();
+    /* Protothreads resume through an enclosing switch: keep all
+     * wait points outside any nested switch. */
+    if (desc->kind == SET_PORT) {
+        THRD_SPAWN_ARGS(SW6306_PortFastChargeSet, (sw6306_port_t)desc->arg0,
+                        (sw6306_port_dir_t)desc->arg1, value);
+    } else if (desc->kind == SET_PROTOCOL) {
+        THRD_SPAWN_ARGS(SW6306_ProtocolEnable, (sw6306_proto_t)desc->arg0,
+                        (sw6306_proto_dir_t)desc->arg1, value);
+    } else if (desc->kind == SET_PD_YIELD) {
+        THRD_SPAWN_ARGS(SW6306_PDSourceYieldSet, value, value2, value3);
+    } else if (desc->kind == SET_PPS) {
+        THRD_SPAWN_ARGS(SW6306_PPSEnable, (sw6306_pps_t)desc->arg0, value);
+    } else if (desc->kind == SET_SCP) {
+        THRD_SPAWN_ARGS(SW6306_SCPSourceSet, value, value2);
+    } else if (index == CFG_OUTPUT) {
+        THRD_SPAWN_ARGS(SW6306_SetMaxOutputPower, value);
+    } else if (index == CFG_INPUT) {
+        THRD_SPAWN_ARGS(SW6306_SetMaxInputPower, value);
+    } else if (index == CFG_PPS_BROADCAST) {
+        THRD_SPAWN_NOARG(SW6306_PPSBroadcast);
+    } else if (index == CFG_UFCS_BROADCAST) {
+        THRD_SPAWN_NOARG(SW6306_UFCSBroadcast);
+    }
+    if (!SW6306_LastOperationOK())
+        s_config_dirty |= selected;
+    THRD_END;
+}
+
+static uint8_t bus_idle_due(uint32_t now) {
+    if ((unsigned)s_idle_timeout >= sizeof(s_idle_seconds) / sizeof(s_idle_seconds[0]) ||
+        !SW6306_IsInitialized() || !s_cycle_ok || !s_adc_fresh || !s_status_fresh ||
+        !ext_sample_fresh(EXT_ADC, now) || !ext_sample_fresh(EXT_STATUS, now) ||
+        !meter_ports_fresh(now) || SW6306_IsCharging() || SW6306_IsLowCurrentMode() ||
+        ext_loads() || s_meter_a1 != A1_FREE || s_meter_auto_off_dirty ||
+        (!SW6306_IsPortC1ON() && !SW6306_IsPortA1ON()) ||
+        s_ext_ibus_ma > (unsigned)s_idle_threshold) {
+        idle_reset();
+        return 0u;
+    }
+    if (s_idle_fired)
+        return 0u;
+    if (!s_idle_running) {
+        s_idle_running = 1u;
+        s_idle_since = now;
+        return 0u;
+    }
+    return (uint32_t)(now - s_idle_since) >= s_idle_seconds[s_idle_timeout] * 1000u;
+}
+
 /************************ SW6306 定期采样与缓存 ************************/
 /* One actor owns the SW6306 PT call tree. Every I2C operation now
  * submits through HAL IRQ and yields only this coroutine while waiting.
@@ -1094,6 +1431,8 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             s_status_fresh=0u;
             s_cycle_ok=1u;
             s_monitor.initialized=1u;
+            config_restore_switches();
+            idle_reset();
             s_port_baseline_valid=0u; /* first successful PortStatusLoad */
             THRD_DELAY(100u);
             continue;
@@ -1171,10 +1510,29 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
                 sw6306_bus_read_failed();
             pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK,!s_idle_verified);
             if(!s_idle_verified)pm_api_refresh_idle();
-        } else if (s_sw_phase == 3u && meter_due(Millis())) {
-            s_sw_owner_busy = 1u;
-            THRD_SPAWN_NOARG(meter_step);
-            s_sw_owner_busy = 0u;
+        } else if (s_sw_phase == 3u) {
+            if (meter_due(Millis())) {
+                idle_reset();
+                s_sw_owner_busy = 1u;
+                THRD_SPAWN_NOARG(meter_step);
+                s_sw_owner_busy = 0u;
+            } else if (bus_idle_due(Millis())) {
+                /* Keep new external load requests waiting until the
+                 * asynchronous output removal has settled and been reread. */
+                s_bus_force_off = 1u;
+                s_sw_owner_busy = 1u;
+                SW6306_OperationReset();
+                THRD_SPAWN_NOARG(SW6306_ForceOff);
+                s_sw_owner_busy = 0u;
+                s_idle_fired = SW6306_LastOperationOK();
+                s_meter_ports_valid = 0u;
+                s_idle_verified = 0u;
+                s_bus_force_off = 0u;
+            } else if (config_eligible(Millis())) {
+                s_sw_owner_busy = 1u;
+                THRD_SPAWN_NOARG(config_step);
+                s_sw_owner_busy = 0u;
+            }
         } else if (s_sw_phase == 4u) {
             s_sw_owner_busy=1u;
             SW6306_OperationReset();
@@ -1182,6 +1540,16 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             s_sw_owner_busy=0u;
             if (!SW6306_LastOperationOK())
                 sw6306_bus_read_failed();
+            else if (!SW6306_ValidateInitialized()) {
+                sw6306_display_read_failed();
+                s_ext_valid = 0u;
+                s_meter_ports_valid = 0u;
+                s_idle_verified = 0u;
+                idle_reset();
+                pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK, 1u);
+                s_retry_at = Millis();
+                continue;
+            }
             if(++s_capacity_div>=2u) {
                 s_capacity_div=0u;
                 s_sw_owner_busy=1u;

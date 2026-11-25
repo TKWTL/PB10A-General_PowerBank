@@ -61,6 +61,13 @@ void ParameterSetting_Widget(ui_t *ui) {
         if(ui->nowItem->element->data->name == NULL) ui->nowItem->element->data->name = "Null!!";
 
         switch (ui->nowItem->element->data->dataType) {
+        case UI_DATA_ENUM: {
+            const ui_data_t *data = ui->nowItem->element->data;
+            int index = *(const int *)data->ptr;
+            if (data->options && index >= data->min && index <= data->max)
+                mini_snprintf(value, sizeof(value), "%s:%s", data->name, data->options[index - data->min]);
+            break;
+        }
         case UI_DATA_INT:
             mini_snprintf(value, sizeof(value), "%s:%d ", (ui->nowItem->element->data->name), *(int *)(ui->nowItem->element->data->ptr));
             break;

@@ -416,6 +416,7 @@ void Draw_Scrollbar(ui_t *ui, uint16_t x, uint16_t y, uint16_t w, uint16_t h, ui
 #endif
 
     switch (data->dataType) {
+    case UI_DATA_ENUM:
     case UI_DATA_INT:
     case UI_DATA_FLOAT:   /* 定点整数：与 INT 同构 */
         {
@@ -503,7 +504,7 @@ static uint8_t UI_FadeKeepsPage(const ui_t *ui) {
 
     const ui_data_t *data = item->element->data;
     return data->actionType == UI_DATA_ACTION_RW &&
-           (data->dataType == UI_DATA_INT || data->dataType == UI_DATA_FLOAT);
+           (data->dataType == UI_DATA_INT || data->dataType == UI_DATA_FLOAT || data->dataType == UI_DATA_ENUM);
 }
 
 static void UI_FadeFrame(ui_t *ui, uint8_t step) {
@@ -789,6 +790,14 @@ static void Draw_TextPage(ui_t *ui, ui_page_t *Page, ui_item_t *now_Item, ui_ite
                     }
                     break;
 
+                case UI_DATA_ENUM:
+                    if (data->ptr && data->options) {
+                        int index = *(const int *)data->ptr;
+                        if (index >= data->min && index <= data->max)
+                            (void)mini_snprintf(Data, sizeof(Data), "%s", data->options[index - data->min]);
+                    }
+                    break;
+
                 case UI_DATA_STRING:
                     if (temp_item->element->data->ptr != NULL) {
                         strncpy(Data, (char *)(temp_item->element->data->ptr), sizeof(Data) - 1);
@@ -984,8 +993,8 @@ static void UI_LeaveCurrent(ui_t *ui) {
     if((ui->menuState==UI_ITEM_RUNING || ui->menuState==UI_ITEM_DRAWING) &&
         item->itemType==UI_ITEM_DATA && item->element && item->element->data) {
         ui_data_t *data=item->element->data;
-        if((data->dataType==UI_DATA_INT || data->dataType==UI_DATA_FLOAT) &&
-            data->functionType==UI_DATA_FUNCTION_EXIT_EXECUTE && data->function)
+        if ((data->dataType == UI_DATA_INT || data->dataType == UI_DATA_FLOAT || data->dataType == UI_DATA_ENUM) &&
+            data->functionType == UI_DATA_FUNCTION_EXIT_EXECUTE && data->function)
             data->function(ui); /* Commit pending parameter change once. */
     }
 }
@@ -1261,6 +1270,7 @@ static void Process_App_Run(ui_t *ui, ui_item_t *item, UI_ACTION Action) {
             }
             else {
                 switch (item->element->data->dataType) {
+                case UI_DATA_ENUM:
                 case UI_DATA_INT:
                 case UI_DATA_FLOAT:
                     if (item->itemFunction == NULL) ParameterSetting_Widget(ui);

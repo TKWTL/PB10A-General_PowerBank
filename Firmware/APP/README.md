@@ -54,7 +54,28 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 Powerbank, Radio, Game, Tools, Settings and Statistics appear in that order. Statistics contains Power, Battery, Sensors and System. Open About from Statistics → System. After reset the firmware first opens the Powerbank dashboard. Short or long CONF opens the home menu from the dashboard.
 
 Settings lists PowerLimit, Ports, Protocol#1 and Protocol#2 before Display.
-Those four pages currently contain a Back entry for navigation.
+They expose 32 RAM-only settings and actions derived from PB02B.
+
+- PowerLimit: output 5–105 W, input 5–100 W, both in 5 W steps.
+- Ports: C1 input/output and A1 output fast-charge switches, BUS Idle
+  Timeout (Off by default), Idle Threshold (0–100 mA, 4 mA steps, default 12),
+  Aux-A Enable (on by default), and Aux Idle Current (10–100 mA, default 50).
+  Turning Aux-A Enable off stops the output and rejects new manual and
+  insertion requests. Re-enabling it permits a new request.
+- Protocol#1: PD input/output, PD yield to SCP/VOOC/UFCS, 11/21 V PPS,
+  UFCS input/output and manual PPS/UFCS capability broadcasts.
+- Protocol#2: QC, FCP, AFC, SCP, PE, SFCP, VOOC and SVOOC switches.
+
+All SW6306 writes are dispatched by the existing owner coroutine.
+Power changes and broadcasts can run on active sessions. Protocol and
+fast-charge changes wait for fresh, idle port status and a released
+external-load meter path. UI edits are coalesced and requeued after
+failed writes. PowerLoad detects loss of the applied power configuration;
+reinitialization restores the applied power limits and requeues disabled
+protocol/port switches. MCU reset returns settings to defaults.
+BUS idle shutdown is disabled while charging, in low-current mode,
+during external-load requests or metering, or with invalid telemetry.
+The independent Aux-A idle timeout remains 60 seconds.
 
 The dashboard's second row shows power, the third row voltage, and the
 fourth row protocol, battery percentage and NTC temperature. The BUS and

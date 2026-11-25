@@ -125,11 +125,12 @@ typedef enum{
     UI_DATA_FUNCTION_STEP_EXECUTE    // 步进执行
 } UI_DATA_FUNCTION_TYPE;
 
-typedef enum{
-    UI_DATA_INT,      // 整型数据（ptr -> int）
-    UI_DATA_FLOAT,     // 定点数据：ptr -> int，真实值 = 值 / 10^decimals（无 FPU）
-    UI_DATA_SWITCH,    // 开关类型数据
-    UI_DATA_STRING     // 字符串类型数据
+typedef enum {
+    UI_DATA_INT, // 整型数据（ptr -> int）
+    UI_DATA_FLOAT, // 定点数据：ptr -> int，真实值 = 值 / 10^decimals（无 FPU）
+    UI_DATA_SWITCH, // 开关类型数据
+    UI_DATA_STRING, // 字符串类型数据
+    UI_DATA_ENUM // ptr -> int, options indexed from min
 } UI_DATA_TYPE;
 
 typedef enum{
@@ -152,7 +153,10 @@ typedef struct {
     int max;    //data->max == group_id 表示 组号（同组互斥）
     int min;    //data->min == 1 表示 radio 模式启用
     int step;   // 步进值（UI_DATA_FLOAT 时为缩放整数，单位同 ptr 指向的值）
-    uint8_t decimals; // UI_DATA_FLOAT 的显示小数位（0~3），其余类型忽略
+    union {
+        const char *const *options; /* UI_DATA_ENUM labels, min..max */
+        uint8_t decimals; // UI_DATA_FLOAT 的显示小数位（0~3），其余类型忽略
+    };
 } ui_data_t;
 
 typedef struct {

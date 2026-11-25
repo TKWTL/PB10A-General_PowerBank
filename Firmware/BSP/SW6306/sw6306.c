@@ -38,11 +38,12 @@ static void sw6306_i2c_failed(void) {
 
 static void sw6306_i2c_succeeded(void) { s_i2c_fail_groups = 0U; }
 
+static uint8_t s_pimax_target = SW6306_INPUT_POWER_MAX;
 static uint8_t s_pomax_target = SW6306_OUTPUT_POWER_MAX;   // 运行时最大输出功率目标（W），Init 写入、可由 SetMaxOutputPower 修改
 
 /* 功率设置会立即重算并重播协议电流能力；实现定义在初始化区。 */
-static SW6306_RET SW6306_PDCurrentSet(SW6306_NOARG);
-static SW6306_RET SW6306_UFCSCurrentSet(SW6306_NOARG);
+static SW6306_RET SW6306_PDCurrentSet(SW6306_ARGS(uint8_t watt));
+static SW6306_RET SW6306_UFCSCurrentSet(SW6306_ARGS(uint8_t watt));
 static SW6306_RET SW6306_Unlock_Nolock(SW6306_NOARG);
 
 /* PB10A static rational factors: no float calibration state in RAM.
@@ -884,9 +885,12 @@ SW6306_RET SW6306_Click(SW6306_NOARG) {
 SW6306_RET SW6306_ForceOff(SW6306_NOARG) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
-    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PORTEVT);//切换低地址
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PORTEVT, SW6306_PORTEVT_C1_RMV|SW6306_PORTEVT_C2_RMV|SW6306_PORTEVT_A1_RMV|SW6306_PORTEVT_A2_RMV);//关闭输出口
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_DISCHG_OFF, SW6306_DISCHG_OFF);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PORTEVT); //切换低地址
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PORTEVT, SW6306_PORTEVT_C1_RMV | SW6306_PORTEVT_C2_RMV | SW6306_PORTEVT_A1_RMV | SW6306_PORTEVT_A2_RMV); //关闭输出口
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_DISCHG_OFF, SW6306_DISCHG_OFF);
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
@@ -962,14 +966,20 @@ SW6306_RET SW6306_SetMaxOutputPower(SW6306_ARGS(uint8_t watt)) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
     SW6306_SPAWN_NOARG(SW6306_Unlock_Nolock);
-    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_POSET);
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_POSET, watt);
-    SW6306_Status.pomax_set = watt;
-    s_pomax_target = watt;
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_POSET);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_POSET, watt);
     /* 功率设置与协议能力同步：每档按 min(POSET/电压, 档位允许电流)
      * 计算，不再对 20V Fix / 21V PPS / 21V UFCS 人为限制为 2A。 */
-    SW6306_SPAWN_NOARG(SW6306_PDCurrentSet);
-    SW6306_SPAWN_NOARG(SW6306_UFCSCurrentSet);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_PDCurrentSet, watt);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_UFCSCurrentSet, watt);
+    if (!s_io_failed) {
+        SW6306_Status.pomax_set = watt;
+        s_pomax_target = watt;
+    }
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
@@ -993,9 +1003,11 @@ SW6306_RET SW6306_PortFastChargeSet(SW6306_ARGS(sw6306_port_t port, sw6306_port_
     }
 
     SW6306_MUTEX_TAKE;
-    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PORTQC);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PORTQC);
     /* enable=1 使能 → 清禁止位(0)；enable=0 禁止 → 置禁止位(1) */
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_PORTQC, mask, enable ? 0x00 : mask);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_PORTQC, mask, enable ? 0x00 : mask);
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
@@ -1067,14 +1079,17 @@ default:
     }
 
     SW6306_MUTEX_TAKE;
-    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, reg);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, reg);
     if(active_high) {
         /* VOOC 系列 active HIGH：enable=1 使能 → 置位(1)；enable=0 禁止 → 清位(0) */
-        SW6306_SPAWN_ARGS(SW6306_ByteModify, reg, mask, enable ? mask : 0x00);
+        if (!s_io_failed)
+            SW6306_SPAWN_ARGS(SW6306_ByteModify, reg, mask, enable ? mask : 0x00);
     }
     else {
         /* 常规协议 active low（0=使能/1=禁止）：enable=1 使能 → 清位；enable=0 禁止 → 置位 */
-        SW6306_SPAWN_ARGS(SW6306_ByteModify, reg, mask, enable ? 0x00 : mask);
+        if (!s_io_failed)
+            SW6306_SPAWN_ARGS(SW6306_ByteModify, reg, mask, enable ? 0x00 : mask);
     }
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
@@ -1088,8 +1103,10 @@ SW6306_RET SW6306_SCPSourceSet(SW6306_ARGS(uint8_t hv_enable, uint8_t lv_enable)
     SW6306_FUNC_BEGIN;
     value=(hv_enable ? 0u : SW6306_P_DPDM3_NOSCP_HV)|(lv_enable ? 0u : SW6306_P_DPDM3_NOSCP_LV);
     SW6306_MUTEX_TAKE;
-    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_P_DPDM3);
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_P_DPDM3, mask, value);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_P_DPDM3);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_P_DPDM3, mask, value);
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
@@ -1102,8 +1119,10 @@ SW6306_RET SW6306_PDSourceYieldSet(SW6306_ARGS(uint8_t scp, uint8_t vooc, uint8_
     SW6306_FUNC_BEGIN;
     value=(scp ? 0u : SW6306_PD0_NOSCP)|(vooc ? 0u : SW6306_PD0_NOVOOC)|(ufcs ? 0u : SW6306_PD0_NOUFCS);
     SW6306_MUTEX_TAKE;
-    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PD0);
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_PD0, mask, value);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PD0);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_PD0, mask, value);
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
@@ -1119,9 +1138,11 @@ SW6306_RET SW6306_PPSEnable(SW6306_ARGS(sw6306_pps_t pps, uint8_t enable)) {
     default: SW6306_FUNC_ABORT;
     }
     SW6306_MUTEX_TAKE;
-    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PD1);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PD1);
     /* enable=1 使能 → 清禁止位(0)；enable=0 禁止 → 置禁止位(1) */
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_PD1, mask, enable ? 0x00 : mask);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_PD1, mask, enable ? 0x00 : mask);
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
@@ -1153,9 +1174,14 @@ SW6306_RET SW6306_SetMaxInputPower(SW6306_ARGS(uint8_t watt)) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
     SW6306_SPAWN_NOARG(SW6306_Unlock_Nolock);
-    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PISET);
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PISET, watt);
-    SW6306_Status.pimax_set = watt;
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PISET);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PISET, watt);
+    if (!s_io_failed) {
+        SW6306_Status.pimax_set = watt;
+        s_pimax_target = watt;
+    }
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
@@ -1165,8 +1191,10 @@ SW6306_RET SW6306_SetMaxInputPower(SW6306_ARGS(uint8_t watt)) {
 SW6306_RET SW6306_PPSBroadcast(SW6306_NOARG) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
-    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PD_CMD);
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD_CMD, SW6306_PD_CMD_SRCCAP);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PD_CMD);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD_CMD, SW6306_PD_CMD_SRCCAP);
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
@@ -1175,8 +1203,10 @@ SW6306_RET SW6306_PPSBroadcast(SW6306_NOARG) {
 SW6306_RET SW6306_UFCSBroadcast(SW6306_NOARG) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
-    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_UFCS_CMD);
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_UFCS_CMD, SW6306_UFCS_CMD_SRCCAP);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_UFCS_CMD);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_UFCS_CMD, SW6306_UFCS_CMD_SRCCAP);
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
@@ -1434,39 +1464,53 @@ static uint16_t sw6306_power_current_ma(uint8_t watt, uint16_t voltage_mv, uint1
     return (uint16_t)current_ma;
 }
 
-static SW6306_NOINLINE SW6306_RET SW6306_PDCurrentSet(SW6306_NOARG) {
-    uint16_t i5   = sw6306_power_current_ma(s_pomax_target,  5000U, SW6306_PD_5V_FIX_CURR,  10U);
-    uint16_t i9   = sw6306_power_current_ma(s_pomax_target,  9000U, SW6306_PD_9V_FIX_CURR,  10U);
-    uint16_t i12  = sw6306_power_current_ma(s_pomax_target, 12000U, SW6306_PD_12V_FIX_CURR, 10U);
-    uint16_t i15  = sw6306_power_current_ma(s_pomax_target, 15000U, SW6306_PD_15V_FIX_CURR, 10U);
-    uint16_t i20  = sw6306_power_current_ma(s_pomax_target, 20000U, SW6306_PD_20V_FIX_CURR, 10U);
-    uint16_t pps0 = sw6306_power_current_ma(s_pomax_target,  6000U, SW6306_PD_PPS0_CURR, 50U);
-    uint16_t pps1 = sw6306_power_current_ma(s_pomax_target, 11000U, SW6306_PD_PPS1_CURR, 50U);
-    uint16_t pps2 = sw6306_power_current_ma(s_pomax_target, 16000U, SW6306_PD_PPS2_CURR, 50U);
-    uint16_t pps3 = sw6306_power_current_ma(s_pomax_target, 21000U, SW6306_PD_PPS3_CURR, 50U);
+static SW6306_NOINLINE SW6306_RET SW6306_PDCurrentSet(SW6306_ARGS(uint8_t watt)) {
+    uint16_t i5 = sw6306_power_current_ma(watt, 5000U, SW6306_PD_5V_FIX_CURR, 10U);
+    uint16_t i9 = sw6306_power_current_ma(watt, 9000U, SW6306_PD_9V_FIX_CURR, 10U);
+    uint16_t i12 = sw6306_power_current_ma(watt, 12000U, SW6306_PD_12V_FIX_CURR, 10U);
+    uint16_t i15 = sw6306_power_current_ma(watt, 15000U, SW6306_PD_15V_FIX_CURR, 10U);
+    uint16_t i20 = sw6306_power_current_ma(watt, 20000U, SW6306_PD_20V_FIX_CURR, 10U);
+    uint16_t pps0 = sw6306_power_current_ma(watt, 6000U, SW6306_PD_PPS0_CURR, 50U);
+    uint16_t pps1 = sw6306_power_current_ma(watt, 11000U, SW6306_PD_PPS1_CURR, 50U);
+    uint16_t pps2 = sw6306_power_current_ma(watt, 16000U, SW6306_PD_PPS2_CURR, 50U);
+    uint16_t pps3 = sw6306_power_current_ma(watt, 21000U, SW6306_PD_PPS3_CURR, 50U);
     SW6306_FUNC_BEGIN;
 
-    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PD5);
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD5, (i5 / 10U) & 0xFFU);
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD6, (i9 / 10U) & 0xFFU);
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD7, (i12 / 10U) & 0xFFU);
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD8, (i15 / 10U) & 0xFFU);
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD9,
-        (((i5 / 5U) >> 3) & 0xC0U) |
-        (((i9 / 5U) >> 5) & 0x30U) |
-        (((i12 / 5U) >> 7) & 0x0CU) |
-        ((i15 / 5U) >> 9));
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD10, (i20 / 10U) & 0xFFU);
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_PD11, SW6306_PD11_MSK | 0x03U,
-        SW6306_PD11_CP_PPS0 | SW6306_PD11_CP_PPS1 |
-        SW6306_PD11_CP_PPS2 | SW6306_PD11_CP_PPS3 |
-        ((i20 / 5U) >> 9));
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PPS0, SW6306_PPS0_ENCP | (pps0 / 50U));
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PPS1, SW6306_PPS1_ENCP | (pps1 / 50U));
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PPS2, SW6306_PPS2_ENCP | (pps2 / 50U));
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PPS3, SW6306_PPS3_ENCP | (pps3 / 50U));
-    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PD_CMD);
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD_CMD, SW6306_PD_CMD_SRCCAP);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PD5);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD5, (i5 / 10U) & 0xFFU);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD6, (i9 / 10U) & 0xFFU);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD7, (i12 / 10U) & 0xFFU);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD8, (i15 / 10U) & 0xFFU);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD9,
+                          (((i5 / 5U) >> 3) & 0xC0U) |
+                              (((i9 / 5U) >> 5) & 0x30U) |
+                              (((i12 / 5U) >> 7) & 0x0CU) |
+                              ((i15 / 5U) >> 9));
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD10, (i20 / 10U) & 0xFFU);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_PD11, SW6306_PD11_MSK | 0x03U,
+                          SW6306_PD11_CP_PPS0 | SW6306_PD11_CP_PPS1 |
+                              SW6306_PD11_CP_PPS2 | SW6306_PD11_CP_PPS3 |
+                              ((i20 / 5U) >> 9));
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PPS0, SW6306_PPS0_ENCP | (pps0 / 50U));
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PPS1, SW6306_PPS1_ENCP | (pps1 / 50U));
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PPS2, SW6306_PPS2_ENCP | (pps2 / 50U));
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PPS3, SW6306_PPS3_ENCP | (pps3 / 50U));
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PD_CMD);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD_CMD, SW6306_PD_CMD_SRCCAP);
     SW6306_FUNC_END;
 }
 
@@ -1482,22 +1526,28 @@ static SW6306_NOINLINE SW6306_RET SW6306_PDSet(SW6306_NOARG) {
     SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_PD3, SW6306_PD3_MSK,
         SW6306_PD3_ENDRSWAP | SW6306_PD3_ENVCONNSWAP);
     SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_PD4, SW6306_PD4_MSK, 0x00);
-    SW6306_SPAWN_NOARG(SW6306_PDCurrentSet);
+    SW6306_SPAWN_ARGS(SW6306_PDCurrentSet, s_pomax_target);
     SW6306_FUNC_END;
 }
 
-static SW6306_NOINLINE SW6306_RET SW6306_UFCSCurrentSet(SW6306_NOARG) {
-    uint16_t i5  = sw6306_power_current_ma(s_pomax_target,  5000U, SW6306_UFCS_5V_MAX_MA,  50U);
-    uint16_t i10 = sw6306_power_current_ma(s_pomax_target, 10000U, SW6306_UFCS_10V_MAX_MA, 50U);
-    uint16_t i21 = sw6306_power_current_ma(s_pomax_target, 21000U, SW6306_UFCS_20V_MAX_MA, 50U);
+static SW6306_NOINLINE SW6306_RET SW6306_UFCSCurrentSet(SW6306_ARGS(uint8_t watt)) {
+    uint16_t i5 = sw6306_power_current_ma(watt, 5000U, SW6306_UFCS_5V_MAX_MA, 50U);
+    uint16_t i10 = sw6306_power_current_ma(watt, 10000U, SW6306_UFCS_10V_MAX_MA, 50U);
+    uint16_t i21 = sw6306_power_current_ma(watt, 21000U, SW6306_UFCS_20V_MAX_MA, 50U);
     SW6306_FUNC_BEGIN;
 
-    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_C_UFCS0);
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_C_UFCS0, (i5  * 2U / 100U) & SW6306_UFCS_CURR_CODE_MSK);
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_C_UFCS1, (i10 * 2U / 100U) & SW6306_UFCS_CURR_CODE_MSK);
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_C_UFCS2, (i21 * 2U / 100U) & SW6306_UFCS_CURR_CODE_MSK);
-    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_UFCS_CMD);
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_UFCS_CMD, SW6306_UFCS_CMD_SRCCAP);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_C_UFCS0);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_C_UFCS0, (i5 * 2U / 100U) & SW6306_UFCS_CURR_CODE_MSK);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_C_UFCS1, (i10 * 2U / 100U) & SW6306_UFCS_CURR_CODE_MSK);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_C_UFCS2, (i21 * 2U / 100U) & SW6306_UFCS_CURR_CODE_MSK);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_UFCS_CMD);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_UFCS_CMD, SW6306_UFCS_CMD_SRCCAP);
     SW6306_FUNC_END;
 }
 
@@ -1506,7 +1556,7 @@ static SW6306_NOINLINE SW6306_RET SW6306_UFCSSet(SW6306_NOARG) {
     SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_P_UFCS);
     SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_P_UFCS,
         SW6306_P_UFCS_CURRSET_MAN, SW6306_P_UFCS_CURRSET_MAN);
-    SW6306_SPAWN_NOARG(SW6306_UFCSCurrentSet);
+    SW6306_SPAWN_ARGS(SW6306_UFCSCurrentSet, s_pomax_target);
     SW6306_FUNC_END;
 }
 
@@ -1532,7 +1582,7 @@ SW6306_NOINLINE SW6306_RET SW6306_Init(SW6306_NOARG) {
     //设置放电电池端限流值（按实际感测电阻缩放写入值）
     SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_DCHG_IBAT, sw6306_batt_limit_register(SW6306_BAT_DCHG_CURR_MAX));
     //输入功率设置
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PISET, SW6306_INPUT_POWER_MAX);
+    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PISET, s_pimax_target);
     //设置充电电池端限流值（按实际感测电阻缩放写入值）
     SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_CHG_IBAT, sw6306_batt_limit_register(SW6306_BAT_CHG_CURR_MAX));
     //输出功率设置（写入运行时目标，默认 SW6306_OUTPUT_POWER_MAX）
@@ -1588,6 +1638,8 @@ SW6306_NOINLINE SW6306_RET SW6306_Init(SW6306_NOARG) {
     SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_P_DPDM1, SW6306_DPDM1_QC3P_45W|SW6306_DPDM1_QC2_20V);
     //SFCP协议最大电压12V,PE协议最大电压12V
     SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_P_DPDM2, SW6306_DPDM2_MSK, SW6306_DPDM2_SFCP_12V|SW6306_DPDM2_PE_12V);
+    //Default all supported ordinary source protocols to enabled.
+    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_P_DPDM3, SW6306_P_DPDM3_MSK, 0u);
     //VOOC协议使能
     SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_P_DPDM4, SW6306_P_DPDM4_MSK, SW6306_P_DPDM4_VOOC1|SW6306_P_DPDM4_VOOC4|SW6306_P_DPDM4_SVOOC);
     //VOOC协议使能
@@ -1630,7 +1682,7 @@ uint8_t SW6306_ValidateInitialized(void) {
      * 用PISET/POSET读回检测SW6306独立复位或配置丢失；只有这个入口允许因
      * 功率配置镜像失配而清initialized。 */
     if(SW6306_Status.initialized == 0U) return 0U;
-    if((SW6306_Status.pimax_set == SW6306_INPUT_POWER_MAX) &&
+    if ((SW6306_Status.pimax_set == s_pimax_target) &&
         (SW6306_Status.pomax_set == s_pomax_target)) {
         return 1U;
     }
