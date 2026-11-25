@@ -152,6 +152,7 @@ void WLED_AlgoService(uint32_t now) {
     ext_load_state_t state = PowerAlgo_ExtLoadState(EXT_LOAD_WLED, now);
     if (state == EXT_LOAD_BLOCKED) {
         WLED_AlgoStop();
+        PowerAlgo_ExtLoadReportBlocked();
         return;
     }
     if (state == EXT_LOAD_WAIT) {
@@ -163,6 +164,7 @@ void WLED_AlgoService(uint32_t now) {
             PowerAlgo_ExtLoadSetActive(EXT_LOAD_WLED, 0u);
         } else if ((uint32_t)(now - s_wait_at) >= EXT_LOAD_WAIT_MS) {
             WLED_AlgoStop();
+            PowerAlgo_ExtLoadTimeout();
         }
         return;
     }

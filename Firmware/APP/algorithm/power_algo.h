@@ -4,6 +4,7 @@
 #include "ui_conf.h"
 #include "coroOS.h"
 #include "pm_device.h"
+#include "sw6306.h"
 /* SW6306 plus auxiliary A-port PA6 and ADC1 DMA telemetry. */
 /* Task-facing SW6306 monitor, based on PB02B 100ms staggered LOAD.
  * The displayed BUS voltage/current is the shared SW6306 BUS ADC, not
@@ -37,6 +38,26 @@ uint8_t PowerAlgo_TakeRadioBatteryCheck(uint16_t *vbat_mv,uint8_t *capacity_pct)
 pm_hook_result_t PowerAlgo_BackgroundResume(void);
 pm_hook_result_t PowerAlgo_BackgroundSuspend(void);
 void PowerAlgo_BackgroundAbort(void);
+/* One RAM record and a priority notification mailbox, foreground only. */
+enum { POWER_NOTICE_INFO = 1u,
+       POWER_NOTICE_WARNING,
+       POWER_NOTICE_FAULT };
+typedef struct {
+    uint8_t code, severity, active, valid;
+    uint16_t count;
+    sw6306_fault_snapshot_t raw;
+} power_fault_view_t;
+typedef struct {
+    uint8_t code, severity;
+} power_notice_t;
+void PowerAlgo_GetFaultView(power_fault_view_t *out);
+uint8_t PowerAlgo_NoticePending(void);
+uint8_t PowerAlgo_TakeNotice(power_notice_t *out);
+const char *PowerAlgo_NoticeText(uint8_t code);
+void PowerAlgo_AddFaultItems(ui_page_t *page);
+void PowerAlgo_UpdateFaultItems(ui_t *ui);
+void PowerAlgo_ExtLoadTimeout(void);
+void PowerAlgo_ExtLoadReportBlocked(void);
 /* External consumers share one SW6306 meter path. Foreground callers only. */
 enum { EXT_LOAD_WLED = 0x01u,
        EXT_LOAD_AUX = 0x02u };

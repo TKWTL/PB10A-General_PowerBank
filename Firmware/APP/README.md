@@ -187,6 +187,37 @@ separate energy calculation still uses float for fractional mWh,
 not for a mutable SHUNT coefficient. See the
 [SW6306 debug note](../../Docs/Debug/2026-11-19_sw6306_monitor.md).
 
+### Fault history and non-modal notices
+
+Statistics → Fault shows the last observed fault code, its own protection
+state (ACTIVE / HISTORY / UNKNOWN) and a saturating lifetime-of-MCU counter.
+No Flash log or independent task is used. A failed or stale SW6306 status
+read cannot establish recovery.
+
+The existing SW6306 StatusLoad phase consumes E01–E13 from fresh W1C
+events and live protection edges. Historical reason bits only help decode
+a qualified event; they do not create events by themselves. A successful
+W1C acknowledgement re-arms the bit. Failed clears are retried without
+counting a persistent event again. Only observed fault and capacity-learning
+event bits are acknowledged. N01 (capacity learned) does not increment the
+fault count. Events coalesced by the chip cannot be counted separately.
+
+AUX undervoltage/short cutoff reports E20; shared meter startup timeout
+reports E40; battery protection uses E01/E04/E41 or the corresponding
+SW6306 battery fault code. E50 reports confirmed loss of SW6306 initialization
+or repeated initialization failure. Duplicate software notices from the
+same shared protection do not increment the fault count. E21 and N02
+are reserved: AUX invalid samples currently do not trigger a cutoff, and
+there is no low-current-mode operation UI. Protection policy is unchanged.
+
+The priority mailbox overlays INFO/WARNING for 2.5 s or FAULT for 4 s.
+ASCII notices reuse the existing fonts; the portrait layout uses the
+smaller font. Toast saves at most 456 bytes of affected framebuffer area,
+restoring them only after SPI DMA completion, so cached pages and partial
+redrawing do not retain the overlay. Mosaic frames are not overlaid.
+The timer starts on accepted display submission. Pending notices wait
+through UI_OFF/STOP1 without requesting wake or setting a PM sleep block.
+
 ### SW6306 staged polling and sleep guard (2026-11-19)
 
 The sixth coroOS thread initializes SW6306 on its first service tick,

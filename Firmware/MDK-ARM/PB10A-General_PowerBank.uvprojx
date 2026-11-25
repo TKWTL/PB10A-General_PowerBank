@@ -1050,6 +1050,11 @@
               <FilePath>../APP/MiaoUI/core/ui.c</FilePath>
             </File>
             <File>
+              <FileName>ui_toast.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/MiaoUI/core/ui_toast.c</FilePath>
+            </File>
+            <File>
               <FileName>dispDriver.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/MiaoUI/display/dispDriver.c</FilePath>

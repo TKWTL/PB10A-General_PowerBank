@@ -12,6 +12,7 @@
 #include "system_algo.h"
 #include "wled_algo.h"
 #include <string.h>
+#include "mini_format.h"
 
 #define POWER_SW_SLEEP_BLOCK 0x08u /* separate from scanner (0x02) and radio (0x04) */
 #define SW_REINIT_DELAY_MS 5000u
@@ -308,6 +309,260 @@ static uint8_t s_meter_ports_valid;
 static uint32_t s_meter_ports_at, s_meter_attempt_at, s_meter_command_at;
 static uint32_t s_meter_real_at;
 
+/* Fault history and notification are independent of protection decisions. */
+enum {
+    FAULT_SW,
+    FAULT_AUX,
+    FAULT_METER,
+    FAULT_BATTERY,
+    FAULT_NTC,
+    FAULT_OFFLINE
+};
+enum {
+    NOTICE_LEARN_DONE = 100u,
+    NOTICE_LOW_CURRENT = 101u,
+    NOTICE_DATA_INVALID = 102u
+};
+#define FAULT_EVENTS (SW6306_FAULT0_UVLO | SW6306_FAULT0_CHGERR | SW6306_FAULT0_DISCHGERR)
+#define FAULT_LIVE (SW6306_SYS_STAT_CHGERR | SW6306_SYS_STAT_DISCHGERR)
+static power_fault_view_t s_fault;
+static power_notice_t s_notice;
+static uint8_t s_notice_pending, s_fault_source, s_fault_live_mask;
+static uint8_t s_fault_seen_events, s_fault_prev_live, s_fault_recovered, s_fault_status_ok, s_fault_has_snapshot;
+static uint8_t s_fault_offline, s_fault_init_failed, s_fault_meter_timeout;
+static uint16_t s_fault_common_seen, s_fault_common_software;
+static uint8_t s_fault_clear_mask;
+static uint32_t s_fault_status_at;
+static sw6306_fault_snapshot_t s_fault_latest;
+static ui_item_t s_fault_items[3];
+static char s_fault_labels[3][22];
+
+const char *PowerAlgo_NoticeText(uint8_t code) {
+    switch (code) {
+    case 1:
+        return "BAT UVLO";
+    case 2:
+        return "BAT OVERVOLT";
+    case 3:
+        return "CHIP OVERHEAT";
+    case 4:
+        return "NTC OVERHEAT";
+    case 5:
+        return "VBUS SHORT";
+    case 6:
+        return "VBUS OVERLOAD";
+    case 7:
+        return "VBUS OVERVOLT";
+    case 8:
+        return "CHARGE TIMEOUT";
+    case 9:
+        return "BAT TOO LOW";
+    case 10:
+        return "DPDM OVERVOLT";
+    case 11:
+        return "CC OVERVOLT";
+    case 12:
+        return "TEMP LIMIT";
+    case 13:
+        return "POWER PROTECT";
+    case 20:
+        return "AUX SHORT";
+    case 21:
+        return "AUX ADC ERROR";
+    case 40:
+        return "METER TIMEOUT";
+    case 41:
+        return "BAT PROTECT";
+    case 50:
+        return "SW6306 OFFLINE";
+    case NOTICE_LEARN_DONE:
+        return "CAP LEARN DONE";
+    case NOTICE_LOW_CURRENT:
+        return "LOW CURRENT ERROR";
+    case NOTICE_DATA_INVALID:
+        return "DATA INVALID";
+    default:
+        return "NO FAULT";
+    }
+}
+
+static uint8_t fault_severity(uint8_t code) {
+    return code == 6u || code == 8u || code == 12u || code == 40u ? POWER_NOTICE_WARNING : POWER_NOTICE_FAULT;
+}
+
+static void fault_offer_notice(uint8_t code, uint8_t severity) {
+    if (!s_notice_pending || severity >= s_notice.severity) {
+        s_notice.code = code;
+        s_notice.severity = severity;
+        s_notice_pending = 1u;
+    }
+}
+
+uint8_t PowerAlgo_NoticePending(void) {
+    return s_notice_pending;
+}
+
+uint8_t PowerAlgo_TakeNotice(power_notice_t *out) {
+    if (!out || !s_notice_pending)
+        return 0u;
+    *out = s_notice;
+    s_notice_pending = 0u;
+    return 1u;
+}
+
+static void fault_report(uint8_t code, uint8_t source) {
+    s_fault.code = code;
+    s_fault.severity = fault_severity(code);
+    s_fault.raw = s_fault_latest;
+    s_fault_source = source;
+    s_fault_live_mask = 0u;
+    if (s_fault.count != UINT16_MAX)
+        ++s_fault.count;
+    fault_offer_notice(code, s_fault.severity);
+}
+
+/* Reasons are historical; qualify them by the observed event / live
+ * direction. Prefer newly changed reason bits over older latched bits. */
+static uint8_t fault_decode(sw6306_fault_snapshot_t snap, uint8_t directions) {
+    if (!(directions & SW6306_SYS_STAT_DISCHGERR))
+        snap.discharge = 0u;
+    if (!(directions & SW6306_SYS_STAT_DISCHGERR))
+        snap.extra &= SW6306_FAULT3_CHG_62368UT | SW6306_FAULT3_CHG_62368OT;
+    if (!(directions & SW6306_SYS_STAT_CHGERR))
+        snap.charge = 0u;
+    if (!(directions & SW6306_SYS_STAT_CHGERR))
+        snap.extra &= (uint8_t)~(SW6306_FAULT3_CHG_62368UT | SW6306_FAULT3_CHG_62368OT);
+    if ((snap.discharge & SW6306_FAULT1_OV_BAT) || (snap.charge & SW6306_FAULT2_OV_BAT))
+        return 2u;
+    if ((snap.discharge & SW6306_FAULT1_OT_CHIP) || (snap.charge & SW6306_FAULT2_OT_CHIP))
+        return 3u;
+    if ((snap.discharge & SW6306_FAULT1_OT_NTC) || (snap.charge & SW6306_FAULT2_OT_NTC))
+        return 4u;
+    if (snap.discharge & SW6306_FAULT1_SHT_BUS)
+        return 5u;
+    if (snap.discharge & SW6306_FAULT1_OL_BUS)
+        return 6u;
+    if ((snap.discharge & (SW6306_FAULT1_SOV_BUS | SW6306_FAULT1_FOV_BUS)) ||
+        (snap.charge & (SW6306_FAULT2_SOV_BUS | SW6306_FAULT2_FOV_BUS)))
+        return 7u;
+    if (snap.charge & SW6306_FAULT2_OT)
+        return 8u;
+    if (snap.charge & SW6306_FAULT2_BATLOW)
+        return 9u;
+    if (snap.extra & SW6306_FAULT3_OV_DPDM)
+        return 10u;
+    if (snap.extra & SW6306_FAULT3_OV_CC)
+        return 11u;
+    if ((snap.extra & (SW6306_FAULT3_DCHG_62368UT | SW6306_FAULT3_CHG_62368UT | SW6306_FAULT3_CHG_62368OT)))
+        return 12u;
+    return 13u;
+}
+
+static uint8_t fault_event_directions(uint8_t events) {
+    uint8_t directions = 0u;
+    if (events & (SW6306_FAULT0_UVLO | SW6306_FAULT0_DISCHGERR))
+        directions |= SW6306_SYS_STAT_DISCHGERR;
+    if (events & SW6306_FAULT0_CHGERR)
+        directions |= SW6306_SYS_STAT_CHGERR;
+    return directions;
+}
+
+static uint16_t fault_common_bit(uint8_t code) {
+    if (code == 41u || code == 1u)
+        return 1u << 1;
+    if (code == 2u || code == 3u || code == 4u || code == 9u)
+        return (uint16_t)(1u << code);
+    return 0u;
+}
+
+static void fault_hardware_report(uint8_t code, uint8_t directions) {
+    /* If the same software protection was already reported, attach its
+     * hardware evidence rather than counting the same episode twice. */
+    uint16_t common = fault_common_bit(code);
+    if (!(s_fault_common_software & common)) {
+        fault_report(code, FAULT_SW);
+    } else if (fault_common_bit(s_fault.code) == common &&
+               (s_fault_source == FAULT_NTC || s_fault_source == FAULT_BATTERY)) {
+        s_fault.code = code;
+        s_fault.severity = fault_severity(code);
+        s_fault.raw = s_fault_latest;
+        s_fault_source = FAULT_SW;
+    }
+    if (s_fault.code == code && s_fault_source == FAULT_SW)
+        s_fault_live_mask = directions;
+    s_fault_common_seen |= common;
+    s_fault_common_software &= (uint16_t)~common;
+}
+
+static uint8_t fault_direction_code(sw6306_fault_snapshot_t changed, sw6306_fault_snapshot_t snap, uint8_t direction) {
+    uint8_t code = fault_decode(changed, direction);
+    return code == 13u ? fault_decode(snap, direction) : code;
+}
+
+static void fault_consume_status(void) {
+    sw6306_fault_snapshot_t snap;
+    SW6306_GetFaultSnapshot(&snap);
+    uint8_t events = snap.event0 & (FAULT_EVENTS | SW6306_FAULT0_LEARNEND);
+    uint8_t fresh = events & (uint8_t)~s_fault_seen_events;
+    uint8_t live = snap.system & FAULT_LIVE;
+    uint8_t rising = live & (uint8_t)~s_fault_prev_live;
+    uint8_t falling = s_fault_prev_live & (uint8_t)~live;
+    s_fault_recovered |= falling;
+    /* A live edge belonging to an already consumed uncleared event is
+     * not another occurrence. Successful W1C re-arms that event bit. */
+    uint8_t directions = fault_event_directions(fresh) |
+                         (rising & ((uint8_t)~fault_event_directions(events & s_fault_seen_events) |
+                                    s_fault_recovered));
+    s_fault_recovered &= (uint8_t)~rising;
+    sw6306_fault_snapshot_t changed = snap;
+    if (s_fault_has_snapshot) {
+        changed.discharge &= (uint8_t)~s_fault_latest.discharge;
+        changed.charge &= (uint8_t)~s_fault_latest.charge;
+        changed.extra &= (uint8_t)~s_fault_latest.extra;
+    }
+    s_fault_latest = snap;
+    s_fault_status_at = Millis();
+    s_fault_status_ok = s_fault_has_snapshot = 1u;
+    s_fault_offline = 0u;
+    /* A recorded hardware protection that has recovered must not
+     * become ACTIVE again due to a different protection later. */
+    s_fault_live_mask &= (uint8_t)~falling;
+    uint8_t charge_code = (directions & SW6306_SYS_STAT_CHGERR) ? fault_direction_code(changed, snap, SW6306_SYS_STAT_CHGERR) : 0u;
+    uint8_t discharge_code = (directions & SW6306_SYS_STAT_DISCHGERR) ? fault_direction_code(changed, snap, SW6306_SYS_STAT_DISCHGERR) : 0u;
+    if (fresh & SW6306_FAULT0_UVLO)
+        discharge_code = 1u;
+    if (charge_code && charge_code == discharge_code) {
+        fault_hardware_report(charge_code, directions);
+    } else {
+        /* Count distinguishable charge/discharge events separately.
+         * On a simultaneous snapshot the higher severity is the latest
+         * record; the mailbox independently preserves priority. */
+        if (charge_code && discharge_code &&
+            fault_severity(charge_code) > fault_severity(discharge_code)) {
+            fault_hardware_report(discharge_code, SW6306_SYS_STAT_DISCHGERR);
+            fault_hardware_report(charge_code, SW6306_SYS_STAT_CHGERR);
+        } else {
+            if (charge_code)
+                fault_hardware_report(charge_code, SW6306_SYS_STAT_CHGERR);
+            if (discharge_code)
+                fault_hardware_report(discharge_code, SW6306_SYS_STAT_DISCHGERR);
+        }
+    }
+    if (fresh & SW6306_FAULT0_LEARNEND)
+        fault_offer_notice(NOTICE_LEARN_DONE, POWER_NOTICE_INFO);
+    s_fault_seen_events = events;
+    s_fault_prev_live = live;
+    s_fault_clear_mask = events;
+}
+
+static void fault_offline(void) {
+    if (!s_fault_offline) {
+        s_fault_offline = 1u;
+        fault_report(50u, FAULT_OFFLINE);
+    }
+    s_fault_status_ok = 0u;
+}
+
 static uint8_t ext_loads(void) {
     return (uint8_t)(s_ext_requested | s_ext_active);
 }
@@ -343,6 +598,125 @@ static uint8_t ext_inhibit(uint32_t now) {
     return flags;
 }
 
+static uint8_t fault_status_fresh(uint32_t now) {
+    return s_fault_status_ok && SW6306_IsInitialized() &&
+           (uint32_t)(now - s_fault_status_at) <= SW_MONITOR_STALE_MS;
+}
+
+static uint8_t ext_fault_code(uint8_t inhibit) {
+    if (inhibit & EXT_INHIBIT_HOT)
+        return 4u;
+    if (inhibit & EXT_INHIBIT_FAULT) {
+        sw6306_fault_snapshot_t snap = s_fault_latest;
+        snap.discharge &= SW6306_FAULT1_OV_BAT | SW6306_FAULT1_OT_CHIP | SW6306_FAULT1_OT_NTC;
+        snap.charge &= SW6306_FAULT2_OV_BAT | SW6306_FAULT2_OT_CHIP | SW6306_FAULT2_OT_NTC | SW6306_FAULT2_BATLOW;
+        snap.extra = 0u;
+        uint8_t code = fault_decode(snap, s_fault_prev_live);
+        return code == 2u || code == 3u || code == 4u || code == 9u ? code : 41u;
+    }
+    if (inhibit & EXT_INHIBIT_EMPTY)
+        return ext_sample_fresh(EXT_ADC, Millis()) && s_ext_vbat_mv <= EXT_BATTERY_MIN_MV ? 1u : 41u;
+    return 0u;
+}
+
+void PowerAlgo_ExtLoadReportBlocked(void) {
+    uint8_t inhibit = ext_inhibit(Millis());
+    if (inhibit & EXT_INHIBIT_PM)
+        return;
+    uint8_t code = ext_fault_code(inhibit);
+    if (!code) {
+        fault_offer_notice(s_fault_offline ? 50u : NOTICE_DATA_INVALID,
+                           s_fault_offline ? POWER_NOTICE_FAULT : POWER_NOTICE_WARNING);
+        return;
+    }
+    uint16_t bit = fault_common_bit(code);
+    if (!(s_fault_common_seen & bit)) {
+        fault_report(code, inhibit & EXT_INHIBIT_HOT ? FAULT_NTC : FAULT_BATTERY);
+        s_fault_common_seen |= bit;
+        s_fault_common_software |= bit;
+    } else {
+        fault_offer_notice(code, fault_severity(code));
+    }
+}
+
+void PowerAlgo_ExtLoadTimeout(void) {
+    uint8_t inhibit = ext_inhibit(Millis());
+    if (inhibit & EXT_INHIBIT_PM)
+        return;
+    if (s_fault_offline || ext_fault_code(inhibit)) {
+        PowerAlgo_ExtLoadReportBlocked();
+        return;
+    }
+    if (!s_fault_meter_timeout) {
+        fault_report(40u, FAULT_METER);
+        s_fault_meter_timeout = 1u;
+    }
+}
+
+void PowerAlgo_GetFaultView(power_fault_view_t *out) {
+    if (!out)
+        return;
+    *out = s_fault;
+    out->active = 0u;
+    out->valid = 1u;
+    uint32_t now = Millis();
+    switch (s_fault_source) {
+    case FAULT_SW:
+        if (!s_fault.code)
+            break;
+        out->valid = fault_status_fresh(now);
+        out->active = (s_fault_prev_live & s_fault_live_mask) != 0u;
+        if (s_fault.code == 4u && ext_sample_fresh(EXT_NTC, now) && s_ext_hot)
+            out->active = 1u;
+        if (s_fault.code == 1u && (ext_inhibit(now) & EXT_INHIBIT_EMPTY))
+            out->active = 1u;
+        break;
+    case FAULT_NTC:
+        out->valid = SW6306_IsInitialized() && ext_sample_fresh(EXT_NTC, now);
+        out->active = s_ext_hot;
+        break;
+    case FAULT_BATTERY:
+        out->valid = fault_status_fresh(now);
+        uint8_t inhibit = ext_inhibit(now);
+        out->active = ext_fault_code(inhibit & EXT_INHIBIT_FAULT) == s_fault.code;
+        if (s_fault.code == 41u || s_fault.code == 1u) {
+            out->valid &= ext_sample_fresh(EXT_ADC, now) && ext_sample_fresh(EXT_CAPACITY, now);
+            out->active |= (inhibit & EXT_INHIBIT_EMPTY) != 0u;
+        }
+        break;
+    case FAULT_OFFLINE:
+        out->active = s_fault_offline;
+        break;
+    default:
+        /* Non-latched AUX / meter errors are history after shutdown. */
+        break;
+    }
+}
+
+void PowerAlgo_UpdateFaultItems(ui_t *ui) {
+    if (ui && (!ui->nowItem ||
+               (ui->nowItem->page.location != s_fault_items[0].page.location &&
+                ui->nowItem->page.jumpPage != s_fault_items[0].page.location)))
+        return;
+    power_fault_view_t view;
+    PowerAlgo_GetFaultView(&view);
+    if (!view.code)
+        (void)mini_snprintf(s_fault_labels[0], sizeof(s_fault_labels[0]), " NO FAULT");
+    else
+        (void)mini_snprintf(s_fault_labels[0], sizeof(s_fault_labels[0]), " E%02u %s", (unsigned)view.code,
+                            !view.valid ? "UNKNOWN" : view.active ? "ACTIVE"
+                                                                  : "HISTORY");
+    (void)mini_snprintf(s_fault_labels[1], sizeof(s_fault_labels[1]), " %s", view.code ? PowerAlgo_NoticeText(view.code) : "--");
+    (void)mini_snprintf(s_fault_labels[2], sizeof(s_fault_labels[2]), " Count: %u", (unsigned)view.count);
+}
+
+void PowerAlgo_AddFaultItems(ui_page_t *page) {
+    page->wideText = 1u;
+    PowerAlgo_UpdateFaultItems(NULL);
+    for (unsigned i = 0; i < 3u; ++i)
+        AddItem(s_fault_labels[i], UI_ITEM_DATA, 0, &s_fault_items[i], page, 0, 0);
+}
+
 static uint8_t meter_ports_fresh(uint32_t now) {
     return s_meter_ports_valid && (uint32_t)(now - s_meter_ports_at) <= SW_MONITOR_STALE_MS;
 }
@@ -355,8 +729,12 @@ static uint8_t meter_ready(uint32_t now) {
 uint8_t PowerAlgo_ExtLoadRequest(uint8_t load) {
     /* Missing startup telemetry may settle inside the caller's wait window.
      * A confirmed cutoff is never queued for automatic restart. */
-    if (ext_inhibit(Millis()) & ~EXT_INHIBIT_DATA)
+    if (ext_inhibit(Millis()) & ~EXT_INHIBIT_DATA) {
+        PowerAlgo_ExtLoadReportBlocked();
         return 0u;
+    }
+    if (!ext_loads())
+        s_fault_meter_timeout = 0u;
     s_ext_requested |= load;
     idle_reset();
     pm_api_set_sleep_block(EXT_LOAD_PM_BLOCK, 1u);
@@ -777,11 +1155,14 @@ static void aux_service(uint32_t now) {
     ext_load_state_t state = PowerAlgo_ExtLoadState(EXT_LOAD_AUX, now);
     if (state == EXT_LOAD_BLOCKED) {
         aux_disable();
+        PowerAlgo_ExtLoadReportBlocked();
     } else if (s_aux_state == AUX_STATE_WAIT_METER) {
         if (state == EXT_LOAD_READY)
             aux_start();
-        else if ((uint32_t)(Millis() - s_aux_wait_at) >= EXT_LOAD_WAIT_MS)
+        else if ((uint32_t)(Millis() - s_aux_wait_at) >= EXT_LOAD_WAIT_MS) {
             aux_disable();
+            PowerAlgo_ExtLoadTimeout();
+        }
     } else if (state == EXT_LOAD_WAIT) {
         aux_disable();
         aux_enable();
@@ -817,6 +1198,7 @@ static pm_hook_result_t ext_load_resume(void *ctx) {
     s_ext_pm_work = 0u;
     if (s_ext_pm_closing) {
         s_ext_pm_closing = 0u;
+        s_fault_status_ok = 0u;
         s_ext_valid = 0u;
         s_meter_ports_valid = 0u;
     }
@@ -884,6 +1266,7 @@ static void aux_protect(uint32_t now, uint32_t vdda) {
     }
     if (mv <= AUX_SHORT_VOLTAGE_MV) {
         aux_disable();
+        fault_report(20u, FAULT_AUX);
         return;
     }
     s_aux_state = AUX_STATE_ON;
@@ -1328,6 +1711,9 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             continue;
         }
         if(!SW6306_IsInitialized()) {
+            if (s_fault_has_snapshot || s_monitor.initialized)
+                fault_offline();
+            s_fault_status_ok = 0u;
             s_ext_valid = 0u;
             s_meter_ports_valid = 0u;
             if (s_meter_a2 != A2_FREE)
@@ -1348,6 +1734,9 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             THRD_SPAWN_NOARG(SW6306_Init);
             s_sw_owner_busy=0u;
             if(!SW6306_IsInitialized() || !SW6306_LastOperationOK()) {
+                if (s_fault_init_failed)
+                    fault_offline();
+                s_fault_init_failed = 1u;
                 if (!SW6306_LastOperationOK())
                     sw6306_display_read_failed();
                 SW6306_Invalidate();
@@ -1360,6 +1749,7 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             s_status_fresh=0u;
             s_cycle_ok=1u;
             s_monitor.initialized=1u;
+            s_fault_init_failed = 0u;
             config_restore_switches();
             idle_reset();
             s_port_baseline_valid=0u; /* first successful PortStatusLoad */
@@ -1390,6 +1780,8 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
                 s_radio_battery_check_result=1u;
             } else
                 s_radio_battery_check_result = 2u;
+            if (!SW6306_IsInitialized())
+                fault_offline();
             THRD_DELAY(100u);
             continue;
         }
@@ -1414,10 +1806,32 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             s_sw_owner_busy=1u;
             SW6306_OperationReset();
             THRD_SPAWN_NOARG(SW6306_StatusLoad);
-            s_sw_owner_busy=0u;
             s_status_fresh=(uint8_t)(SW6306_LastOperationOK() &&
                 SW6306_StatusReadSequence()!=s_sw_seq_before);
+            if (s_status_fresh)
+                fault_consume_status();
+            else
+                s_fault_status_ok = 0u;
             sw6306_cache_ntc();
+            if (s_status_fresh && !(ext_inhibit(Millis()) & EXT_INHIBIT_DATA)) {
+                uint8_t inhibit = ext_inhibit(Millis());
+                uint16_t active = fault_common_bit(ext_fault_code(inhibit));
+                if (inhibit & EXT_INHIBIT_HOT)
+                    active |= fault_common_bit(4u);
+                if (inhibit & EXT_INHIBIT_EMPTY)
+                    active |= fault_common_bit(41u) | fault_common_bit(1u);
+                if (inhibit & EXT_INHIBIT_FAULT)
+                    active |= fault_common_bit(ext_fault_code(EXT_INHIBIT_FAULT));
+                s_fault_common_seen &= active;
+                s_fault_common_software &= active;
+            }
+            if (s_status_fresh && s_fault_clear_mask) {
+                SW6306_OperationReset();
+                THRD_SPAWN_ARGS(SW6306_ClearEvents, s_fault_clear_mask);
+                if (SW6306_LastOperationOK())
+                    s_fault_seen_events &= (uint8_t)~s_fault_clear_mask;
+            }
+            s_sw_owner_busy = 0u;
         }
         else if(s_sw_phase==2u) {
             s_sw_seq_before=SW6306_PortReadSequence();

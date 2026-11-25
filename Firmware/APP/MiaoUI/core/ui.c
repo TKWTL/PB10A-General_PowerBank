@@ -25,6 +25,7 @@
  * Created on: 2025-02-08
  */
 #include "core/ui.h"
+#include "core/ui_toast.h"
 #include "display/dispDriver.h"
 #include "indev/indevDriver.h"
 #include "images/image.h"
@@ -508,6 +509,7 @@ static uint8_t UI_FadeKeepsPage(const ui_t *ui) {
 }
 
 static void UI_FadeFrame(ui_t *ui, uint8_t step) {
+    UI_ToastSetAllowed(0u);
     const uint16_t len=(uint16_t)(8u*Disp_GetBufferTileHeight()*
                                   Disp_GetBufferTileWidth());
     uint8_t *const p=Disp_GetBufferPtr();
@@ -540,6 +542,7 @@ static void UI_FadeFrame(ui_t *ui, uint8_t step) {
     Disp_SendBuffer();
 }
 static void UI_FadeBegin(ui_t *ui, UI_ACTION action) {
+    UI_ToastSetAllowed(0u);
     ui->fadeAction=action;
     ui->fadeStep=0u;
     ui->fadePhase=1u;
@@ -1111,6 +1114,9 @@ static void Process_UI_Run(ui_t *ui, UI_ACTION Action) {
         }
         else if(ui->menuState==UI_PAGE_RUNING && ui->nowItem) {
             if(Action==UI_ACTION_ENTER) {
+                /* A DATA label without an element is a read-only full-width row. */
+                if (ui->nowItem->itemType == UI_ITEM_DATA && !ui->nowItem->element)
+                    return;
                 UI_FadeBegin(ui,Action);
                 return;
             }

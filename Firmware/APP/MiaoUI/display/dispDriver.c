@@ -4,6 +4,7 @@
  */
 #include "display/dispDriver.h"
 #include "core/ui.h"
+#include "core/ui_toast.h"
 #include "ssd1306_display.h"
 #include "sc7a20_algo.h"
 
@@ -102,7 +103,11 @@ uint8_t diapInit(void) {
 }
 
 void Disp_SendBuffer(void) {
+    if (SSD1306_Display_FrameBusy())
+        return;
+    UI_ToastDraw();
     SSD1306_Display_RequestFlush(u8g2_GetBufferPtr(&u8g2));
+    UI_ToastSubmitted(SSD1306_Display_FrameBusy());
 }
 
 void Disp_UpdateDisplayArea(uint8_t tx, uint8_t ty, uint8_t tw, uint8_t th) {

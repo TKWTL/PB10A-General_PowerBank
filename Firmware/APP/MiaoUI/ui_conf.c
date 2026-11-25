@@ -17,15 +17,15 @@
 #include "main.h"
 #include "millis.h"
 static ui_page_t s_home,s_settings,s_stats,s_game,s_tools,s_display;
-static ui_page_t s_sys,s_sleep_wake,s_sleep_options,s_stat_power,s_stat_battery,s_stat_sensors,s_stat_system;
+static ui_page_t s_sys, s_sleep_wake, s_sleep_options, s_stat_power, s_stat_battery, s_stat_sensors, s_stat_fault, s_stat_system;
 static ui_item_t s_powerbank,s_radio,s_settings_item,s_stats_item,s_game_item,s_tools_item,s_about;
 static ui_item_t s_settings_back,s_stats_back,s_game_back,s_tools_back;
 static ui_page_t s_power_limit, s_ports, s_protocol1, s_protocol2;
 static ui_item_t s_power_limit_item, s_ports_item, s_protocol1_item, s_protocol2_item;
 static ui_item_t s_power_limit_back, s_ports_back, s_protocol1_back, s_protocol2_back;
 static ui_item_t s_display_item,s_sleep_wake_item,s_system_item,s_display_back,s_sleep_wake_back,s_system_back;
-static ui_item_t s_stat_power_item,s_stat_battery_item,s_stat_sensors_item,s_stat_system_item;
-static ui_item_t s_stat_power_back,s_stat_battery_back,s_stat_sensors_back,s_stat_system_back;
+static ui_item_t s_stat_power_item, s_stat_battery_item, s_stat_sensors_item, s_stat_fault_item, s_stat_system_item;
+static ui_item_t s_stat_power_back, s_stat_battery_back, s_stat_sensors_back, s_stat_fault_back, s_stat_system_back;
 static ui_item_t s_arkanoid, s_tetris, s_pacman, s_bomber, s_invaders, s_scanner, s_leveler, s_accel_cal;
 static ui_item_t s_sleep_options_item,s_sleep_options_back,s_sleep_items[9];
 static ui_data_t s_sleep_data[9];
@@ -179,6 +179,7 @@ void Create_MenuTree(ui_t *ui) {
         AddItem("-Power",UI_ITEM_PARENTS,0,&s_stat_power_item,&s_stats,&s_stat_power,0);
         AddItem("-Battery",UI_ITEM_PARENTS,0,&s_stat_battery_item,&s_stats,&s_stat_battery,0);
         AddItem("-Sensors",UI_ITEM_PARENTS,0,&s_stat_sensors_item,&s_stats,&s_stat_sensors,0);
+        AddItem("-Fault",UI_ITEM_PARENTS,0,&s_stat_fault_item,&s_stats,&s_stat_fault,0);
         AddItem("-System",UI_ITEM_PARENTS,0,&s_stat_system_item,&s_stats,&s_stat_system,0);
 
         AddPage("[Power]",&s_stat_power,UI_PAGE_TEXT,&s_stats);
@@ -194,6 +195,10 @@ void Create_MenuTree(ui_t *ui) {
             SC7A20Algo_AddStatisticsItems(&s_stat_sensors);
             MMC5603Algo_AddStatisticsItems(&s_stat_sensors);
             BMP180Algo_AddStatisticsItems(&s_stat_sensors);
+
+        AddPage("[Fault]",&s_stat_fault,UI_PAGE_TEXT,&s_stats);
+            add_return(&s_stat_fault,&s_stats,&s_stat_fault_back,0);
+            PowerAlgo_AddFaultItems(&s_stat_fault);
 
         AddPage("[System]",&s_stat_system,UI_PAGE_TEXT,&s_stats);
             add_return(&s_stat_system,&s_stats,&s_stat_system_back,0);

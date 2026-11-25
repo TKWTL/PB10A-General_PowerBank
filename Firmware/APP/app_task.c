@@ -12,6 +12,8 @@
 #include "radio_app.h"
 #include "wled_algo.h"
 #include "powerbank_app.h"
+#include "core/ui_toast.h"
+#include "mini_format.h"
 static ui_t s_ui;
 static coro_scheduler_t s_scheduler;
 static coro_pt_t s_states[10];
@@ -28,6 +30,21 @@ THRD_DECLARE(OledServiceThread) {
 
 static uint32_t s_ui_next_deadline, s_ui_next_interval;
 static uint8_t s_ui_woke_early;
+static void ui_take_power_notice(void) {
+    power_notice_t notice;
+    char title[18];
+    if (!PowerAlgo_TakeNotice(&notice))
+        return;
+    const char *level = notice.severity == POWER_NOTICE_FAULT ? "FAULT" : notice.severity == POWER_NOTICE_WARNING ? "WARNING"
+                                                                                                                  : "INFO";
+    if (notice.code < 100u)
+        (void)mini_snprintf(title, sizeof(title), "E%02u %s", (unsigned)notice.code, level);
+    else
+        (void)mini_snprintf(title, sizeof(title), "N%02u %s", (unsigned)(notice.code - 99u), level);
+    UI_ToastShow(title, PowerAlgo_NoticeText(notice.code),
+                 notice.severity == POWER_NOTICE_FAULT ? 4000u : 2500u, notice.severity);
+}
+
 THRD_DECLARE(MiaoUiThread) {
     THRD_BEGIN;
     s_ui_next_deadline = Millis();
@@ -35,7 +52,7 @@ THRD_DECLARE(MiaoUiThread) {
         /* A key or completed navigation arbitration may wake a slow page.
          * During the mosaic fade, key events must not accelerate its steps. */
         THRD_UNTIL((int32_t)(Millis() - s_ui_next_deadline) >= 0 ||
-                   (s_ui.fadePhase == 0u && indevHasPending()) ||
+                   (s_ui.fadePhase == 0u && (indevHasPending() || PowerAlgo_NoticePending() || UI_ToastNeedsFrame())) ||
                    MiaoUi_NavigationReady());
         s_ui_woke_early = (uint8_t)((int32_t)(Millis() - s_ui_next_deadline) < 0);
 
@@ -45,8 +62,14 @@ THRD_DECLARE(MiaoUiThread) {
                    !SSD1306_Display_FrameBusy() &&
                    !pm_api_ui_should_block());
 
+        UI_ToastBeginFrame(s_ui.fadePhase == 0u);
         MiaoUi_ProcessNavigate(&s_ui);
+        UI_ToastSetAllowed(s_ui.fadePhase == 0u);
+        if (s_ui.fadePhase == 0u)
+            ui_take_power_notice();
+        PowerAlgo_UpdateFaultItems(&s_ui);
         s_ui_next_interval = ui_loop(&s_ui);
+        UI_ToastEndFrame();
         /* Advance absolute deadlines without accumulating 1 ms scheduler
          * jitter. Skip missed slots rather than running catch-up frames.
          * Key/navigation wakes begin a fresh interval from this frame. */
