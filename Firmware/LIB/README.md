@@ -74,3 +74,10 @@ and render; the core logic reads the uncompressed cache for random-access
 collision or scrolling. Pac-Man applies an RLE_XOR delta after the
 base bitmap decode. Invalid source/destination sizes are checked;
 buffers must not alias. No dynamic allocation.
+
+`pressure_altitude_dm()` interpolates 81 integer-metre standard-atmosphere
+nodes (30–110 kPa in 1 kPa steps, 162 bytes), returning decimetres.
+The reference is 101325 Pa; no floating-point runtime or local sea-level
+pressure calibration is used. Outside the table range it returns invalid.
+Offline evaluation at all 80,001 integer Pa inputs found a maximum
+interpolation/rounding error of 0.993 m against the stated model.

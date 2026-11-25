@@ -37,8 +37,7 @@ static struct pt s_transfer_pt;
 static volatile uint8_t s_flag,s_pm_flag;
 static uint32_t s_last_sample,s_retry_at;
 static int s_axes[3];
-static uint8_t s_tool_mode,s_orient_div;
-static uint32_t s_sample_at;
+static uint8_t s_tool_mode, s_orient_div;
 static sc7a20_sample_t s_sample;
 
 /* Preserve calibration across software / NRST / watchdog resets while SRAM
@@ -189,14 +188,15 @@ uint8_t SC7A20Algo_ApplySixFace(const int16_t face_raw[6][3]) {
     return 1u;
 }
 void SC7A20Algo_SetToolMode(uint8_t mode) {
-    if(mode>2u)mode=0u;
+    if (mode > 3u)
+        mode = 0u;
     s_tool_mode=mode;
     s_orient_div=0u;
     s_sample.seq=0u; /* old sample must not be interpreted as new */
 }
 uint8_t SC7A20Algo_GetSample(sc7a20_sample_t *out) {
-    if(!out || s_stage!=6u || s_suspended || s_paused ||
-       s_sample.seq==0u || (uint32_t)(Millis()-s_sample_at)>800u)
+    if (!out || s_stage != 6u || s_suspended || s_paused ||
+        s_sample.seq == 0u || (uint32_t)(Millis() - s_sample.at_ms) > 800u)
         return 0u;
     *out=s_sample; /* same foreground coroOS, no ISR writer */
     return 1u;
@@ -248,8 +248,9 @@ __attribute__((noinline)) void SC7A20Algo_Poll(void) {
         s_last_sample=Millis()-SC_SAMPLE_MS;
         s_stage=6u;break;
     case 6u:
-        if(!s_waiting && (uint32_t)(Millis()-s_last_sample)<
-            (s_tool_mode==1u?SC_LEVEL_SAMPLE_MS:SC_SAMPLE_MS))return;
+        if (!s_waiting && (uint32_t)(Millis() - s_last_sample) <
+                              ((s_tool_mode == 1u || s_tool_mode == 3u) ? SC_LEVEL_SAMPLE_MS : SC_SAMPLE_MS))
+            return;
         result=sc_transfer(1u,SC7A20_STRG_OUT_AUTO,6u);
         if(!result)return;
         if(result!=1u){sc_offline();return;}
@@ -262,10 +263,10 @@ __attribute__((noinline)) void SC7A20Algo_Poll(void) {
             SC7A20_ReadCalibratedMg(s_sample.mg);
             sc_level_axes_update(); /* PB10A -> PB02B drawing axes */
             ++s_sample.seq;if(!s_sample.seq)++s_sample.seq;
-            s_sample_at=Millis();
-            /* 25Hz leveler sampling must not speed up the 5Hz
+            s_sample.at_ms = Millis();
+            /* 25Hz tool sampling must not speed up the 5Hz
              * 2-second orientation hysteresis from the normal mode. */
-            if(s_tool_mode!=1u || ++s_orient_div>=5u) {
+            if ((s_tool_mode != 1u && s_tool_mode != 3u) || ++s_orient_div >= 5u) {
                 s_orient_div=0u;
                 sc_orientation_update(s_sample.mg[2]);
             }

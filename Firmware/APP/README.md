@@ -53,6 +53,9 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 
 Powerbank, Radio, Game, Tools, Settings and Statistics appear in that order. Statistics contains Power, Battery, Sensors, Fault, System and About. After reset the firmware first opens the Powerbank dashboard. Short or long CONF opens the home menu from the dashboard.
 
+Game order: Tetris, Pac-Man, Bomber, Invaders, Arkanoid.
+Tools order: Leveler, SOS Blink, Compass, Altimeter, Accel Calibration, I2C Scanner.
+
 Settings lists Power Limits, Ports, Protocol#1 and Protocol#2 before Display.
 They expose 32 RAM-only settings and actions derived from PB02B.
 

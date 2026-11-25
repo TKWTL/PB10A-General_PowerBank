@@ -11,6 +11,8 @@ static struct pt s_transfer_pt;
 static volatile uint8_t s_flag;
 static uint32_t s_due_at,s_conversion_at;
 static int s_temp10,s_pressure_hpa10;
+static bmp180_sample_t s_sample;
+static uint8_t s_valid;
 static ui_item_t s_items[2];
 static ui_data_t s_data[2];
 static ui_element_t s_elements[2];
@@ -22,8 +24,16 @@ static uint8_t bmp_transfer(uint8_t read, uint8_t reg, uint8_t count) {
 
 static void bmp_offline(void) {
     BMP180_Invalidate();
+    s_valid = 0u;
     s_stage=0u;
     s_due_at=Millis()+BMP_RETRY_MS;
+}
+
+uint8_t BMP180Algo_GetSample(bmp180_sample_t *out) {
+    if (!out || !s_valid || s_paused || (uint32_t)(Millis() - s_sample.at_ms) > 1500u)
+        return 0u;
+    *out = s_sample;
+    return 1u;
 }
 
 __attribute__((noinline)) void BMP180Algo_Poll(void) {
@@ -69,7 +79,13 @@ __attribute__((noinline)) void BMP180Algo_Poll(void) {
         result=bmp_transfer(1u,BMP180_ADCVALUE_BASE,3u);
         if(!result)return;
         if(result!=1u || !BMP180_ApplyPressure(s_buffer,&s_pressure_hpa10)){bmp_offline();return;}
-        s_due_at=Millis()+BMP_SAMPLE_MS;
+        /* Publish a complete temperature/pressure pair, retaining Pa. */
+        s_sample.pressure_pa = BMP180_AirPressure;
+        s_sample.temperature_c10 = s_temp10;
+        s_sample.at_ms = Millis();
+        ++s_sample.seq;
+        s_valid = 1u;
+        s_due_at = s_sample.at_ms + BMP_SAMPLE_MS;
         s_stage=2u;break;
     default:bmp_offline();break;
     }
@@ -78,11 +94,13 @@ __attribute__((noinline)) void BMP180Algo_Poll(void) {
 static pm_hook_result_t bmp_prepare(void *ctx) {
     (void)ctx;
     s_paused=1u;
+    s_valid = 0u;
     return s_waiting?PM_HOOK_PENDING:PM_HOOK_DONE;
 }
 static pm_hook_result_t bmp_resume(void *ctx) {
     (void)ctx;
     s_paused=0u;
+    s_valid = 0u;
     return PM_HOOK_DONE;
 }
 static const pm_device_node_t s_node={
@@ -90,6 +108,8 @@ static const pm_device_node_t s_node={
 };
 void BMP180Algo_Init(void) {
     s_stage=0u;s_waiting=0u;s_paused=0u;s_due_at=Millis();
+    s_valid = 0u;
+    s_sample.seq = 0u;
     PT_INIT(&s_transfer_pt);
     (void)pm_device_register(&s_node);
 }

@@ -12,5 +12,7 @@
 #include "radio_app.h"
 #include "tools_motion_app.h"
 #include "sos_app.h"
+#include "compass_app.h"
+#include "altimeter_app.h"
 
 #endif

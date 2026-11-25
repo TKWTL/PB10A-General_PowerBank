@@ -925,6 +925,16 @@
               <FilePath>../APP/functions/sos_app.c</FilePath>
             </File>
             <File>
+              <FileName>compass_app.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/functions/compass_app.c</FilePath>
+            </File>
+            <File>
+              <FileName>altimeter_app.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/functions/altimeter_app.c</FilePath>
+            </File>
+            <File>
               <FileName>radio_app.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/functions/radio_app.c</FilePath>

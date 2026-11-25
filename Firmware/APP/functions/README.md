@@ -61,6 +61,23 @@ them.
   across MCU reset while SRAM has power, **not** across total power loss.
   Both applications release their PM lock on leave.
 
+- `compass_app.c/.h`: magnetic heading with gravity-based tilt compensation,
+  vector EMA, rotating compass rose, eight directions and magnetic strength.
+  The displayed top edge is the forward axis; actual R2 display rotation
+  adds 180 degrees. Hold the screen sufficiently face-up to obtain a fix.
+  `COMPASS_MAG_*_AXIS` maps MMC5603 to native SC7A20 axes; the default
+  aligned-axis assumption requires physical verification. No magnetic
+  calibration or declination correction. Both sensors use the 40 ms tool
+  target; only long CONF exits. Invalid/stale samples, rapid acceleration,
+  near-vertical forward axis or weak horizontal field suppress heading.
+- `altimeter_app.c/.h`: Pa snapshot, integer standard-atmosphere LUT,
+  standard/relative height in 0.1 m, pressure, sensor temperature and
+  vertical speed from the closest sample at least 5 s old. Short CONF
+  toggles STD/REL; LEFT or RIGHT zeros the relative height and selects REL;
+  long CONF exits. Relative reference is session RAM only.
+  Both sensor tools use the Leveler PM block/leave hook pattern and normal
+  screen auto-rotation; no new thread or I2C owner.
+
 Shared foundation services such as RTC calendar editing and the buzzer
 are provided by `APP/framework/`; device logic resides in `APP/algorithm/`.
 For new MiaoUI applications, register their callbacks/pages in `ui_conf.c`

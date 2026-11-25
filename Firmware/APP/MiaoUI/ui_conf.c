@@ -27,7 +27,7 @@ static ui_item_t s_power_limit_back, s_ports_back, s_protocol1_back, s_protocol2
 static ui_item_t s_display_item,s_sleep_wake_item,s_system_item,s_display_back,s_sleep_wake_back,s_system_back;
 static ui_item_t s_stat_power_item, s_stat_battery_item, s_stat_sensors_item, s_stat_fault_item, s_stat_system_item;
 static ui_item_t s_stat_power_back, s_stat_battery_back, s_stat_sensors_back, s_stat_fault_back, s_stat_system_back;
-static ui_item_t s_arkanoid, s_tetris, s_pacman, s_bomber, s_invaders, s_scanner, s_leveler, s_accel_cal, s_sos;
+static ui_item_t s_arkanoid, s_tetris, s_pacman, s_bomber, s_invaders, s_scanner, s_leveler, s_accel_cal, s_sos, s_compass, s_altimeter;
 static ui_item_t s_sleep_options_item;
 static ui_data_t s_sleep_data;
 static ui_element_t s_sleep_element;
@@ -100,8 +100,6 @@ void Create_MenuTree(ui_t *ui) {
 
     AddPage("[Game]",&s_game,UI_PAGE_ICON,&s_home);
         add_return(&s_game,&s_home,&s_game_back,0);
-        AddItem("-Arkanoid",UI_ITEM_WORD,img_arkanoid,&s_arkanoid,&s_game,0,Game_ArkanoidRun);
-        UI_SetLeaveHook(&s_arkanoid,Game_ArkanoidOnLeave);
         AddItem("-Tetris",UI_ITEM_WORD,img_tetris,&s_tetris,&s_game,0,Game_TetrisRun);
         UI_SetLeaveHook(&s_tetris,Game_TetrisOnLeave);
         AddItem("-Pac-Man",UI_ITEM_WORD,img_pacman,&s_pacman,&s_game,0,Game_PacmanRun);
@@ -110,6 +108,8 @@ void Create_MenuTree(ui_t *ui) {
         UI_SetLeaveHook(&s_bomber,Game_BomberOnLeave);
         AddItem("-Invaders",UI_ITEM_WORD,img_invaders,&s_invaders,&s_game,0,Game_InvadersRun);
         UI_SetLeaveHook(&s_invaders,Game_InvadersOnLeave);
+        AddItem("-Arkanoid",UI_ITEM_WORD,img_arkanoid,&s_arkanoid,&s_game,0,Game_ArkanoidRun);
+        UI_SetLeaveHook(&s_arkanoid,Game_ArkanoidOnLeave);
 
     AddPage("[Tools]",&s_tools,UI_PAGE_ICON,&s_home);
         add_return(&s_tools,&s_home,&s_tools_back,0);
@@ -118,6 +118,10 @@ void Create_MenuTree(ui_t *ui) {
         UI_SetLeaveHook(&s_leveler,Motion_LevelerOnLeave);
         AddItem("-SOS Blink",UI_ITEM_WORD,img_sos,&s_sos,&s_tools,0,SOS_AppRun);
         UI_SetLeaveHook(&s_sos,SOS_AppOnLeave);
+        AddItem("-Compass",UI_ITEM_WORD,img_compass,&s_compass,&s_tools,0,Compass_AppRun);
+        UI_SetLeaveHook(&s_compass,Compass_AppOnLeave);
+        AddItem("-Altimeter",UI_ITEM_WORD,img_altimeter,&s_altimeter,&s_tools,0,Altimeter_AppRun);
+        UI_SetLeaveHook(&s_altimeter,Altimeter_AppOnLeave);
         AddItem("-Accel Calibration",UI_ITEM_WORD,img_gradienter_cal,
             &s_accel_cal,&s_tools,0,Motion_CalibrationRun);
         UI_SetLeaveHook(&s_accel_cal,Motion_CalibrationOnLeave);

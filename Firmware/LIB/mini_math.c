@@ -53,3 +53,32 @@ int16_t atan2_cdeg(int32_t y, int32_t x) {
     if (x < 0) angle = 18000 - angle;
     return (int16_t)(y < 0 ? -angle : angle);
 }
+
+/* Standard pressure altitude (101325 Pa), integer meter nodes at 1 kPa. */
+// clang-format off
+static const int16_t altitude_lut[81] = {
+    9165, 8945, 8731, 8522, 8318, 8119, 7924, 7734, 7547, 7365,
+    7187, 7012, 6840, 6672, 6507, 6345, 6185, 6029, 5875, 5724,
+    5575, 5429, 5285, 5143, 5004, 4866, 4730, 4597, 4465, 4335,
+    4207, 4081, 3956, 3833, 3711, 3591, 3473, 3356, 3240, 3126,
+    3013, 2901, 2791, 2681, 2573, 2467, 2361, 2256, 2153, 2051,
+    1949, 1849, 1750, 1651, 1554, 1458, 1362, 1267, 1174, 1081,
+    989, 897, 807, 717, 629, 540, 453, 366, 281, 195,
+    111, 27, -56, -139, -220, -302, -382, -462, -541, -620,
+    -698,
+};
+// clang-format on
+
+uint8_t pressure_altitude_dm(int32_t pa, int32_t *out) {
+    if (!out || pa < 30000 || pa > 110000)
+        return 0u;
+    unsigned offset = (unsigned)(pa - 30000);
+    unsigned index = offset / 1000u;
+    int32_t dm = (int32_t)altitude_lut[index] * 10;
+    if (index < 80u) {
+        int32_t drop = altitude_lut[index] - altitude_lut[index + 1u];
+        dm -= (drop * (int32_t)(offset % 1000u) + 50) / 100;
+    }
+    *out = dm;
+    return 1u;
+}

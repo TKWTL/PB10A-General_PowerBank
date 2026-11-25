@@ -166,6 +166,10 @@ void Disp_SetRotation(uint8_t rotation) {
     s_applied_rotation=flipped;
 }
 
+uint8_t Disp_GetRotation(void) {
+    return s_applied_rotation == 1u;
+}
+
 void Disp_SetRotationMode(uint8_t rotation_mode) {
     static const u8g2_cb_t *const rotations[4] = {U8G2_R0, U8G2_R1, U8G2_R2, U8G2_R3};
     u8g2_SetDisplayRotation(&u8g2, rotations[rotation_mode & 3U]);

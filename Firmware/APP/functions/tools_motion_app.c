@@ -15,7 +15,6 @@
 #include "mini_format.h"
 #include <string.h>
 
-#define MOTION_APP_PM_BLOCK 0x20u
 #define LEVEL_VIEW_MS       40u
 #define LEVEL_PLUMB_ENTER   4300
 #define LEVEL_PLUMB_EXIT    4700
@@ -45,13 +44,13 @@ static int16_t cal_abs(int16_t x) {
     return (int16_t)(x<0 ? -(int32_t)x : x);
 }
 static void motion_tool_begin(uint8_t mode) {
-    pm_api_set_sleep_block(MOTION_APP_PM_BLOCK,1u);
+    pm_api_set_sleep_block(SENSOR_TOOL_PM_BLOCK, 1u);
     pm_api_refresh_idle();
     SC7A20Algo_SetToolMode(mode);
 }
 static void motion_tool_end(void) {
     SC7A20Algo_SetToolMode(0u);
-    pm_api_set_sleep_block(MOTION_APP_PM_BLOCK,0u);
+    pm_api_set_sleep_block(SENSOR_TOOL_PM_BLOCK, 0u);
     pm_api_refresh_idle();
 }
 void Motion_LevelerOnLeave(ui_t *ui) {

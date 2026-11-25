@@ -48,6 +48,7 @@ uint16_t Disp_GetUTF8Width(const char *str);
 /* Screen Flip is an auto-rotation permission: OFF=U8G2_R0 (native),
  * ON=SC7A20 Z-axis 180-degree orientation. Low-level R0..R3 still exposed. */
 void Disp_SetRotation(uint8_t rotation);
+uint8_t Disp_GetRotation(void); /* 1 for actual R2, 0 for native R0 */
 void Disp_SetRotationMode(uint8_t rotation_mode);
 void Disp_ResumeRotation(ui_t *ui);
 void Disp_UpdateRotation(ui_t *ui, uint8_t rotation_state);
