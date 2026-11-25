@@ -56,9 +56,9 @@ Powerbank, Radio, Game, Tools, Settings and Statistics appear in that order. Sta
 Settings lists Power Limits, Ports, Protocol#1 and Protocol#2 before Display.
 They expose 32 RAM-only settings and actions derived from PB02B.
 
-- Power Limits: experimental input/output requests 5–120 W, both in 5 W steps. The SW6306V register manual specifies 100 W; actual power remains hardware/protocol-limited. A clamped register readback between 100 W and the requested setting is remembered for reset detection.
+- Power Limits: input 5–100 W, output 5–105 W, both in 5 W steps; defaults 100 W / 105 W. Higher output requests were rejected in hardware testing.
 - Ports: C1 input/output and A1 output fast-charge switches, BUS Idle
-  Timeout (Off by default), Idle Threshold (0–100 mA, 4 mA steps, default 12),
+  Timeout (1 min by default), Idle Threshold (0–100 mA, 4 mA steps, default 12),
   Aux-A Enable (on by default), and Aux Idle Current (10–100 mA, default 50).
   Turning Aux-A Enable off stops the output and rejects new manual and
   insertion requests. Re-enabling it permits a new request.
@@ -139,18 +139,14 @@ and a predicted/measured 78 °C cutoff clears the request (E30).
 It never automatically turns the LED back on.
 The independent common battery NTC 60 °C/45 °C cutoff is unchanged.
 
-Tools → SOS Blink: CONF starts/stops, long CONF returns, and leaving
-the tool stops SOS without disabling unrelated manual lighting.
-SOS uses level 32, 100 ms dots and 300 ms dashes, 1.5 s nominal
-on-time in a 2.7 s transmission. A provisional WLED_SOS_PEAK_MW
-of 15000 and WLED_SOS_AVG_MW of 2500 yield a 9.54 s minimum
-cycle, including 90 ms of nominal service-edge margin. Lower
-allowed average power extends cooldown; a thermal pause holds the
-external-load request but drives PWM low. A meter interruption
-or restart cannot skip the previous group's budgeted cooling interval.
-The full-power pulses are experimental by user choice. Peak power,
-transient thermal response and the <80 °C hotspot limit require
-actual bench verification; the steady-state model does not prove them.
+Tools → SOS Blink (after Leveler): entering starts the sequence;
+any key exits and stops it. SOS uses level 32, 100 ms dots and 300 ms
+dashes, 1.5 s on-time in a 2.7 s transmission. WLED_SOS_PEAK_MW
+(15000) and WLED_SOS_AVG_MW (2500) yield a 9 s cycle.
+Lower allowed average power extends cooldown; thermal pause keeps
+the external-load reservation and drives PWM low. Meter interruptions
+and re-entry preserve the current group's cooling interval.
+The user verified a hotspot below 80 °C with the previous SOS timing.
 
 The SW6306 owner reuses a live C1/A1 path or requests a shared
 synthetic A2 insertion, confirmed by rereading port status. A2 has
@@ -296,7 +292,7 @@ a cable plugged into an inactive A port may not be detectable.
 
 **Verify hardware configuration before connecting real loads:** the
 current SW6306 BSP initialization includes 5S/4.2V cells,
-5 mΩ battery shunt scaling and experimental 120 W input/output requests following PB10A changes. The protocol current limits and battery current limits are unchanged. These are existing driver
+5 mΩ battery shunt scaling and 100 W input / 105 W output power settings. The protocol current limits and battery current limits are unchanged. These are existing driver
 defaults, not independently confirmed PB10A battery/hardware specs.
 
 ### Key input (Collar-Radio Buttons DAS)

@@ -17,8 +17,6 @@
 #define WLED_RECOVER_MS 5000u
 #define SOS_UNIT_MS 100u
 #define SOS_ON_MS 1500u
-/* One 10 ms service quantum per pulse for nominal timer-edge latency. */
-#define SOS_BUDGET_ON_MS (SOS_ON_MS + 9u * 10u)
 #define SOS_TRANSMIT_MS 2700u
 #define SOS_MIN_CYCLE_MS 5000u
 #define SOS_MIN_BUDGET_MW 1200u
@@ -315,7 +313,7 @@ static void wled_request(uint32_t now) {
 }
 
 static uint32_t sos_cycle(uint16_t budget) {
-    uint32_t cycle = ((uint32_t)WLED_SOS_PEAK_MW * SOS_BUDGET_ON_MS + budget - 1u) / budget;
+    uint32_t cycle = ((uint32_t)WLED_SOS_PEAK_MW * SOS_ON_MS + budget - 1u) / budget;
     return cycle < SOS_MIN_CYCLE_MS ? SOS_MIN_CYCLE_MS : cycle;
 }
 

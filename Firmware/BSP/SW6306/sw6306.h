@@ -95,11 +95,11 @@ extern "C" {
 #define SW6306_NTC_TEMP_CALC_EN         1
 #endif
 
-//实验性输入/输出功率请求上限120W；手册标称100W，实际能力仍由芯片与协议限制
-#define SW6306_INPUT_POWER_MAX 120U //输入/充电功率，单位1W
-#define SW6306_OUTPUT_POWER_MAX 120U //输出/放电功率，单位1W
+//输入100W、输出105W：使21V PPS/UFCS最高5A能力满足功率约束
+#define SW6306_INPUT_POWER_MAX 100U //输入/充电功率，单位1W
+#define SW6306_OUTPUT_POWER_MAX 105U //输出/放电功率，单位1W
 
-//电池端输入输出最大电流设定（单位mA，保持独立限流）
+//电池端输入输出最大电流设定，最大100W
 #define SW6306_BAT_DCHG_CURR_MAX        12000U      //设置放电电池端限流值（单位:mA，范围：100~12000）
 #define SW6306_BAT_CHG_CURR_MAX         6000U       //设置充电电池端限流值（单位:mA，范围：100~12000）
 

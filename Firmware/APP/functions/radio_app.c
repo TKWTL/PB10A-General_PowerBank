@@ -93,7 +93,7 @@ void Radio_AppDraw(ui_t *ui) {
     Disp_SetDrawColor(&fg);
     Disp_SetFont(font_fusion_pixel_p12_zhcn);
     /* Collar-Radio radio.c: every top status widget uses y-slide. */
-    Disp_DrawXBMP(1u,(uint16_t)(1-slide),7u,9u,s_signal_icon);
+    Disp_DrawXBMP(9u, (uint16_t)(1 - slide), 7u, 9u, s_signal_icon);
     (void)mini_snprintf(buf,sizeof(buf),":%u",(unsigned)s_snapshot.rssi);
     Disp_DrawStr(16u, (uint16_t)(10 - slide), buf);
     Disp_DrawStr(44u, (uint16_t)(10 - slide),

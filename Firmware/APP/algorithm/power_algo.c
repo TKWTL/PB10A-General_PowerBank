@@ -168,7 +168,7 @@ static const unsigned s_idle_seconds[] = {5u, 10u, 30u, 60u, 300u, 900u, 1800u};
 static const char *const s_idle_labels[] = {"5s", "10s", "30s", "1min", "5min", "15min", "30min", "Off"};
 static int s_output_w = SW6306_OUTPUT_POWER_MAX, s_input_w = SW6306_INPUT_POWER_MAX;
 static uint8_t s_output_requested = SW6306_OUTPUT_POWER_MAX, s_input_requested = SW6306_INPUT_POWER_MAX;
-static int s_idle_timeout = 7, s_idle_threshold = 12, s_aux_threshold = 50;
+static int s_idle_timeout = 3, s_idle_threshold = 12, s_aux_threshold = 50; /* 1 min */
 static uint8_t s_setting_switch[CFG_COUNT] = {[CFG_AUX_ENABLE] = 1u};
 #define s_aux_allowed (s_setting_switch[CFG_AUX_ENABLE])
 

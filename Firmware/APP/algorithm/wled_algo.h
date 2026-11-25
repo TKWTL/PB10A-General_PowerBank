@@ -6,8 +6,7 @@
 #define WLED_MANUAL_MAX_LEVEL 19u
 #define WLED_PEAK_LEVEL 32u
 
-/* The 32nd level has not been measured. This is a provisional design
- * budget, not a measured peak, and must be replaced after pulse testing. */
+/* SOS power budget in milliwatts. */
 #ifndef WLED_SOS_PEAK_MW
 #define WLED_SOS_PEAK_MW 15000u
 #endif

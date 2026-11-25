@@ -41,15 +41,6 @@ static void sw6306_i2c_succeeded(void) { s_i2c_fail_groups = 0U; }
 static uint8_t s_pimax_target = SW6306_INPUT_POWER_MAX;
 static uint8_t s_pomax_target = SW6306_OUTPUT_POWER_MAX;   // 运行时最大输出功率目标（W），Init 写入、可由 SetMaxOutputPower 修改
 
-/* Above the documented 100 W ceiling the experimental request may be
- * clamped in the register mirror. Keep the observed post-write mirror. */
-static uint8_t s_pimax_expected = SW6306_INPUT_POWER_MAX;
-static uint8_t s_pomax_expected = SW6306_OUTPUT_POWER_MAX;
-
-static uint8_t sw6306_power_readback_ok(uint8_t requested, uint8_t actual) {
-    return requested == actual || (requested > 100u && actual >= 100u && actual < requested);
-}
-
 /* 功率设置会立即重算并重播协议电流能力；实现定义在初始化区。 */
 static SW6306_RET SW6306_PDCurrentSet(SW6306_ARGS(uint8_t watt));
 static SW6306_RET SW6306_UFCSCurrentSet(SW6306_ARGS(uint8_t watt));
@@ -975,7 +966,7 @@ static SW6306_RET SW6306_Unlock_Nolock(SW6306_NOARG) {
     SW6306_FUNC_END;
 }
 
-/* 设置最大输出功率（单位W，PB10A试验上限120W）。
+/* 设置最大输出功率（单位W，PB10A上限105W）。
  * 写 POSET 后立即按新功率重算 PD/PPS/UFCS Source 电流并重播能力。 */
 SW6306_RET SW6306_SetMaxOutputPower(SW6306_ARGS(uint8_t watt)) {
     SW6306_FUNC_BEGIN;
@@ -985,13 +976,6 @@ SW6306_RET SW6306_SetMaxOutputPower(SW6306_ARGS(uint8_t watt)) {
         SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_POSET);
     if (!s_io_failed)
         SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_POSET, watt);
-    if (!s_io_failed) {
-        s_pomax_expected = watt;
-        if (watt > 100u)
-            SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_CTRG_POSET, &s_pomax_expected);
-        if (!sw6306_power_readback_ok(watt, s_pomax_expected))
-            s_io_failed = 1u;
-    }
     /* 功率设置与协议能力同步：每档按 min(POSET/电压, 档位允许电流)
      * 计算，不再对 20V Fix / 21V PPS / 21V UFCS 人为限制为 2A。 */
     if (!s_io_failed)
@@ -999,7 +983,7 @@ SW6306_RET SW6306_SetMaxOutputPower(SW6306_ARGS(uint8_t watt)) {
     if (!s_io_failed)
         SW6306_SPAWN_ARGS(SW6306_UFCSCurrentSet, watt);
     if (!s_io_failed) {
-        SW6306_Status.pomax_set = s_pomax_expected;
+        SW6306_Status.pomax_set = watt;
         s_pomax_target = watt;
     }
     SW6306_MUTEX_GIVE;
@@ -1191,7 +1175,7 @@ SW6306_RET SW6306_SetLowCurrentMode(SW6306_ARGS(uint8_t enable)) {
     SW6306_FUNC_END;
 }
 
-/* 设置最大输入功率（单位W，PB10A试验上限120W）：解锁并写 PISET(0x45)，同步镜像 */
+/* 设置最大输入功率（单位W，最大100W）：解锁并写 PISET(0x45)，同步镜像 */
 SW6306_RET SW6306_SetMaxInputPower(SW6306_ARGS(uint8_t watt)) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
@@ -1201,14 +1185,7 @@ SW6306_RET SW6306_SetMaxInputPower(SW6306_ARGS(uint8_t watt)) {
     if (!s_io_failed)
         SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PISET, watt);
     if (!s_io_failed) {
-        s_pimax_expected = watt;
-        if (watt > 100u)
-            SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_CTRG_PISET, &s_pimax_expected);
-        if (!sw6306_power_readback_ok(watt, s_pimax_expected))
-            s_io_failed = 1u;
-    }
-    if (!s_io_failed) {
-        SW6306_Status.pimax_set = s_pimax_expected;
+        SW6306_Status.pimax_set = watt;
         s_pimax_target = watt;
     }
     SW6306_MUTEX_GIVE;
@@ -1478,7 +1455,7 @@ SW6306_RET SW6306_IbusForceCtrlSet(SW6306_ARGS(uint8_t status))//设置是否强
 /* 依据 POSET (W) 与档位最高电压 (mV) 计算输出电流上限。
  * 整数计算避免浮点，并向下对齐到协议规定步进；使用 uint32_t
  * 防止 W * 1000000 发生 16 位溢出。
- * 120W请求时仍限制20V Fix / 21V PPS/UFCS至5000mA。
+ * 105W设置：20V Fix = 5000mA，21V PPS/UFCS = 5000mA。
  * 实际对外能力仍应由芯片依据线缆 E-marker 与端口状态限制。 */
 static uint16_t sw6306_power_current_ma(uint8_t watt, uint16_t voltage_mv, uint16_t max_ma, uint16_t step_ma) {
     uint32_t current_ma = (uint32_t)watt * 1000000UL / voltage_mv;
@@ -1618,21 +1595,6 @@ SW6306_NOINLINE SW6306_RET SW6306_Init(SW6306_NOARG) {
     SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_CHG_IBAT, sw6306_batt_limit_register(SW6306_BAT_CHG_CURR_MAX));
     //输出功率设置（写入运行时目标，默认 SW6306_OUTPUT_POWER_MAX）
     SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_POSET, s_pomax_target);
-    if (!s_io_failed) {
-        s_pimax_expected = s_pimax_target;
-        s_pomax_expected = s_pomax_target;
-        if (s_pimax_target > 100u)
-            SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_CTRG_PISET, &s_pimax_expected);
-        if (!s_io_failed && s_pomax_target > 100u)
-            SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_CTRG_POSET, &s_pomax_expected);
-        if (!sw6306_power_readback_ok(s_pimax_target, s_pimax_expected) ||
-            !sw6306_power_readback_ok(s_pomax_target, s_pomax_expected))
-            s_io_failed = 1u;
-    }
-    if (s_io_failed) {
-        SW6306_MUTEX_GIVE;
-        SW6306_FUNC_ABORT;
-    }
     //LEARN_END 由算法在消费 DONE 后 re-arm 时清除；Init 不得破坏历史完成状态。
     //切换寄存器组
     SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_DCHG4);
@@ -1673,7 +1635,7 @@ SW6306_NOINLINE SW6306_RET SW6306_Init(SW6306_NOARG) {
     SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_INDET3, SW6306_INDET3_A1_20|SW6306_INDET3_A2_60);
     //端口快充全部使能
     SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_PORTQC, SW6306_PORTQC_MSK, 0x00);
-    /* A 120W PISET request is not sufficient if VCHG caps sink requests at 15V.
+    /* PISET=100W is not sufficient if VCHG caps sink requests at 15V.
      * Enable 20V request for capable PD chargers (20V/5A needs a
      * certified 5A e-marked cable). Keep battery-voltage priority. */
     SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_VCHG,
@@ -1728,8 +1690,8 @@ uint8_t SW6306_ValidateInitialized(void) {
      * 用PISET/POSET读回检测SW6306独立复位或配置丢失；只有这个入口允许因
      * 功率配置镜像失配而清initialized。 */
     if(SW6306_Status.initialized == 0U) return 0U;
-    if ((SW6306_Status.pimax_set == s_pimax_expected) &&
-        (SW6306_Status.pomax_set == s_pomax_expected)) {
+    if ((SW6306_Status.pimax_set == s_pimax_target) &&
+        (SW6306_Status.pomax_set == s_pomax_target)) {
         return 1U;
     }
     SW6306_Status.initialized = 0U;

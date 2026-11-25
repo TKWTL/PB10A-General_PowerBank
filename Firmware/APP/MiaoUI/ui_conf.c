@@ -129,12 +129,12 @@ void Create_MenuTree(ui_t *ui) {
         AddItem("-Leveler",UI_ITEM_WORD,img_gradienter,
             &s_leveler,&s_tools,0,Motion_LevelerRun);
         UI_SetLeaveHook(&s_leveler,Motion_LevelerOnLeave);
+        AddItem("-SOS Blink",UI_ITEM_WORD,img_sos,&s_sos,&s_tools,0,SOS_AppRun);
+        UI_SetLeaveHook(&s_sos,SOS_AppOnLeave);
         AddItem("-Accel Calibration",UI_ITEM_WORD,img_gradienter_cal,
             &s_accel_cal,&s_tools,0,Motion_CalibrationRun);
         UI_SetLeaveHook(&s_accel_cal,Motion_CalibrationOnLeave);
         AddItem("-I2C Scanner",UI_ITEM_WORD,img_scan,&s_scanner,&s_tools,0,i2c_Scanner);
-        AddItem("-SOS Blink",UI_ITEM_WORD,img_sos,&s_sos,&s_tools,0,SOS_AppRun);
-        UI_SetLeaveHook(&s_sos,SOS_AppOnLeave);
 
     AddPage("[Settings]",&s_settings,UI_PAGE_TEXT,&s_home);
         add_return(&s_settings,&s_home,&s_settings_back,0);
