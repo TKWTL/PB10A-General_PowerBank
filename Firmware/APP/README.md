@@ -100,9 +100,9 @@ In the Powerbank dashboard, RIGHT raises brightness and LEFT lowers
 it. A debounced press changes a level immediately, then repeats every
 80 ms while held. A RIGHT press that starts from off is limited to
 level 2 until a new press. LEFT reaches zero without a press limit.
-TIM1 CH4 drives PA11 at 3.90625 kHz (64 MHz timer clock, PSC 15,
+TIM1 CH4 drives PA11 at 62.5 kHz (64 MHz timer clock, PSC 0,
 ARR 1023). Levels 1–32 use squared compare values capped at 1023
-and the existing 160 ms ramp. Level 1 has a 250 ns minimum high pulse.
+and the existing 160 ms ramp. Level 1 uses compare 1.
 The SOS API is available to firmware with no dashboard shortcut.
 
 WLED and Aux-A use fresh SW6306 battery voltage, capacity, NTC and

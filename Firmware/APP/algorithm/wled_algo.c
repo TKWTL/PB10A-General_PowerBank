@@ -203,7 +203,7 @@ void WLED_AlgoService(uint32_t now) {
     } else {
         int32_t delta = (int32_t)s_target - s_ramp_from;
         uint16_t pwm = (uint16_t)(s_ramp_from + delta * (int32_t)elapsed / (int32_t)WLED_RAMP_MS);
-        /* PSC=15 gives a 250 ns high pulse at CCR4=1. */
+        /* Start at compare 1 while the ramp is below the first level. */
         apply_pwm(pwm ? pwm : 1u);
     }
 }

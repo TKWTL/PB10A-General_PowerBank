@@ -30,8 +30,8 @@
 #define PB_DATE_Y 63u
 
 #define PB_BUS_END 45u
-#define PB_BAT_END 84u
-#define PB_AUX_ARROW_X 85u
+#define PB_BAT_END 82u
+#define PB_AUX_ARROW_X 82u
 #define PB_DISCHARGE_ARROW_MW 100u
 #define PB_BUS_CENTER (PB_COL_BUS + 18u)
 #define PB_BAT_CENTER (PB_COL_BAT + 18u)
@@ -159,7 +159,7 @@ static void draw_aux(const power_monitor_t *power, uint8_t bg, uint8_t fg) {
     Disp_SetDrawColor(&fg);
     if (power->aux_enabled && power->aux_valid &&
         power_mw(power->aux_mv, power->aux_ma) >= PB_DISCHARGE_ARROW_MW)
-        Disp_DrawStr(PB_AUX_ARROW_X, PB_ROW_TITLE, ">");
+        Disp_DrawStr(PB_AUX_ARROW_X, PB_ROW_TITLE + 1u, ">");
     if (power->ntc_valid) {
         char text[8]; /* Up to six glyphs, with two bytes for °. */
         int c10 = power->ntc_c10;
