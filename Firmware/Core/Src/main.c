@@ -170,6 +170,7 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+  LL_RCC_ConfigMCO(LL_RCC_MCO1SOURCE_LSE, LL_RCC_MCO1_DIV_1);
 }
 
 /* USER CODE BEGIN 4 */

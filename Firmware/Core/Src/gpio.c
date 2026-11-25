@@ -57,10 +57,10 @@ void MX_GPIO_Init(void)
   LL_GPIO_ResetOutputPin(D_C_GPIO_Port, D_C_Pin);
 
   /**/
-  LL_GPIO_ResetOutputPin(CPEN_GPIO_Port, CPEN_Pin);
+  LL_GPIO_ResetOutputPin(SUB_EN_GPIO_Port, SUB_EN_Pin);
 
   /**/
-  LL_GPIO_ResetOutputPin(SUB_EN_GPIO_Port, SUB_EN_Pin);
+  LL_GPIO_ResetOutputPin(CPEN_GPIO_Port, CPEN_Pin);
 
   /**/
   GPIO_InitStruct.Pin = D_C_Pin;
