@@ -67,10 +67,10 @@ They expose 32 RAM-only settings and actions derived from PB02B.
 - Protocol#2: QC, FCP, AFC, SCP, PE, SFCP, VOOC and SVOOC switches.
 
 All SW6306 writes are dispatched by the existing owner coroutine.
-Power changes and broadcasts can run on active sessions. Protocol and
-fast-charge changes wait for fresh, idle port status and a released
-external-load meter path. UI edits are coalesced and requeued after
-failed writes. PowerLoad detects loss of the applied power configuration;
+Power, protocol, fast-charge switches and broadcasts are eligible
+in the next configuration slot regardless of port or external-load
+state. UI edits are coalesced and requeued after failed writes.
+PowerLoad detects loss of the applied power configuration;
 reinitialization restores the applied power limits and requeues disabled
 protocol/port switches. MCU reset returns settings to defaults.
 BUS idle shutdown is disabled while charging, in low-current mode,
@@ -463,9 +463,9 @@ apply the current Screen Flip setting from the first frame after exit.
   right edge down **X≈+1000 mg**. The 5 Hz estimator uses ±650 mg
   thresholds with about 2 s confirmation. Sideways attitudes do not
   update the orientation.
-- Settings > Sleep&Wake contains Back, Sleep Options, Pickup Wake,
-  Motion Wake. Sleep Options reproduces IH01A's mutually exclusive choices:
-  No Auto Sleep, 15s, 30s, 1min, 2min, 5min, 10min, 15min, 30min.
+- Settings > Sleep & Wake includes an enum Sleep Options item:
+  Off (no automatic sleep), 15s, 30s, 1min, 2min, 5min, 10min,
+  15min, 30min. The parameter editor applies each step immediately.
   The default is 1min, matching PM's 60000ms default.
 - Both wake switches default OFF. When either is enabled, SC7A20 runs
   25 Hz low power during STOP1. **Pickup Wake** uses PB02B's six-direction

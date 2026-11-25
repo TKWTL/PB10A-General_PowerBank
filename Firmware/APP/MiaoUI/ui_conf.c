@@ -18,7 +18,7 @@
 #include "main.h"
 #include "millis.h"
 static ui_page_t s_home,s_settings,s_stats,s_game,s_tools,s_display;
-static ui_page_t s_sys, s_sleep_wake, s_sleep_options, s_stat_power, s_stat_battery, s_stat_sensors, s_stat_fault, s_stat_system;
+static ui_page_t s_sys, s_sleep_wake, s_stat_power, s_stat_battery, s_stat_sensors, s_stat_fault, s_stat_system;
 static ui_item_t s_powerbank,s_radio,s_settings_item,s_stats_item,s_game_item,s_tools_item,s_about;
 static ui_item_t s_settings_back,s_stats_back,s_game_back,s_tools_back;
 static ui_page_t s_power_limit, s_ports, s_protocol1, s_protocol2;
@@ -28,15 +28,13 @@ static ui_item_t s_display_item,s_sleep_wake_item,s_system_item,s_display_back,s
 static ui_item_t s_stat_power_item, s_stat_battery_item, s_stat_sensors_item, s_stat_fault_item, s_stat_system_item;
 static ui_item_t s_stat_power_back, s_stat_battery_back, s_stat_sensors_back, s_stat_fault_back, s_stat_system_back;
 static ui_item_t s_arkanoid, s_tetris, s_pacman, s_bomber, s_invaders, s_scanner, s_leveler, s_accel_cal, s_sos;
-static ui_item_t s_sleep_options_item,s_sleep_options_back,s_sleep_items[9];
-static ui_data_t s_sleep_data[9];
-static ui_element_t s_sleep_elements[9];
-static uint8_t s_sleep_selected[9];
-static const char *const s_sleep_labels[9]={
-    " No Auto Sleep"," 15s"," 30s"," 1min"," 2min",
-    " 5min"," 10min"," 15min"," 30min"
-};
-static const int s_sleep_seconds[9]={0,15,30,60,120,300,600,900,1800};
+static ui_item_t s_sleep_options_item;
+static ui_data_t s_sleep_data;
+static ui_element_t s_sleep_element;
+static int s_sleep_selected = 3; /* 1 min, matching the PM default. */
+static const char *const s_sleep_labels[] = {
+    "Off", "15s", "30s", "1min", "2min", "5min", "10min", "15min", "30min"};
+static const int s_sleep_seconds[] = {0, 15, 30, 60, 120, 300, 600, 900, 1800};
 static ui_text_t s_about_text;
 static ui_element_t s_about_el;
 /* Only one pending target; Radio (1) outranks Powerbank (2). */
@@ -50,37 +48,26 @@ static void add_return(ui_page_t *page,ui_page_t *parent,ui_item_t *item,uint8_t
     AddItem("[Back]",UI_ITEM_RETURN,page->type==UI_PAGE_ICON?img_home:0,item,page,parent,0);
 }
 
-/* IH01A radio-style Sleep Options: RAM-only and default 1 min. */
+/* RAM-only enum, reusing the normal parameter editor. */
 static void sleep_option_changed(ui_t *ui) {
-    uint8_t i;
     (void)ui;
-    for(i=0u;i<9u;i++)
-        if(s_sleep_selected[i]) {
-            pm_api_set_sleep_timeout(s_sleep_seconds[i]);
-            return;
-        }
+    pm_api_set_sleep_timeout(s_sleep_seconds[s_sleep_selected]);
 }
+
 static void add_sleep_options(ui_page_t *parent) {
-    uint8_t i;
-    s_sleep_selected[3]=1u; /* 1 min: current PM default */
-    AddItem("-Sleep Options",UI_ITEM_PARENTS,0,&s_sleep_options_item,
-        parent,&s_sleep_options,0);
-    AddPage("[Sleep Options]",&s_sleep_options,UI_PAGE_TEXT,parent);
-    add_return(&s_sleep_options,parent,&s_sleep_options_back,0);
-    for(i=0u;i<9u;i++) {
-        s_sleep_data[i].name=s_sleep_labels[i];
-        s_sleep_data[i].ptr=&s_sleep_selected[i];
-        s_sleep_data[i].function=sleep_option_changed;
-        s_sleep_data[i].functionType=UI_DATA_FUNCTION_STEP_EXECUTE;
-        s_sleep_data[i].dataType=UI_DATA_SWITCH;
-        s_sleep_data[i].actionType=UI_DATA_ACTION_RW;
-        s_sleep_data[i].min=1;
-        s_sleep_data[i].max=1; /* MiaoUI exclusive switch group */
-        s_sleep_elements[i].data=&s_sleep_data[i];
-        Create_element(&s_sleep_items[i],&s_sleep_elements[i]);
-        AddItem(s_sleep_labels[i],UI_ITEM_DATA,0,
-            &s_sleep_items[i],&s_sleep_options,0,0);
-    }
+    s_sleep_data.name = "Sleep";
+    s_sleep_data.ptr = &s_sleep_selected;
+    s_sleep_data.function = sleep_option_changed;
+    s_sleep_data.functionType = UI_DATA_FUNCTION_STEP_EXECUTE;
+    s_sleep_data.dataType = UI_DATA_ENUM;
+    s_sleep_data.actionType = UI_DATA_ACTION_RW;
+    s_sleep_data.min = 0;
+    s_sleep_data.max = (int)(sizeof(s_sleep_labels) / sizeof(s_sleep_labels[0])) - 1;
+    s_sleep_data.step = 1;
+    s_sleep_data.options = s_sleep_labels;
+    s_sleep_element.data = &s_sleep_data;
+    Create_element(&s_sleep_options_item, &s_sleep_element);
+    AddItem(" Sleep Options", UI_ITEM_DATA, 0, &s_sleep_options_item, parent, 0, 0);
 }
 
 void Create_Parameter(ui_t *ui) {

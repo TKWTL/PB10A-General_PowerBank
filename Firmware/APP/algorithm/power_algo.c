@@ -1751,21 +1751,13 @@ THRD_DECLARE(battery_learn_rearm) {
 
 /* Only the SW6306 owner consumes dirty bits. One register operation or
  * power transaction per service slot leaves the monitor and ADC responsive. */
-static uint8_t config_ports_idle(uint32_t now) {
-    return s_idle_verified && meter_ports_fresh(now) && SW6306_TransportPortsIdle() &&
-           !ext_loads() && s_meter_a2 == METER_A2_OFF;
-}
-
-static uint32_t config_eligible(uint32_t now) {
-    uint32_t mask = CFG_POWER_MASK | CFG_BROADCAST_MASK;
-    if (config_ports_idle(now))
-        mask |= CFG_CHIP_SWITCH_MASK;
-    return s_config_dirty & mask;
+static uint32_t config_eligible(void) {
+    return s_config_dirty & (CFG_POWER_MASK | CFG_BROADCAST_MASK | CFG_CHIP_SWITCH_MASK);
 }
 
 static void config_restore_switches(void) {
-    /* Init writes the ON baseline. Replay any user-disabled switches once
-     * the ports are idle again. Pending UI requests survive reinit. */
+    /* Init writes the ON baseline. Replay user-disabled switches in the
+     * next configuration slots. Pending UI requests survive reinit. */
     for (unsigned i = CFG_C1_INPUT; i < CFG_COUNT; ++i) {
         uint32_t bit = CFG_BIT(i);
         if ((CFG_CHIP_SWITCH_MASK & bit) && !s_setting_switch[i])
@@ -1780,10 +1772,10 @@ THRD_DECLARE(config_step) {
     static uint8_t value, value2, value3;
     THRD_BEGIN;
 
-    selected = config_eligible(Millis());
+    selected = config_eligible();
     if (!selected)
         PT_EXIT(pt);
-    /* Power and explicit broadcasts are independent of the deferred switches. */
+    /* Keep power changes and explicit broadcasts first. */
     if (selected & (CFG_POWER_MASK | CFG_BROADCAST_MASK))
         selected &= CFG_POWER_MASK | CFG_BROADCAST_MASK;
     for (index = 0u; !(selected & CFG_BIT(index)); ++index) {
@@ -2057,7 +2049,7 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
                 s_sw_owner_busy = 1u;
                 THRD_SPAWN_NOARG(battery_learn_rearm);
                 s_sw_owner_busy = 0u;
-            } else if (config_eligible(Millis())) {
+            } else if (config_eligible()) {
                 s_sw_owner_busy = 1u;
                 THRD_SPAWN_NOARG(config_step);
                 s_sw_owner_busy = 0u;
