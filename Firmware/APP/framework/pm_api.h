@@ -7,7 +7,7 @@ extern "C" {
 /* Maximum state depth: DEEPSLEEP (STOP1); STANDBY is forbidden. */
 /* A single ISR-to-PM pending bitmask. IRQs never run application logic. */
 #define PM_WAKE_KEY        0x01u
-#define PM_WAKE_SC7A20    0x02u
+#define PM_WAKE_SC7A20 0x02u /* PB5 shared SC7A20 / SW6306 interrupt */
 #define PM_WAKE_MIC_INDET  0x04u
 #define PM_WAKE_SUB_INDET  0x08u
 void pm_api_on_exti_event(uint8_t source);

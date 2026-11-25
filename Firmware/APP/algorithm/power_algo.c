@@ -11,6 +11,7 @@
 #include "pm_api.h"
 #include "system_algo.h"
 #include "wled_algo.h"
+#include "battery_algo.h"
 #include <string.h>
 #include "mini_format.h"
 
@@ -24,6 +25,9 @@ enum {
     BATTERY_MAX_ENERGY,
     BATTERY_REMAIN_ENERGY,
     BATTERY_TEMP,
+    BATTERY_SOH,
+    BATTERY_EFC,
+    BATTERY_LEARN,
     BATTERY_ITEM_COUNT
 };
 static int s_battery_values[BATTERY_ITEM_COUNT];
@@ -49,7 +53,9 @@ static uint8_t s_eta_mode, s_adc_fresh, s_bus_display_valid;
 static uint8_t s_sw_phase,s_capacity_div,s_idle_verified,s_status_fresh;
 static uint8_t s_sw_owner_busy,s_cycle_ok;
 static uint32_t s_sw_seq_before;
-static uint32_t s_retry_at;
+static uint32_t s_retry_at, s_sw_next_at;
+static volatile uint8_t s_meter_irq; /* PB5 shared INT: ISR sets, owner consumes. */
+static uint8_t s_scene_seen;
 static uint8_t s_port_baseline_valid,s_previous_connections;
 /* Independent request/result mailbox, single owner: PowerAlgo_SW6306Thread. */
 static uint8_t s_radio_battery_check_request,s_radio_battery_check_result;
@@ -277,7 +283,6 @@ void PowerAlgo_AddProtocolItems(ui_page_t *page, uint8_t group) {
 #define EXT_NTC_STOP_C10 600
 #define EXT_NTC_RESTART_C10 450
 #define METER_RELEASE_MS 200u
-#define METER_HANDOVER_MS 1000u
 #define METER_RETRY_MS 1000u
 
 typedef enum { EXT_ADC,
@@ -293,21 +298,21 @@ enum { EXT_INHIBIT_DATA = 1u,
        EXT_INHIBIT_FAULT = 8u,
        EXT_INHIBIT_PM = 16u };
 
-typedef enum { A2_FREE,
-               A2_INSERT_PENDING,
-               A2_METER_OWNED,
-               A2_REMOVE_PENDING,
-               A2_UNCERTAIN } meter_a2_t;
+typedef enum { METER_A2_UNKNOWN,
+               METER_A2_OFF,
+               METER_A2_ON,
+               METER_A2_PENDING } meter_a2_state_t;
 
 static uint8_t s_ext_requested, s_ext_active, s_ext_valid, s_ext_hot, s_ext_fault;
 static uint8_t s_ext_pm_closing, s_ext_pm_work;
 static uint16_t s_ext_vbat_mv, s_ext_ibus_ma;
 static uint32_t s_ext_stamp[EXT_SAMPLE_COUNT], s_ext_release_at, s_ext_pm_at;
-static meter_a2_t s_meter_a2;
+static meter_a2_state_t s_meter_a2;
+static uint8_t s_a2_target; /* Latched submitted command, not current demand. */
 static uint8_t s_meter_a1_on, s_meter_real_path, s_meter_real_present;
 static uint8_t s_meter_ports_valid;
 static uint32_t s_meter_ports_at, s_meter_attempt_at, s_meter_command_at;
-static uint32_t s_meter_real_at;
+
 
 /* Fault history and notification are independent of protection decisions. */
 enum {
@@ -502,7 +507,8 @@ static uint8_t fault_direction_code(sw6306_fault_snapshot_t changed, sw6306_faul
 static void fault_consume_status(void) {
     sw6306_fault_snapshot_t snap;
     SW6306_GetFaultSnapshot(&snap);
-    uint8_t events = snap.event0 & (FAULT_EVENTS | SW6306_FAULT0_LEARNEND);
+    /* LEARNEND belongs to the capacity-learning consumer, not fault handling. */
+    uint8_t events = snap.event0 & FAULT_EVENTS;
     uint8_t fresh = events & (uint8_t)~s_fault_seen_events;
     uint8_t live = snap.system & FAULT_LIVE;
     uint8_t rising = live & (uint8_t)~s_fault_prev_live;
@@ -521,6 +527,7 @@ static void fault_consume_status(void) {
         changed.extra &= (uint8_t)~s_fault_latest.extra;
     }
     s_fault_latest = snap;
+    s_scene_seen |= snap.event0 & SW6306_FAULT0_SCENE;
     s_fault_status_at = Millis();
     s_fault_status_ok = s_fault_has_snapshot = 1u;
     s_fault_offline = 0u;
@@ -548,8 +555,6 @@ static void fault_consume_status(void) {
                 fault_hardware_report(discharge_code, SW6306_SYS_STAT_DISCHGERR);
         }
     }
-    if (fresh & SW6306_FAULT0_LEARNEND)
-        fault_offer_notice(NOTICE_LEARN_DONE, POWER_NOTICE_INFO);
     s_fault_seen_events = events;
     s_fault_prev_live = live;
     s_fault_clear_mask = events;
@@ -717,13 +722,17 @@ void PowerAlgo_AddFaultItems(ui_page_t *page) {
         AddItem(s_fault_labels[i], UI_ITEM_DATA, 0, &s_fault_items[i], page, 0, 0);
 }
 
+void PowerAlgo_OnSharedIRQ(void) {
+    s_meter_irq = 1u;
+}
+
 static uint8_t meter_ports_fresh(uint32_t now) {
     return s_meter_ports_valid && (uint32_t)(now - s_meter_ports_at) <= SW_MONITOR_STALE_MS;
 }
 
 static uint8_t meter_ready(uint32_t now) {
     return !s_bus_force_off && meter_ports_fresh(now) &&
-           (s_meter_real_path || s_meter_a2 == A2_METER_OWNED);
+           (s_meter_real_path || (!s_meter_real_present && s_meter_a2 == METER_A2_ON));
 }
 
 uint8_t PowerAlgo_ExtLoadRequest(uint8_t load) {
@@ -779,48 +788,75 @@ static void meter_note_ports(uint32_t now) {
     uint8_t connections = SW6306_ConnectedPortMask();
     uint8_t a2_on = SW6306_IsPortA2ON() != 0u;
     uint8_t a2_online = (connections & SW6306_CONNECTED_A2) != 0u;
+    uint8_t was_present = s_meter_real_present;
     s_meter_a1_on = SW6306_IsPortA1ON() != 0u;
-    uint8_t real_path = SW6306_IsPortC1ON() || SW6306_IsCharging() || s_meter_a1_on;
-    if (real_path && (!s_meter_real_path || !meter_ports_fresh(now)))
-        s_meter_real_at = now;
-    s_meter_real_path = real_path;
-    s_meter_real_present = real_path || (connections & (SW6306_CONNECTED_C1 | SW6306_CONNECTED_A1));
+    uint8_t c1_path = SW6306_IsPortC1ON() || SW6306_IsCharging();
+    s_meter_real_path = c1_path || s_meter_a1_on;
+    s_meter_real_present = connections & (SW6306_CONNECTED_C1 | SW6306_CONNECTED_A1);
+    if (c1_path)
+        s_meter_real_present |= SW6306_CONNECTED_C1;
+    if (s_meter_a1_on)
+        s_meter_real_present |= SW6306_CONNECTED_A1;
     s_meter_ports_at = now;
     s_meter_ports_valid = 1u;
 
-    /* A2 has no physical connector. An unexpected active A2 can be
-     * removed, but only a confirmed insertion permits external loads. */
-    uint8_t settled = (uint32_t)(now - s_meter_command_at) >= METER_RETRY_MS;
-    if (a2_on && s_meter_a2 == A2_INSERT_PENDING) {
-        s_meter_a2 = A2_METER_OWNED;
-    } else if (!a2_on && !a2_online) {
-        if ((s_meter_a2 != A2_INSERT_PENDING && s_meter_a2 != A2_UNCERTAIN) || settled)
-            s_meter_a2 = A2_FREE;
-    } else if (s_meter_a2 == A2_FREE ||
-               (s_meter_a2 == A2_METER_OWNED && !a2_on) ||
-               (settled && (s_meter_a2 == A2_INSERT_PENDING || s_meter_a2 == A2_REMOVE_PENDING))) {
-        s_meter_a2 = A2_UNCERTAIN;
-    }
+    /* A2 is exclusive to firmware, so any observed ON path can be reused.
+     * While a command is pending, confirm its latched direction or wait
+     * until the existing retry interval expires before changing state. */
+    meter_a2_state_t observed = a2_on ? METER_A2_ON : a2_online ? METER_A2_UNKNOWN
+                                                                : METER_A2_OFF;
+    if (s_meter_a2 != METER_A2_PENDING ||
+        observed == (s_a2_target ? METER_A2_ON : METER_A2_OFF) ||
+        (uint32_t)(now - s_meter_command_at) >= METER_RETRY_MS)
+        s_meter_a2 = observed;
+
+    /* Real USB insertion wins immediately, including CC detection before
+     * a C1 power path exists. Do not wait for the normal retry slot. */
+    if ((s_meter_real_present & (uint8_t)~was_present) && s_meter_a2 != METER_A2_OFF)
+        s_meter_attempt_at = now - METER_RETRY_MS;
+}
+
+static void meter_invalidate(void) {
+    s_meter_ports_valid = 0u;
+    s_meter_real_present = s_meter_real_path = 0u;
+    s_meter_a2 = METER_A2_UNKNOWN;
 }
 
 static uint8_t meter_remove_due(uint32_t now) {
-    if (s_meter_a2 != A2_METER_OWNED && s_meter_a2 != A2_UNCERTAIN)
+    if (!meter_ports_fresh(now) || s_meter_a2 == METER_A2_OFF ||
+        (s_meter_a2 == METER_A2_PENDING && !s_a2_target))
+        return 0u;
+    if (s_meter_real_present)
+        return 1u;
+    if (s_meter_a2 == METER_A2_PENDING)
         return 0u;
     if (!ext_loads())
         return (uint32_t)(now - s_ext_release_at) >= METER_RELEASE_MS;
-    if (s_meter_real_path)
-        return (uint32_t)(now - s_meter_real_at) >= METER_HANDOVER_MS;
-    return s_meter_a2 == A2_UNCERTAIN && !ext_inhibit(now);
+    return s_meter_a2 == METER_A2_UNKNOWN && !ext_inhibit(now);
+}
+
+static uint8_t meter_urgent_due(uint32_t now) {
+    return s_meter_real_present && meter_remove_due(now) &&
+           (uint32_t)(now - s_meter_attempt_at) >= METER_RETRY_MS;
 }
 
 static uint8_t meter_due(uint32_t now) {
     if ((uint32_t)(now - s_meter_attempt_at) < METER_RETRY_MS)
         return 0u;
+    if (!meter_ports_fresh(now))
+        return s_ext_pm_work || ext_loads() || s_meter_a2 != METER_A2_OFF;
     if (meter_remove_due(now))
         return 1u;
-    if (ext_loads())
-        return !ext_inhibit(now) && !meter_ready(now);
-    return (uint32_t)(now - s_ext_release_at) >= METER_RELEASE_MS && s_meter_a2 != A2_FREE;
+    return ext_loads() && !ext_inhibit(now) &&
+           !s_meter_real_present && s_meter_a2 == METER_A2_OFF;
+}
+
+/* A synthetic path alone is not a discharge session. While charging,
+ * mixed external loads have no unambiguous net discharge direction. */
+static uint8_t battery_discharging(uint32_t now) {
+    return !SW6306_IsCharging() && meter_ports_fresh(now) &&
+           ((s_meter_real_path && SW6306_IsDischarging()) ||
+            (s_ext_active && meter_ready(now)));
 }
 
 static void ext_cache_adc(void) {
@@ -854,14 +890,18 @@ static void sw6306_bus_read_failed(void) {
     idle_reset();
 }
 
+static void battery_publish_lifetime(void);
+
 static void sw6306_display_read_failed(void) {
     sw6306_bus_read_failed();
     s_monitor.ntc_valid = 0u;
     s_power_data[POWER_BUS_VOLTAGE].ptr = NULL;
     s_power_data[POWER_BUS_CURRENT].ptr = NULL;
     s_power_data[POWER_CHIP_TEMP].ptr = NULL;
-    for (unsigned i = 0; i < BATTERY_ITEM_COUNT; ++i)
+    for (unsigned i = 0; i < BATTERY_SOH; ++i)
         s_battery_data[i].ptr = NULL;
+    BatteryAlgo_InvalidSample();
+    battery_publish_lifetime();
 }
 
 /* An insertion is a 0->1 transition in a successful live port snapshot.
@@ -932,6 +972,8 @@ static pm_hook_result_t sw_suspend(void *ctx) {
             SW6306_Invalidate();
             return PM_HOOK_ERROR;
         }
+        BatteryAlgo_Finalize();
+        battery_publish_lifetime();
         s_sw_low_power=1u;
     }
     return PM_HOOK_DONE;
@@ -971,7 +1013,9 @@ static pm_hook_result_t sw_resume(void *ctx) {
     if(PT_SCHEDULE(result))return PM_HOOK_PENDING;
     s_sw_resume_started=0u;
     s_sw_low_power=0u;
-    s_meter_ports_valid = 0u;
+    meter_invalidate();
+    BatteryAlgo_InvalidSample();
+    battery_publish_lifetime();
     idle_reset();
     s_idle_verified=0u;
     s_monitor.valid=0u;
@@ -1181,7 +1225,7 @@ static pm_hook_result_t ext_load_prepare(void *ctx) {
         /* An existing in-flight A2 operation must settle before sleep. */
         s_meter_attempt_at = s_ext_pm_at - METER_RETRY_MS;
     }
-    if (!s_sw_owner_busy && s_meter_a2 == A2_FREE) {
+    if (!s_sw_owner_busy && s_meter_a2 == METER_A2_OFF && meter_ports_fresh(Millis())) {
         s_ext_pm_work = 0u;
         return PM_HOOK_DONE;
     }
@@ -1201,6 +1245,8 @@ static pm_hook_result_t ext_load_resume(void *ctx) {
         s_fault_status_ok = 0u;
         s_ext_valid = 0u;
         s_meter_ports_valid = 0u;
+        BatteryAlgo_InvalidSample();
+        battery_publish_lifetime();
     }
     return PM_HOOK_DONE;
 }
@@ -1378,12 +1424,41 @@ void PowerAlgo_AddStatisticsItems(ui_page_t *page) {
     }
 }
 
+static uint32_t battery_round_div(uint32_t value, uint32_t divisor) {
+    return value / divisor + (value % divisor >= divisor / 2u);
+}
+
+static void battery_publish_lifetime(void) {
+    static const char *const learn_names[] = {"WAIT", "LEARN", "DONE", "--"};
+    battery_view_t view;
+    BatteryAlgo_GetView(&view);
+    s_battery_values[BATTERY_SOH] = view.soh_d10;
+    s_battery_data[BATTERY_SOH].ptr = view.full_mwh ? &s_battery_values[BATTERY_SOH] : NULL;
+
+    /* Round before choosing the width, so 9.9999 becomes 10.00,
+     * rather than an overflowing six-character 10.000. */
+    uint32_t divisor = 10u;
+    uint8_t decimals = 3u;
+    while (decimals && battery_round_div(view.efc_q10000, divisor) >= 10000u) {
+        divisor *= 10u;
+        --decimals;
+    }
+    uint32_t value = battery_round_div(view.efc_q10000, divisor);
+    s_battery_data[BATTERY_EFC].decimals = decimals;
+    s_battery_values[BATTERY_EFC] = (int)value;
+    s_battery_data[BATTERY_EFC].dataType = value > 99999u ? UI_DATA_STRING : UI_DATA_FLOAT;
+    s_battery_data[BATTERY_EFC].ptr = value > 99999u ? (void *)">99k" : &s_battery_values[BATTERY_EFC];
+    s_battery_data[BATTERY_LEARN].ptr = (void *)learn_names[view.learn];
+}
+
 void PowerAlgo_AddBatteryItems(ui_page_t *page) {
     static const char *const names[BATTERY_ITEM_COUNT] = {
-        " Charge %", " Battery V", " Max Wh", " Remain Wh", " Batt Temp °C"};
+        " Charge %", " Battery V", " Max Wh", " Remain Wh", " Batt Temp °C",
+        " SOH %", " EFC", " Learn"};
     for (unsigned i = 0; i < BATTERY_ITEM_COUNT; ++i) {
         s_battery_data[i].name = names[i];
-        s_battery_data[i].dataType = i == BATTERY_CHARGE ? UI_DATA_INT : UI_DATA_FLOAT;
+        s_battery_data[i].dataType = i == BATTERY_LEARN ? UI_DATA_STRING : i == BATTERY_CHARGE ? UI_DATA_INT
+                                                                                               : UI_DATA_FLOAT;
         s_battery_data[i].actionType = UI_DATA_ACTION_RO;
         s_battery_elements[i].data = &s_battery_data[i];
         Create_element(&s_battery_items[i], &s_battery_elements[i]);
@@ -1391,6 +1466,8 @@ void PowerAlgo_AddBatteryItems(ui_page_t *page) {
     }
     s_battery_data[BATTERY_VOLTAGE].decimals = 2u;
     s_battery_data[BATTERY_TEMP].decimals = 1u;
+    s_battery_data[BATTERY_SOH].decimals = 1u;
+    battery_publish_lifetime();
 }
 
 static void sw6306_cache_adc(void) {
@@ -1485,6 +1562,25 @@ static uint8_t sw6306_cache_battery_capacity(void) {
     return 1u;
 }
 
+static void battery_sample(uint8_t valid) {
+    if (valid) {
+        uint32_t now = Millis();
+        uint8_t direction_valid = s_status_fresh && meter_ports_fresh(now);
+        if (direction_valid && SW6306_IsCharging() && s_ext_active) {
+            /* Mixed charging/external load has no reliable net direction.
+             * Settle through the last discharge sample, then pause EFC. */
+            BatteryAlgo_Finalize();
+            direction_valid = 0u;
+        }
+        if (BatteryAlgo_Update(s_full_mwh, s_remain_mwh, SW6306_ReadLearnState(),
+                               direction_valid, battery_discharging(now)))
+            fault_offer_notice(NOTICE_LEARN_DONE, POWER_NOTICE_INFO);
+    } else {
+        BatteryAlgo_InvalidSample();
+    }
+    battery_publish_lifetime();
+}
+
 static void sw6306_update_eta(uint32_t now) {
     uint8_t mode = s_monitor.charging ? 1u : s_monitor.discharging ? 2u
                                                                    : 0u;
@@ -1537,6 +1633,7 @@ THRD_DECLARE(meter_read_ports) {
     static uint32_t before;
 
     THRD_BEGIN;
+    s_meter_irq = 0u; /* An IRQ arriving during this read stays pending. */
     before = SW6306_PortReadSequence();
     SW6306_OperationReset();
     THRD_SPAWN_NOARG(SW6306_PortStatusLoad);
@@ -1545,37 +1642,94 @@ THRD_DECLARE(meter_read_ports) {
         sw6306_connection_update();
     } else {
         s_meter_ports_valid = 0u;
+        if (s_meter_a2 != METER_A2_PENDING)
+            s_meter_a2 = METER_A2_UNKNOWN;
+        sw6306_bus_read_failed();
     }
+    THRD_END;
+}
+
+static void meter_update_guard(void) {
+    s_idle_verified = meter_ports_fresh(Millis()) &&
+                      s_meter_a2 == METER_A2_OFF && SW6306_TransportPortsIdle();
+    s_monitor.port_busy = !s_idle_verified;
+    pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK, !s_idle_verified);
+    if (!s_idle_verified && !s_ext_pm_closing)
+        pm_api_refresh_idle();
+}
+
+THRD_DECLARE(meter_remove) {
+    THRD_BEGIN;
+    s_meter_attempt_at = Millis();
+    s_a2_target = 0u;
+    s_meter_a2 = METER_A2_UNKNOWN;
+    SW6306_OperationReset();
+    THRD_SPAWN_NOARG(SW6306_PortA2Remove);
+    s_meter_command_at = Millis();
+    if (SW6306_LastOperationOK())
+        s_meter_a2 = METER_A2_PENDING;
+    THRD_SPAWN_NOARG(meter_read_ports);
+    meter_update_guard();
     THRD_END;
 }
 
 THRD_DECLARE(meter_step) {
     THRD_BEGIN;
-    s_meter_attempt_at = Millis();
-    THRD_SPAWN_NOARG(meter_read_ports);
-    if (!s_meter_ports_valid)
+    /* The urgent path uses the just-completed physical port snapshot:
+     * no additional port read or phase delay before A2 Remove. */
+    if (!meter_urgent_due(Millis())) {
+        s_meter_attempt_at = Millis();
+        THRD_SPAWN_NOARG(meter_read_ports);
+    }
+    if (!s_meter_ports_valid) {
+        meter_update_guard();
         PT_EXIT(pt);
+    }
 
     if (meter_remove_due(Millis())) {
-        s_meter_a2 = A2_UNCERTAIN;
-        SW6306_OperationReset();
-        THRD_SPAWN_NOARG(SW6306_PortA2Remove);
-        s_meter_command_at = Millis();
-        if (SW6306_LastOperationOK())
-            s_meter_a2 = A2_REMOVE_PENDING;
-        THRD_SPAWN_NOARG(meter_read_ports);
+        THRD_SPAWN_NOARG(meter_remove);
     } else if (ext_loads() && !ext_inhibit(Millis()) &&
-               !s_meter_real_present && s_meter_a2 == A2_FREE) {
-        /* A2 auto-off is already disabled by SW6306_Init. A1 keeps its
-         * normal hardware idle policy throughout external metering. */
-        s_meter_a2 = A2_UNCERTAIN;
+               !s_meter_real_present && s_meter_a2 == METER_A2_OFF) {
+        s_meter_attempt_at = Millis();
+        s_a2_target = 1u;
+        s_meter_a2 = METER_A2_UNKNOWN;
         SW6306_OperationReset();
         THRD_SPAWN_NOARG(SW6306_PortA2Insert);
         s_meter_command_at = Millis();
         if (SW6306_LastOperationOK())
-            s_meter_a2 = A2_INSERT_PENDING;
+            s_meter_a2 = METER_A2_PENDING;
         THRD_SPAWN_NOARG(meter_read_ports);
+        /* An A1/C1 insertion can race the asynchronous insert. */
+        if (meter_urgent_due(Millis()))
+            THRD_SPAWN_NOARG(meter_remove);
     }
+    meter_update_guard();
+    THRD_END;
+}
+
+/* PB5 is shared with SC7A20: the edge is a read hint, never proof of
+ * USB insertion. A2 also gets a 100 ms periodic fallback poll. */
+THRD_DECLARE(meter_poll) {
+    THRD_BEGIN;
+    THRD_SPAWN_NOARG(meter_read_ports);
+    if (meter_urgent_due(Millis()))
+        THRD_SPAWN_NOARG(meter_remove);
+    meter_update_guard();
+    THRD_END;
+}
+
+THRD_DECLARE(battery_learn_rearm) {
+    THRD_BEGIN;
+    /* The DONE sample has already updated/saved capacity. Acknowledge its
+     * event before rearming, so a new completion cannot be cleared later. */
+    SW6306_OperationReset();
+    THRD_SPAWN_ARGS(SW6306_ClearEvents, SW6306_FAULT0_LEARNEND);
+    if (!SW6306_LastOperationOK())
+        PT_EXIT(pt);
+    SW6306_OperationReset();
+    THRD_SPAWN_NOARG(SW6306_CapacityLearningRearm);
+    if (SW6306_LastOperationOK())
+        BatteryAlgo_LearnRearmed();
     THRD_END;
 }
 
@@ -1583,7 +1737,7 @@ THRD_DECLARE(meter_step) {
  * power transaction per service slot leaves the monitor and ADC responsive. */
 static uint8_t config_ports_idle(uint32_t now) {
     return s_idle_verified && meter_ports_fresh(now) && SW6306_TransportPortsIdle() &&
-           !ext_loads() && s_meter_a2 == A2_FREE;
+           !ext_loads() && s_meter_a2 == METER_A2_OFF;
 }
 
 static uint32_t config_eligible(uint32_t now) {
@@ -1672,7 +1826,7 @@ static uint8_t bus_idle_due(uint32_t now) {
         !SW6306_IsInitialized() || !s_cycle_ok || !s_adc_fresh || !s_status_fresh ||
         !ext_sample_fresh(EXT_ADC, now) || !ext_sample_fresh(EXT_STATUS, now) ||
         !meter_ports_fresh(now) || SW6306_IsCharging() || SW6306_IsLowCurrentMode() ||
-        ext_loads() || s_meter_a2 != A2_FREE ||
+        ext_loads() || s_meter_a2 != METER_A2_OFF ||
         (!SW6306_IsPortC1ON() && !SW6306_IsPortA1ON()) ||
         s_ext_ibus_ma > (unsigned)s_idle_threshold) {
         idle_reset();
@@ -1702,9 +1856,13 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             continue;
         }
         if (s_ext_pm_work) {
-            if (SW6306_IsInitialized() && meter_due(Millis())) {
+            if (SW6306_IsInitialized()) {
                 s_sw_owner_busy = 1u;
-                THRD_SPAWN_NOARG(meter_step);
+                /* Keep reading while a command is pending; PM cannot
+                 * accept an old OFF state or an unconfirmed removal. */
+                THRD_SPAWN_NOARG(meter_poll);
+                if (meter_due(Millis()))
+                    THRD_SPAWN_NOARG(meter_step);
                 s_sw_owner_busy = 0u;
             }
             THRD_DELAY(50u);
@@ -1715,9 +1873,9 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
                 fault_offline();
             s_fault_status_ok = 0u;
             s_ext_valid = 0u;
-            s_meter_ports_valid = 0u;
-            if (s_meter_a2 != A2_FREE)
-                s_meter_a2 = A2_UNCERTAIN;
+            meter_invalidate();
+            BatteryAlgo_Invalidate();
+            battery_publish_lifetime();
             s_adc_fresh = 0u;
             s_monitor.initialized=0u;
             s_monitor.valid=0u;
@@ -1753,7 +1911,8 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             config_restore_switches();
             idle_reset();
             s_port_baseline_valid=0u; /* first successful PortStatusLoad */
-            THRD_DELAY(100u);
+            s_sw_next_at = Millis() + 100u;
+            s_scene_seen = 0u;
             continue;
         }
         if(s_radio_battery_check_request) {
@@ -1791,6 +1950,23 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
              * explicitly requests a fresh ADC + Capacity pair above. */
             THRD_DELAY(20u);
             continue;
+        }
+        /* Service PB5 edges between scheduled phases. Do not shorten
+         * the normal ADC / capacity scan cadence on sensor interrupts. */
+        if (s_meter_irq) {
+            s_sw_owner_busy = 1u;
+            THRD_SPAWN_NOARG(meter_poll);
+            s_sw_owner_busy = 0u;
+        }
+        if ((int32_t)(Millis() - s_sw_next_at) < 0) {
+            THRD_UNTIL((int32_t)(Millis() - s_sw_next_at) >= 0 ||
+                       s_meter_irq || s_ext_pm_work || pm_api_ui_should_block());
+            continue;
+        }
+        if (s_sw_phase != 2u && s_meter_a2 != METER_A2_OFF) {
+            s_sw_owner_busy = 1u;
+            THRD_SPAWN_NOARG(meter_poll);
+            s_sw_owner_busy = 0u;
         }
         if(s_sw_phase==0u) {
             s_cycle_ok=1u;
@@ -1834,25 +2010,15 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             s_sw_owner_busy = 0u;
         }
         else if(s_sw_phase==2u) {
-            s_sw_seq_before=SW6306_PortReadSequence();
-            s_sw_owner_busy=1u;
-            SW6306_OperationReset();
-            THRD_SPAWN_NOARG(SW6306_PortStatusLoad);
-            s_sw_owner_busy=0u;
-            if (SW6306_LastOperationOK() && SW6306_PortReadSequence() != s_sw_seq_before) {
-                meter_note_ports(Millis());
-                sw6306_connection_update();
-            } else {
-                s_meter_ports_valid = 0u;
+            s_sw_owner_busy = 1u;
+            THRD_SPAWN_NOARG(meter_poll);
+            if (s_meter_ports_valid && s_scene_seen) {
+                SW6306_OperationReset();
+                THRD_SPAWN_ARGS(SW6306_ClearEvents, SW6306_FAULT0_SCENE);
+                if (SW6306_LastOperationOK())
+                    s_scene_seen = 0u;
             }
-            s_idle_verified=(uint8_t)(SW6306_LastOperationOK() &&
-                SW6306_PortReadSequence()!=s_sw_seq_before &&
-                SW6306_TransportPortsIdle());
-            s_monitor.port_busy=(uint8_t)!s_idle_verified;
-            if (!SW6306_LastOperationOK())
-                sw6306_bus_read_failed();
-            pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK,!s_idle_verified);
-            if(!s_idle_verified)pm_api_refresh_idle();
+            s_sw_owner_busy = 0u;
         } else if (s_sw_phase == 3u) {
             if (meter_due(Millis())) {
                 idle_reset();
@@ -1868,9 +2034,13 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
                 THRD_SPAWN_NOARG(SW6306_ForceOff);
                 s_sw_owner_busy = 0u;
                 s_idle_fired = SW6306_LastOperationOK();
-                s_meter_ports_valid = 0u;
+                meter_invalidate();
                 s_idle_verified = 0u;
                 s_bus_force_off = 0u;
+            } else if (BatteryAlgo_LearnRearmPending()) {
+                s_sw_owner_busy = 1u;
+                THRD_SPAWN_NOARG(battery_learn_rearm);
+                s_sw_owner_busy = 0u;
             } else if (config_eligible(Millis())) {
                 s_sw_owner_busy = 1u;
                 THRD_SPAWN_NOARG(config_step);
@@ -1886,7 +2056,9 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             else if (!SW6306_ValidateInitialized()) {
                 sw6306_display_read_failed();
                 s_ext_valid = 0u;
-                s_meter_ports_valid = 0u;
+                meter_invalidate();
+                BatteryAlgo_Invalidate();
+                battery_publish_lifetime();
                 s_idle_verified = 0u;
                 idle_reset();
                 pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK, 1u);
@@ -1900,6 +2072,7 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
                 THRD_SPAWN_NOARG(SW6306_CapacityLoad);
                 s_sw_owner_busy=0u;
                 s_monitor.capacity_valid = sw6306_cache_battery_capacity();
+                battery_sample(s_monitor.capacity_valid);
                 if (s_monitor.capacity_valid)
                     s_monitor.capacity_pct = (uint8_t)s_battery_values[BATTERY_CHARGE];
             }
@@ -1914,8 +2087,7 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
                 s_monitor.c1_on = SW6306_IsPortC1ON();
                 s_monitor.a1_on = SW6306_IsPortA1ON();
                 s_monitor.charging = SW6306_IsCharging();
-                s_monitor.discharging = SW6306_IsDischarging() ||
-                                        (!s_monitor.charging && s_ext_active && meter_ready(Millis()));
+                s_monitor.discharging = battery_discharging(Millis());
                 s_monitor.protocol = SW6306_ReadProtocol();
                 s_monitor.sample_ms = Millis();
                 sw6306_update_eta(s_monitor.sample_ms);
@@ -1924,7 +2096,7 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
         }
         /* Phase 3 uses the idle I2C slot only when the meter has work. */
         s_sw_phase=(uint8_t)((s_sw_phase+1u)%5u);
-        THRD_DELAY(100u);
+        s_sw_next_at = Millis() + 100u;
     }
     THRD_END;
 }
@@ -1978,6 +2150,9 @@ uint8_t PowerAlgo_TakeRadioBatteryCheck(uint16_t *vbat_mv,uint8_t *capacity_pct)
 /**************************** 服务注册与初始化 ***************************/
 void PowerAlgo_Init(void) {
     memset(&s_monitor,0,sizeof(s_monitor));
+    BatteryAlgo_Init();
+    battery_publish_lifetime();
+    meter_invalidate();
     aux_disable();
     s_monitor.protocol="--";
     s_sw_phase=0u;s_capacity_div=1u;s_idle_verified=0u;
@@ -1985,6 +2160,7 @@ void PowerAlgo_Init(void) {
     s_port_baseline_valid=0u;s_previous_connections=0u;
     s_status_fresh=0u;
     s_retry_at=Millis(); /* first service tick attempts SW6306_Init */
+    s_sw_next_at = Millis();
     s_sw_low_power=0u;s_sw_owner_busy=0u;
     s_sw_suspend_stage=0u;s_sw_resume_started=0u;
     s_cycle_ok=0u;

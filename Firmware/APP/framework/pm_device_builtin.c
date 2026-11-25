@@ -72,13 +72,13 @@ static void stm32_restore(void) {
 
 static void stm32_deepsleep(void *ctx) {
     (void)ctx;
-    /* PB5 is level-low when the sensor has already signalled a wake.
+    /* PB5 is shared by SC7A20 and SW6306, both active-low.
      * A cleared edge pending bit must not strand STOP1 on a held-low pin. */
     /* Any EXTI that arrived after the PM's last poll must prevent WFI:
      * the edge might otherwise be cleared before STOP1 is entered. */
-    if(!pm_api_rtc_wakeup_pending() && !pm_api_rtc_alarm_pending() &&
+    if (!pm_api_rtc_wakeup_pending() && !pm_api_rtc_alarm_pending() &&
         !pm_api_external_wake_pending() &&
-        (!SC7A20Algo_WakeIRQ() || LL_GPIO_IsInputPinSet(INT_GPIO_Port,INT_Pin)))
+        LL_GPIO_IsInputPinSet(INT_GPIO_Port, INT_Pin))
         HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON,PWR_STOPENTRY_WFI);
     SystemClock_Config();
     RadioAlgo_RestoreClock();

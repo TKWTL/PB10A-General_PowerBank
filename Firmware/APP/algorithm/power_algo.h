@@ -24,6 +24,7 @@ typedef struct {
 void PowerAlgo_Init(void);
 /* SW6306 owner thread: cooperative Init/ADC/Status/Port/Power/Capacity. */
 char PowerAlgo_SW6306Thread(coro_pt_t *pt);
+void PowerAlgo_OnSharedIRQ(void); /* ISR hint only; no I2C in EXTI. */
 void PowerAlgo_GetMonitor(power_monitor_t *out);
 /* Display cache keeps published values while new transfers are pending. */
 void PowerAlgo_GetDisplayMonitor(power_monitor_t *out);

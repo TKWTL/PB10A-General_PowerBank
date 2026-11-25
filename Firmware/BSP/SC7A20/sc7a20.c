@@ -589,7 +589,7 @@ SC7A20_RET SC7A20_Init(SC7A20_NOARG) {
     SC7A20_IO_LOCKED(SC7A20_ByteRead, SC7A20_STRG_WHO_AM_I, SC7A20_Status.sendbuf);
     if(SC7A20_Status.sendbuf[0] == SC7A20_WHO_AM_I_VALUE) {
         //① PB10A: configure INT output active-low for PB5 input.
-        //   PB10A INT (PB5) is NOT the PB02B shared SW6306/SC7A20 PB8.
+        //   PB10A PB5 is shared with SW6306 INT, as on PB02B PB8.
         //   Keep PB02B 25Hz/2g/BDU/HR default register initialization.
         SC7A20_IO_LOCKED(SC7A20_ByteModify, SC7A20_CTRG_CTRL6, SC7A20_CTRL6_H_LACTIVE, SC7A20_CTRL6_H_LACTIVE);
         //控制寄存器4：BDU + 量程 + 高精度（其余位保持默认）

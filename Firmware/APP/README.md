@@ -30,7 +30,7 @@ Board-level current and wake reliability still require measurement.
 
 ### Devices, RTC and scanning
 
-SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) and RDA5807 (Collar-Radio-derived) use the LL I2C1 adapter retained in `Core/Src/i2c.c` / `Core/Inc/i2c.h` USER CODE sections. SW6306 now initializes and is refreshed by an independent 100ms coroOS service thread. The I2C Scanner WORD page has regained the original Collar-Radio title and 16x8 address matrix. The Collar-Radio style Time page offers aligned integer date/time edits via HAL RTC. RTC uses backup-register DR0 validity marking so CubeMX-generated default time/date is applied only on a fresh backup domain. RTC fields refresh every 500 ms outside active parameter editing; RTC uses LSE in the current CubeMX configuration. STOP1 and all hardware peripherals remain untested on board.
+SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) and RDA5807 (Collar-Radio-derived) use the LL I2C1 adapter retained in `Core/Src/i2c.c` / `Core/Inc/i2c.h` USER CODE sections. SW6306 now initializes and is refreshed by an independent 100ms coroOS service thread. The I2C Scanner WORD page has regained the original Collar-Radio title and 16x8 address matrix. The Collar-Radio style Time page offers aligned integer date/time edits via HAL RTC. RTC uses backup-register DR0 validity marking so CubeMX-generated default time/date is applied only on a fresh backup domain. RTC fields refresh every 500 ms outside active parameter editing; RTC uses LSE in the current CubeMX configuration. SW6306 shared-INT STOP1 wake has been verified by the user; the new A2 handover and battery statistics are not yet board-tested.
 
 
 ### Application versus service separation
@@ -135,10 +135,17 @@ wled_algo.h. Set it to 1 to restore the PB02B derating table.
 The SW6306 owner reuses a live C1/A1 path or requests a shared
 synthetic A2 insertion, confirmed by rereading port status. A2 has
 no physical connector and its hardware auto-off is disabled in Init.
-It is removed after both external loads stop or a real path takes over.
-Physical A1 retains its normal auto-off policy. A2 does not trigger
-automatic navigation or appear as a dashboard port. ETA pauses during
-simultaneous charging and external load.
+A2 uses OFF/ON/PENDING/UNKNOWN with a latched command direction.
+When a real A1/C1 connection is detected (including C1 CC before its
+power path is ready), the owner immediately issues A2 Remove, bypassing
+the usual 1 s retry delay on the first insertion detection. No handover
+delay is used. PB5 shared IRQ triggers an early port read; while A2 is
+not proven OFF, a 100 ms phase-boundary poll is the fallback.
+A2 is also removed 200 ms after both external loads stop, subject to
+the existing retry/confirmation cadence. PM requires a fresh A2 OFF
+snapshot. Physical A1 retains its normal auto-off policy. A2 does not
+trigger automatic navigation or appear as a dashboard port. ETA pauses
+during simultaneous charging and external load.
 
 
 The current CubeMX-generated configuration uses ADC1 HSI clock DIV1,
@@ -157,6 +164,7 @@ Statistics → Battery shows charge percentage, pack voltage in volts,
 full and remaining energy in Wh, and Batt Temp °C from the SW6306 NTC to one
 decimal place. The SW6306 service supplies the readings from its ADC, status
 and capacity caches. Unavailable readings display as `--`.
+SOH %, EFC and Learn are appended to this page.
 
 Statistics → System shows VDDA in volts to two decimal places, die temperature
 to one decimal place and About. Die temperature uses VREFINT-corrected ADC
@@ -198,9 +206,9 @@ The existing SW6306 StatusLoad phase consumes E01–E13 from fresh W1C
 events and live protection edges. Historical reason bits only help decode
 a qualified event; they do not create events by themselves. A successful
 W1C acknowledgement re-arms the bit. Failed clears are retried without
-counting a persistent event again. Only observed fault and capacity-learning
-event bits are acknowledged. N01 (capacity learned) does not increment the
-fault count. Events coalesced by the chip cannot be counted separately.
+counting a persistent event again. Fault bits are acknowledged here;
+capacity learning and scene changes have separate consumers. N01
+(capacity learned) does not increment the fault count. Events coalesced by the chip cannot be counted separately.
 
 AUX undervoltage/short cutoff reports E20; shared meter startup timeout
 reports E40; battery protection uses E01/E04/E41 or the corresponding
@@ -217,6 +225,35 @@ restoring them only after SPI DMA completion, so cached pages and partial
 redrawing do not retain the overlay. Mosaic frames are not overlaid.
 The timer starts on accepted display submission. Pending notices wait
 through UI_OFF/STOP1 without requesting wake or setting a PM sleep block.
+
+### Battery health and equivalent full cycles
+
+The fixed factory energy is 102600 mWh (102.6 Wh). SOH is rounded
+to 0.1% from the last valid SW6306 full energy, without a 100% clamp.
+BatteryAlgo uses integer mWh and accepts full energy from 500 to
+200000 mWh. EFC is cumulative discharge energy normalized by the
+actual full energy at the start of each discharge session, not by the
+factory energy. Two valid discharge samples confirm the session;
+four non-discharge samples settle it using the last discharge sample.
+The 125% session bound and 1/10000 cycle resolution require only
+32-bit arithmetic. EFC includes an uncommitted active-session estimate.
+A2 alone does not count as discharge; actual WLED/Aux-A and BUS loads
+share the same energy counter. Mixed charging/external loads settle the
+previous discharge estimate and pause EFC.
+
+Two alternating 16-byte .noinit slots store full mWh, settled EFC,
+sequence and CRC16/version tag, written last. Warm reset restores the
+newest valid slot. STOP1 settles any confirmed session after LPSET
+succeeds; SW6306 reinitialization discards the unfinished session.
+No Flash writes, independent task, or additional float dependency.
+A full VDD power loss or a reset during an unsettled session can lose
+data; the last committed record is the recovery point.
+
+CapacityLoad's 0xA2 LEARN_END, not the 0x15 event alone, triggers
+N01 once after a valid full energy is saved. The SW6306 owner clears
+the consumed learning event and rearms in phase 3, retrying a failed
+operation on later slots. Learn displays WAIT/LEARN/DONE/--.
+Rearming does not reset the EFC or factory energy.
 
 ### SW6306 staged polling and sleep guard (2026-11-19)
 
@@ -419,8 +456,9 @@ apply the current Screen Flip setting from the first frame after exit.
   (all ±XYZ) 6D movement detection via AOI2, threshold 32 and duration 1;
   this is not restricted to ±Z. **Motion Wake** monitors high-pass XYZ
   movement via AOI1 (48 LSB / 2 ticks). Both route to the active-low
-  SC7A20 INT1 wired to PB5/EXTI5. The EXTI ISR only latches a source
-  flag; foreground PM hooks read/clear sources and restore 12-bit RUN.
+  SC7A20 INT1 shares PB5/EXTI5 with SW6306 INT. The EXTI ISR only
+  latches hints; foreground PM hooks restore 12-bit RUN and the SW6306
+  owner reads its port status.
 - All SC7A20 sleep register writes/reads are IRQ-driven I2C and PM
   returns PENDING while transactions or HPF settling remain.
   The active-low INT input is checked before WFI to avoid a held-low
@@ -435,9 +473,11 @@ The CubeMX GPIO configuration enables **falling-edge** EXTI inputs for:
 - Five navigation keys: PC6, PA9, PA10, PA12, PA15, grouped as
   `PM_WAKE_KEY` (single source bit). Normal 10 ms button debouncing and
   action queuing remain in `indevService_10ms()`.
-- SC7A20 INT1: PB5/EXTI5, `PM_WAKE_SC7A20`. Every falling edge
-  wakes and refreshes the PM idle timer, even without Pickup/Motion
-  monitoring armed. Only the SC7A20 PM device decides sensor register mode.
+- Shared SC7A20 INT1 / SW6306 INT: PB5/EXTI5, `PM_WAKE_SC7A20`
+  (legacy name). Every falling edge wakes and refreshes the PM idle
+  timer, even without Pickup/Motion armed. The ISR also latches
+  a SW6306 port-read hint. The actual source is determined from
+  device state, not the shared GPIO edge.
 - `MIC_INDET`: PB0/EXTI0, `PM_WAKE_MIC_INDET`.
 - `SUB_INDET`: PA7/EXTI7, `PM_WAKE_SUB_INDET`. Aux-A insertion
   state and voltage/current are still polled by `ADC_RTC_AuxAThread`
@@ -492,16 +532,18 @@ thresholds must still be verified on real hardware.
   Radio only if the auto-switch is enabled. One connection can trigger
   only once; returning to high re-arms the next insertion. A headset
   already plugged in at boot does not generate a synthetic event.
-- SW6306's existing 100 ms staggered task needs no new I2C scan.
+- SW6306's existing staggered task handles shared INT edge hints
+  before the next scheduled phase, with periodic port polling as fallback.
   Its successful `PortStatusLoad()` snapshot already contains TYPEC
   (0x19) and PORT_STA (0x1D). `SW6306_ConnectedPortMask()` uses C1/C2
   Source/Sink/CC/online flags and A1/A2 online flags, **not** SYS_STAT
   path-ON bits. The first successful read establishes a baseline, later
   complete reads identify 0->1 connections, and failed reads do not
   update it. The unpowered passive A-port case can remain undetectable.
-- **PB5 is wired to SC7A20 INT1, not SW6306 INT.** SW6306 attachment
-  must be confirmed by the polling coroutine; do not assume PB5 is
-  a SW6306 port-change interrupt.
+- **PB5 is shared by SW6306 and SC7A20.** The user verified SW6306
+  wake from STOP1 on hardware. A shared edge alone is not evidence
+  of attachment: the owner must confirm the port read. SW6306 uses
+  its existing 10 ms active-low IRQ pulse configuration.
 - All navigation actions, including returning from a temporary Radio
   screen, occur only on the UI coroutine. STOP1 wake does not invoke
   screen drawing or I2C in EXTI interrupt handlers.
@@ -720,7 +762,8 @@ PB10A has no independent backup-domain supply. Calibration therefore
 does **not** use RTC DR1..DR4, whose contents would be lost on a full
 VDD power-down just like ordinary SRAM. Instead, a 16-byte
 `s_calibration_noinit` record shares the Keil linker scatter file's
-reserved `RW_NOINIT` section with `g_fault_record` (32 bytes).
+reserved `RW_NOINIT` section with `g_fault_record` (32 bytes) and
+the two battery statistics slots (32 bytes).
 The scatter currently reserves the **last 256 bytes of 36 KiB SRAM**
 for this area. The calibration consists of three signed 16-bit zero
 codes and three unsigned 16-bit Q14 slopes, plus a 16-bit magic/version

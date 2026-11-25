@@ -995,6 +995,11 @@
               <FilePath>../APP/functions/games/invaders/invaders_assets.c</FilePath>
             </File>
             <File>
+              <FileName>battery_algo.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/algorithm/battery_algo.c</FilePath>
+            </File>
+            <File>
               <FileName>power_algo.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/algorithm/power_algo.c</FilePath>

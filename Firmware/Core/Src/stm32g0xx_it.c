@@ -28,6 +28,7 @@
 #include "spi.h"
 #include "millis.h"
 #include "fault_record.h"
+#include "power_algo.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -202,7 +203,8 @@ void EXTI4_15_IRQHandler(void)
   {
     LL_EXTI_ClearFallingFlag_0_31(LL_EXTI_LINE_5);
     /* USER CODE BEGIN LL_EXTI_LINE_5_FALLING */
-    pm_api_on_exti_event(PM_WAKE_SC7A20); /* PB5: SC7A20 INT1 */
+    pm_api_on_exti_event(PM_WAKE_SC7A20); /* PB5: shared SC7A20 / SW6306 INT */
+    PowerAlgo_OnSharedIRQ();
     /* USER CODE END LL_EXTI_LINE_5_FALLING */
   }
   if (LL_EXTI_IsActiveFallingFlag_0_31(LL_EXTI_LINE_6) != RESET)
