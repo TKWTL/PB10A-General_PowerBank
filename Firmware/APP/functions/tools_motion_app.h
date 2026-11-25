@@ -6,6 +6,9 @@
 /* PB02B Leveler and 6-face accelerometer calibration, ported to MiaoUI.
  * Both are single-frame WORD apps. The sensor coroOS owns all I2C.
  * UI only reads an algorithm snapshot and records validated calibration. */
+extern const unsigned char img_leveler[];
+extern const unsigned char img_leveler_cal[];
+
 void Motion_LevelerRun(ui_t *ui);
 void Motion_LevelerOnLeave(ui_t *ui);
 void Motion_CalibrationRun(ui_t *ui);

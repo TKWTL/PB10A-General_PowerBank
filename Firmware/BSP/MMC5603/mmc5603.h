@@ -28,7 +28,9 @@
 #define MMC5603_PRODUCT_ID      0x10u
 #define MMC5603_CTRL0_TM_M      0x01u
 #define MMC5603_CTRL0_TM_T      0x02u
+#define MMC5603_CTRL0_SET 0x08u
 #define MMC5603_CTRL0_AUTO_SR   0x20u
+#define MMC5603_CTRL1_SW_RESET 0x80u
 #define MMC5603_CTRL2_CMM_EN   0x10u
 #define MMC5603_STATUS_M_DONE   0x40u
 uint8_t MMC5603_ReadReg(uint8_t reg,uint8_t *value);

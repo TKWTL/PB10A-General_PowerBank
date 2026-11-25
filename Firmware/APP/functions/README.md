@@ -55,7 +55,8 @@ them.
   SC7A20 algorithm's sequential RAM sample mirror, never UI-owned I2C.
   Leveler draws a 128x64 gravity-translated/rotated horizon with a
   plumb double-circle view and a default-font tilt angle at bottom right;
-  its icons are the Collar-Radio Gradienter and Calibration 30x30 XBM.
+  its `img_leveler` and `img_leveler_cal` 30x30 XBM icons live in this
+  module (derived from Collar-Radio).
   Calibration uses six stable ±axis placements, then records zero/slope
   with CRC into the Keil `.noinit` SRAM area; this retains calibration
   across MCU reset while SRAM has power, **not** across total power loss.

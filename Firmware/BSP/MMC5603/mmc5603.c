@@ -35,8 +35,8 @@ uint8_t MMC5603_EnterLowPower(void) {
 }
 
 uint8_t MMC5603_StartSingleMeasurement(void) {
-    /* TM_M sets a single-shot magnetic measurement; self-clearing. */
-    return MMC5603_WriteReg(MMC5603_REG_CTRL0,MMC5603_CTRL0_TM_M);
+    /* Rev. B single-shot example: TM_M plus automatic SET/RESET. */
+    return MMC5603_WriteReg(MMC5603_REG_CTRL0, MMC5603_CTRL0_TM_M | MMC5603_CTRL0_AUTO_SR);
 }
 
 char MMC5603_TransferPT(struct pt *pt, uint8_t read, uint8_t reg, uint8_t *data,

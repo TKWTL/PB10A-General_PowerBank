@@ -54,7 +54,7 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 Powerbank, Radio, Game, Tools, Settings and Statistics appear in that order. Statistics contains Power, Battery, Sensors, Fault, System and About. After reset the firmware first opens the Powerbank dashboard. Short or long CONF opens the home menu from the dashboard.
 
 Game order: Tetris, Pac-Man, Bomber, Invaders, Arkanoid.
-Tools order: Leveler, SOS Blink, Compass, Altimeter, Accel Calibration, I2C Scanner.
+Tools order: Leveler, Compass, Altimeter, SOS Blink, Accel Calibration, I2C Scanner.
 
 Settings lists Power Limits, Ports, Protocol#1 and Protocol#2 before Display.
 They expose 32 RAM-only settings and actions derived from PB02B.
@@ -142,9 +142,11 @@ and a predicted/measured 78 °C cutoff clears the request (E30).
 It never automatically turns the LED back on.
 The independent common battery NTC 60 °C/45 °C cutoff is unchanged.
 
-Tools → SOS Blink (after Leveler): entering starts the sequence;
-any key exits and stops it. SOS uses level 32, 100 ms dots and 300 ms
-dashes, 1.5 s on-time in a 2.7 s transmission. WLED_SOS_PEAK_MW
+Tools → SOS Blink (after Altimeter): entry displays a high-intensity
+light warning; short CONF starts the sequence only after the warning.
+Other keys exit; once started, any key exits and stops it. SOS uses
+level 32, 100 ms dots and 300 ms dashes, 1.5 s on-time in a 2.7 s
+transmission. WLED_SOS_PEAK_MW
 (15000) and WLED_SOS_AVG_MW (2500) yield a 9 s cycle.
 Lower allowed average power extends cooldown; thermal pause keeps
 the external-load reservation and drives PWM low. Meter interruptions
@@ -600,6 +602,11 @@ its persistent buffer, completion flag, polling cadence and PM hooks.
 The shared I2C controller runs IRQ-completed transfers, not blocking
 calls inside cooperative tasks.
 
+MMC5603 initialization and recovery perform software reset (at least 20 ms),
+ID check, default bandwidth/all axes, single-shot mode and SET. Each magnetic
+measurement writes CTRL0=0x21 (TM_M | AUTO_SR); the BSP single-shot helper
+uses the same command. Existing conversion polling and retry timing are retained.
+
 The Radio implementation follows Collar-Radio's `Application/Applications/radio.c`
 in placement and key actions: top 7x9/6x9 status icons, 24-pixel
 frequency value with a variable-width MHz placement, 43/45/47-pixel
@@ -744,7 +751,7 @@ the constant is not a measured guarantee for other boards.
 The **Tools** icon page now offers two WORD-page apps:
 
 - `-Leveler` using Collar-Radio's original GPL-3.0
-  `img_gradienter` 30x30 XBM icon. It adapts the PB02B
+  `img_leveler` 30x30 XBM icon. It adapts the PB02B
   `firmware/Applications/functions/leveler.c` 160x40 A8/LVGL
   drawing to PB10A's native **128x64** SSD1306 with per-row
   u8g2 span drawing (no additional framebuffer). There is **no
@@ -758,7 +765,7 @@ The **Tools** icon page now offers two WORD-page apps:
   Current tilt is overlaid in the **bottom-right** using the
   project's default `UI_FONT` with a small degree-ring mark.
 - `-Accel Calibration` using Collar-Radio's
-  `img_gradienter_cal`. The PB02B six-face (not six independent
+  `img_leveler_cal`. The PB02B six-face (not six independent
   accelerometer axes) procedure is ported with the same threshold
   and stability rules: X-/X+/Y-/Y+/Z-/Z+ with each candidate held
   for 10 additional fresh 200ms intervals (about 2 seconds).

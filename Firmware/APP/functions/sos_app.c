@@ -22,7 +22,7 @@ const unsigned char img_sos[] = {
 // clang-format on
 
 
-static uint8_t s_entered;
+static uint8_t s_warning_shown, s_started;
 
 static void center_text(uint16_t y, const char *text) {
     uint16_t width = Disp_GetUTF8Width(text);
@@ -31,7 +31,7 @@ static void center_text(uint16_t y, const char *text) {
 
 void SOS_AppOnLeave(ui_t *ui) {
     (void)ui;
-    s_entered = 0u;
+    s_warning_shown = s_started = 0u;
     WLED_AlgoRequestSOS(0u);
 }
 
@@ -39,16 +39,15 @@ void SOS_AppRun(ui_t *ui) {
     if (!ui)
         return;
     if (ui->action != UI_ACTION_NONE) {
-        WLED_AlgoRequestSOS(0u);
-        return; /* MiaoUI exits WORD pages on any unconsumed action. */
+        if (!s_started && s_warning_shown && ui->action == UI_ACTION_ENTER) {
+            s_started = 1u;
+            ui->action = UI_ACTION_NONE;
+            WLED_AlgoRequestSOS(1u);
+        } else {
+            WLED_AlgoRequestSOS(0u);
+            return; /* MiaoUI exits WORD pages on any unconsumed action. */
+        }
     }
-    if (!s_entered) {
-        s_entered = 1u;
-        WLED_AlgoRequestSOS(1u);
-    }
-
-    uint8_t progress;
-    wled_sos_state_t state = WLED_AlgoGetSOSStatus(&progress);
 
     uint8_t fg = ui->bgColor ^ 1u;
     Disp_SetMaxClipWindow();
@@ -56,6 +55,23 @@ void SOS_AppRun(ui_t *ui) {
     Disp_DrawBox(0u, 0u, UI_HOR_RES, UI_VER_RES);
     Disp_SetDrawColor(&fg);
     Disp_SetFont(UI_FONT);
+    if (!s_started) {
+        center_text(11u, "WARNING");
+        Disp_DrawLine(0u, 14u, UI_HOR_RES - 1u, 14u);
+        center_text(27u, "High intensity light");
+        center_text(40u, "Do not look at LED");
+        Disp_SetFont(font_home_h6w4);
+        center_text(52u, "CONF: Start");
+        center_text(62u, "Other keys: Exit");
+        Disp_SetFont(UI_FONT);
+        Disp_SendBuffer();
+        s_warning_shown = 1u;
+        UI_RequestNextFrame(ui, 200u);
+        return;
+    }
+
+    uint8_t progress;
+    wled_sos_state_t state = WLED_AlgoGetSOSStatus(&progress);
     center_text(11u, "SOS Blink");
     Disp_DrawLine(0u, 14u, UI_HOR_RES - 1u, 14u);
     static const char *const states[] = {

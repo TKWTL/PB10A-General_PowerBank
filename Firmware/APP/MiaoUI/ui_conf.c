@@ -113,16 +113,16 @@ void Create_MenuTree(ui_t *ui) {
 
     AddPage("[Tools]",&s_tools,UI_PAGE_ICON,&s_home);
         add_return(&s_tools,&s_home,&s_tools_back,0);
-        AddItem("-Leveler",UI_ITEM_WORD,img_gradienter,
+        AddItem("-Leveler",UI_ITEM_WORD,img_leveler,
             &s_leveler,&s_tools,0,Motion_LevelerRun);
         UI_SetLeaveHook(&s_leveler,Motion_LevelerOnLeave);
-        AddItem("-SOS Blink",UI_ITEM_WORD,img_sos,&s_sos,&s_tools,0,SOS_AppRun);
-        UI_SetLeaveHook(&s_sos,SOS_AppOnLeave);
         AddItem("-Compass",UI_ITEM_WORD,img_compass,&s_compass,&s_tools,0,Compass_AppRun);
         UI_SetLeaveHook(&s_compass,Compass_AppOnLeave);
         AddItem("-Altimeter",UI_ITEM_WORD,img_altimeter,&s_altimeter,&s_tools,0,Altimeter_AppRun);
         UI_SetLeaveHook(&s_altimeter,Altimeter_AppOnLeave);
-        AddItem("-Accel Calibration",UI_ITEM_WORD,img_gradienter_cal,
+        AddItem("-SOS Blink",UI_ITEM_WORD,img_sos,&s_sos,&s_tools,0,SOS_AppRun);
+        UI_SetLeaveHook(&s_sos,SOS_AppOnLeave);
+        AddItem("-Accel Calibration",UI_ITEM_WORD,img_leveler_cal,
             &s_accel_cal,&s_tools,0,Motion_CalibrationRun);
         UI_SetLeaveHook(&s_accel_cal,Motion_CalibrationOnLeave);
         AddItem("-I2C Scanner",UI_ITEM_WORD,img_scan,&s_scanner,&s_tools,0,i2c_Scanner);
