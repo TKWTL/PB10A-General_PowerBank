@@ -6,7 +6,7 @@
 #include <stddef.h>
 
 #define WLED_MIN_LEVEL 1u
-#define WLED_START_PRESS_LIMIT 2u
+#define WLED_START_PRESS_LIMIT 1u
 #define WLED_PWM_MAX 1023u
 #define WLED_RAMP_MS 160u
 #define WLED_TEST_AMBIENT_C10 300

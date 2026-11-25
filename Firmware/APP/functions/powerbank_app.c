@@ -290,7 +290,9 @@ void Powerbank_AppOnLeave(ui_t *ui) {
 void Powerbank_AppRun(ui_t *ui) {
     if (!ui || ui->action == UI_ACTION_ENTER || ui->action == UI_ACTION_BACK)
         return;
-    /* DOWN toggles AUX. The 10 ms key service owns continuous dimming. */
+    /* UP cycles BUS ports; DOWN toggles AUX. Dimming runs in the key service. */
+    if (ui->action == UI_ACTION_MINUS && !indevActionIsRepeat())
+        PowerAlgo_RequestBusCycle();
     if (ui->action == UI_ACTION_PLUS && !indevActionIsRepeat())
         PowerAlgo_AuxA_Request(AUX_CMD_TOGGLE);
     ui->action = UI_ACTION_NONE;

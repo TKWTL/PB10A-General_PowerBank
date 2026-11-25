@@ -179,7 +179,7 @@ static unsigned s_setting_data_count;
 static uint32_t s_config_dirty;
 static uint8_t s_idle_running, s_idle_fired;
 static uint32_t s_idle_since;
-static uint8_t s_bus_force_off;
+static uint8_t s_bus_force_off, s_bus_cycle_pending;
 
 static void idle_reset(void) {
     s_idle_running = s_idle_fired = 0u;
@@ -311,6 +311,9 @@ static uint32_t s_ext_stamp[EXT_SAMPLE_COUNT], s_ext_release_at, s_ext_pm_at;
 static meter_a2_state_t s_meter_a2;
 static uint8_t s_a2_target; /* Latched submitted command, not current demand. */
 static uint8_t s_meter_a1_on, s_meter_real_path, s_meter_real_present;
+/* Manually removed but still attached ports do not reopen for the same
+ * metering session. Clear suppression when a real port goes away or opens. */
+static uint8_t s_meter_ignored;
 static uint8_t s_meter_ports_valid;
 static uint32_t s_meter_ports_at, s_meter_attempt_at, s_meter_command_at;
 
@@ -729,6 +732,11 @@ void PowerAlgo_AddFaultItems(ui_page_t *page) {
         AddItem(s_fault_labels[i], UI_ITEM_DATA, 0, &s_fault_items[i], page, 0, 0);
 }
 
+void PowerAlgo_RequestBusCycle(void) {
+    s_bus_cycle_pending = 1u;
+    idle_reset();
+}
+
 void PowerAlgo_OnSharedIRQ(void) {
     s_meter_irq = 1u;
 }
@@ -737,9 +745,13 @@ static uint8_t meter_ports_fresh(uint32_t now) {
     return s_meter_ports_valid && (uint32_t)(now - s_meter_ports_at) <= SW_MONITOR_STALE_MS;
 }
 
+static uint8_t meter_wanted_real(void) {
+    return s_meter_real_present & (uint8_t)~s_meter_ignored;
+}
+
 static uint8_t meter_ready(uint32_t now) {
     return !s_bus_force_off && meter_ports_fresh(now) &&
-           (s_meter_real_path || (!s_meter_real_present && s_meter_a2 == METER_A2_ON));
+           (s_meter_real_path || (!meter_wanted_real() && s_meter_a2 == METER_A2_ON));
 }
 
 uint8_t PowerAlgo_ExtLoadRequest(uint8_t load) {
@@ -749,8 +761,10 @@ uint8_t PowerAlgo_ExtLoadRequest(uint8_t load) {
         PowerAlgo_ExtLoadReportBlocked();
         return 0u;
     }
-    if (!ext_loads())
+    if (!ext_loads()) {
         s_fault_meter_timeout = 0u;
+        s_meter_attempt_at = Millis() - METER_RETRY_MS;
+    }
     s_ext_requested |= load;
     idle_reset();
     pm_api_set_sleep_block(EXT_LOAD_PM_BLOCK, 1u);
@@ -804,15 +818,17 @@ static void meter_note_ports(uint32_t now) {
     uint8_t connections = SW6306_ConnectedPortMask();
     uint8_t a2_on = SW6306_IsPortA2ON() != 0u;
     uint8_t a2_online = (connections & SW6306_CONNECTED_A2) != 0u;
-    uint8_t was_present = s_meter_real_present;
+    uint8_t was_present = meter_wanted_real();
     s_meter_a1_on = SW6306_IsPortA1ON() != 0u;
     uint8_t c1_path = SW6306_IsPortC1ON() || SW6306_IsCharging();
-    s_meter_real_path = c1_path || s_meter_a1_on;
+    s_meter_real_path = (c1_path ? SW6306_CONNECTED_C1 : 0u) |
+                        (s_meter_a1_on ? SW6306_CONNECTED_A1 : 0u);
     s_meter_real_present = connections & (SW6306_CONNECTED_C1 | SW6306_CONNECTED_A1);
     if (c1_path)
         s_meter_real_present |= SW6306_CONNECTED_C1;
     if (s_meter_a1_on)
         s_meter_real_present |= SW6306_CONNECTED_A1;
+    s_meter_ignored &= s_meter_real_present & (uint8_t)~s_meter_real_path;
     s_meter_ports_at = now;
     s_meter_ports_valid = 1u;
 
@@ -828,13 +844,13 @@ static void meter_note_ports(uint32_t now) {
 
     /* Real USB insertion wins immediately, including CC detection before
      * a C1 power path exists. Do not wait for the normal retry slot. */
-    if ((s_meter_real_present & (uint8_t)~was_present) && s_meter_a2 != METER_A2_OFF)
+    if (meter_wanted_real() & (uint8_t)~was_present)
         s_meter_attempt_at = now - METER_RETRY_MS;
 }
 
 static void meter_invalidate(void) {
     s_meter_ports_valid = 0u;
-    s_meter_real_present = s_meter_real_path = 0u;
+    s_meter_real_present = s_meter_real_path = s_meter_ignored = 0u;
     s_meter_a2 = METER_A2_UNKNOWN;
 }
 
@@ -842,7 +858,7 @@ static uint8_t meter_remove_due(uint32_t now) {
     if (!meter_ports_fresh(now) || s_meter_a2 == METER_A2_OFF ||
         (s_meter_a2 == METER_A2_PENDING && !s_a2_target))
         return 0u;
-    if (s_meter_real_present)
+    if (meter_wanted_real())
         return 1u;
     if (s_meter_a2 == METER_A2_PENDING)
         return 0u;
@@ -852,7 +868,7 @@ static uint8_t meter_remove_due(uint32_t now) {
 }
 
 static uint8_t meter_urgent_due(uint32_t now) {
-    return s_meter_real_present && meter_remove_due(now) &&
+    return meter_wanted_real() && meter_remove_due(now) &&
            (uint32_t)(now - s_meter_attempt_at) >= METER_RETRY_MS;
 }
 
@@ -864,7 +880,7 @@ static uint8_t meter_due(uint32_t now) {
     if (meter_remove_due(now))
         return 1u;
     return ext_loads() && !ext_inhibit(now) &&
-           !s_meter_real_present && s_meter_a2 == METER_A2_OFF;
+           !s_meter_real_path && s_meter_a2 == METER_A2_OFF;
 }
 
 /* A synthetic path alone is not a discharge session. While charging,
@@ -1114,12 +1130,16 @@ static void aux_publish(uint8_t valid, uint16_t mv, uint16_t ma) {
     s_power_data[POWER_AUX_CURRENT].ptr = valid ? &s_power_values[POWER_AUX_CURRENT] : NULL;
 }
 
-static void aux_disable(void) {
+static void aux_output_off(void) {
     LL_GPIO_ResetOutputPin(SUB_EN_GPIO_Port, SUB_EN_Pin);
-    s_aux_state = AUX_STATE_OFF;
     s_monitor.aux_enabled = 0u;
     s_aux_low_current = 0u;
     s_scan_for_protection = 0u;
+}
+
+static void aux_disable(void) {
+    aux_output_off();
+    s_aux_state = AUX_STATE_OFF;
     aux_publish(1u, 0u, 0u);
     PowerAlgo_ExtLoadRelease(EXT_LOAD_AUX);
 }
@@ -1224,8 +1244,13 @@ static void aux_service(uint32_t now) {
             PowerAlgo_ExtLoadTimeout();
         }
     } else if (state == EXT_LOAD_WAIT) {
-        aux_disable();
-        aux_enable();
+        /* Preserve demand through a real/fake port handover; never release
+         * and reacquire the shared meter reservation just to pause AUX. */
+        aux_output_off();
+        s_aux_state = AUX_STATE_WAIT_METER;
+        s_aux_wait_at = now;
+        aux_publish(0u, 0u, 0u);
+        PowerAlgo_ExtLoadSetActive(EXT_LOAD_AUX, 0u);
     }
 }
 
@@ -1238,6 +1263,7 @@ static pm_hook_result_t ext_load_prepare(void *ctx) {
         WLED_AlgoStop();
         aux_disable();
         s_aux_command_pending = 0u;
+        s_bus_cycle_pending = 0u;
         /* An existing in-flight A2 operation must settle before sleep. */
         s_meter_attempt_at = s_ext_pm_at - METER_RETRY_MS;
     }
@@ -1685,11 +1711,14 @@ THRD_DECLARE(meter_remove) {
     if (SW6306_LastOperationOK())
         s_meter_a2 = METER_A2_PENDING;
     THRD_SPAWN_NOARG(meter_read_ports);
+    if (s_meter_ports_valid && s_meter_a2 == METER_A2_OFF && meter_wanted_real() && !s_meter_real_path)
+        s_meter_attempt_at = Millis() - METER_RETRY_MS;
     meter_update_guard();
     THRD_END;
 }
 
 THRD_DECLARE(meter_step) {
+    static uint8_t real_event;
     THRD_BEGIN;
     /* The urgent path uses the just-completed physical port snapshot:
      * no additional port read or phase delay before A2 Remove. */
@@ -1704,20 +1733,29 @@ THRD_DECLARE(meter_step) {
 
     if (meter_remove_due(Millis())) {
         THRD_SPAWN_NOARG(meter_remove);
-    } else if (ext_loads() && !ext_inhibit(Millis()) &&
-               !s_meter_real_present && s_meter_a2 == METER_A2_OFF) {
+    }
+    if (meter_ports_fresh(Millis()) && ext_loads() && !ext_inhibit(Millis()) &&
+        !s_meter_real_path && s_meter_a2 == METER_A2_OFF) {
         s_meter_attempt_at = Millis();
-        s_a2_target = 1u;
-        s_meter_a2 = METER_A2_UNKNOWN;
         SW6306_OperationReset();
-        THRD_SPAWN_NOARG(SW6306_PortA2Insert);
-        s_meter_command_at = Millis();
-        if (SW6306_LastOperationOK())
-            s_meter_a2 = METER_A2_PENDING;
-        THRD_SPAWN_NOARG(meter_read_ports);
-        /* An A1/C1 insertion can race the asynchronous insert. */
-        if (meter_urgent_due(Millis()))
-            THRD_SPAWN_NOARG(meter_remove);
+        if (meter_wanted_real()) {
+            /* A cable can remain attached after MCU reset with its path off.
+             * Reissue the real port's insert event instead of competing with A2. */
+            real_event = (meter_wanted_real() & SW6306_CONNECTED_C1) ? SW6306_PORTEVT_C1_INS : SW6306_PORTEVT_A1_INS;
+            THRD_SPAWN_ARGS(SW6306_PortEvents, real_event);
+            THRD_SPAWN_NOARG(meter_read_ports);
+        } else {
+            s_a2_target = 1u;
+            s_meter_a2 = METER_A2_UNKNOWN;
+            THRD_SPAWN_NOARG(SW6306_PortA2Insert);
+            s_meter_command_at = Millis();
+            if (SW6306_LastOperationOK())
+                s_meter_a2 = METER_A2_PENDING;
+            THRD_SPAWN_NOARG(meter_read_ports);
+            /* A1/C1 insertion can race the asynchronous A2 insert. */
+            if (meter_urgent_due(Millis()))
+                THRD_SPAWN_NOARG(meter_remove);
+        }
     }
     meter_update_guard();
     THRD_END;
@@ -1730,6 +1768,74 @@ THRD_DECLARE(meter_poll) {
     THRD_SPAWN_NOARG(meter_read_ports);
     if (meter_urgent_due(Millis()))
         THRD_SPAWN_NOARG(meter_remove);
+    meter_update_guard();
+    THRD_END;
+}
+
+/* Manual cycle is based on confirmed real power paths, never synthetic A2.
+ * Break before make; keep external-load requests across the transition. */
+THRD_DECLARE(bus_cycle_step) {
+    static uint8_t paths, target, remove_events;
+    static uint32_t started;
+    THRD_BEGIN;
+    s_bus_force_off = 1u;
+    THRD_SPAWN_NOARG(meter_read_ports);
+    if (s_meter_ports_valid) {
+        paths = s_meter_real_path;
+        target = !paths ? SW6306_CONNECTED_A1 : paths == SW6306_CONNECTED_A1 ? SW6306_CONNECTED_C1
+                                                                             : 0u;
+        /* C-port event writes act only when the chip is a source. Do not
+         * deliberately interrupt an input/charging session. */
+        if (SW6306_IsCharging()) {
+            target = 0u;
+            paths &= (uint8_t)~SW6306_CONNECTED_C1;
+        }
+        remove_events = (paths & SW6306_CONNECTED_A1 ? SW6306_PORTEVT_A1_RMV : 0u) |
+                        (paths & SW6306_CONNECTED_C1 ? SW6306_PORTEVT_C1_RMV : 0u);
+        if (remove_events) {
+            SW6306_OperationReset();
+            THRD_SPAWN_ARGS(SW6306_PortEvents, remove_events);
+            if (!SW6306_LastOperationOK())
+                target = 0u;
+            started = Millis();
+            do {
+                THRD_SPAWN_NOARG(meter_read_ports);
+                if (!s_meter_ports_valid || !(s_meter_real_path & paths))
+                    break;
+                THRD_DELAY(50u);
+            } while ((uint32_t)(Millis() - started) < METER_RETRY_MS);
+            if (!s_meter_ports_valid || (s_meter_real_path & paths))
+                target = 0u;
+        }
+        if (target && s_meter_ports_valid && s_meter_a2 != METER_A2_OFF) {
+            THRD_SPAWN_NOARG(meter_remove);
+            started = Millis();
+            while (meter_ports_fresh(Millis()) && s_meter_a2 != METER_A2_OFF &&
+                   (uint32_t)(Millis() - started) < METER_RETRY_MS) {
+                THRD_DELAY(50u);
+                THRD_SPAWN_NOARG(meter_read_ports);
+            }
+            if (!s_meter_ports_valid || s_meter_a2 != METER_A2_OFF)
+                target = 0u;
+        }
+        if (target && !pm_api_ui_should_block()) {
+            SW6306_OperationReset();
+            THRD_SPAWN_ARGS(SW6306_PortEvents,
+                            target == SW6306_CONNECTED_A1 ? SW6306_PORTEVT_A1_INS : SW6306_PORTEVT_C1_INS);
+            THRD_SPAWN_NOARG(meter_read_ports);
+        }
+        /* A manual OFF must not immediately revive an attached C1 via
+         * meter provisioning. Existing WLED/AUX demand can use A2. */
+        if (s_meter_ports_valid) {
+            s_meter_ignored = s_meter_real_present & (uint8_t)~(s_meter_real_path | target);
+            /* Let a submitted real insert settle. OFF with external demand
+             * instead makes the automatic A2 path eligible immediately. */
+            s_meter_attempt_at = target ? Millis() : Millis() - METER_RETRY_MS;
+            if (!target && ext_loads() && meter_due(Millis()))
+                THRD_SPAWN_NOARG(meter_step);
+        }
+    }
+    s_bus_force_off = 0u;
     meter_update_guard();
     THRD_END;
 }
@@ -1959,6 +2065,12 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             THRD_DELAY(20u);
             continue;
         }
+        if (s_bus_cycle_pending) {
+            s_bus_cycle_pending = 0u;
+            s_sw_owner_busy = 1u;
+            THRD_SPAWN_NOARG(bus_cycle_step);
+            s_sw_owner_busy = 0u;
+        }
         /* Service PB5 edges between scheduled phases. Do not shorten
          * the normal ADC / capacity scan cadence on sensor interrupts. */
         if (s_meter_irq) {
@@ -1968,7 +2080,7 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
         }
         if ((int32_t)(Millis() - s_sw_next_at) < 0) {
             THRD_UNTIL((int32_t)(Millis() - s_sw_next_at) >= 0 ||
-                       s_meter_irq || s_ext_pm_work || pm_api_ui_should_block());
+                       s_meter_irq || s_bus_cycle_pending || s_ext_pm_work || pm_api_ui_should_block());
             continue;
         }
         if (s_sw_phase != 2u && s_meter_a2 != METER_A2_OFF) {

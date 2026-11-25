@@ -54,7 +54,7 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 Powerbank, Radio, Game, Tools, Settings and Statistics appear in that order. Statistics contains Power, Battery, Sensors, Fault, System and About. After reset the firmware first opens the Powerbank dashboard. Short or long CONF opens the home menu from the dashboard.
 
 Game order: Tetris, Pac-Man, Bomber, Invaders, Arkanoid.
-Tools order: Leveler, Compass, Altimeter, SOS Blink, Accel Calibration, I2C Scanner.
+Tools order: Leveler, Compass, Altimeter, SOS Blink, Accel Calibration, Mag Calibration, I2C Scanner.
 
 Settings lists Power Limits, Ports, Protocol#1 and Protocol#2 before Display.
 They expose 32 RAM-only settings and actions derived from PB02B.
@@ -123,12 +123,11 @@ insertion wake. A protection shutdown waits for a new request.
 In the Powerbank dashboard, RIGHT raises brightness and LEFT lowers
 it. A debounced press changes a level immediately, then repeats every
 80 ms while held. A RIGHT press that starts from off is limited to
-level 2 until a new press. LEFT reaches zero without a press limit.
+level 1 until a new press. LEFT reaches zero without a press limit.
 TIM1 CH4 drives PA11 at 62.5 kHz (64 MHz timer clock, PSC 0,
 ARR 1023). Manual requests have 19 levels with the existing square-law
 PWM and 160 ms ramp; the display uses the actual limited level / 19.
 The physical level 32 is reserved for SOS.
-The first continuous RIGHT press from off remains limited to level 2.
 
 At 30 °C ambient, hardware measurements at levels 8/16/24 are
 1.346/3.208/7.023 W with 58/75/125 °C hotspots. Interpolate power
@@ -153,8 +152,18 @@ the external-load reservation and drives PWM low. Meter interruptions
 and re-entry preserve the current group's cooling interval.
 The user verified a hotspot below 80 °C with the previous SOS timing.
 
-The SW6306 owner reuses a live C1/A1 path or requests a shared
-synthetic A2 insertion, confirmed by rereading port status. A2 has
+UP cycles actual BUS output paths: none -> request A1; A1 -> remove A1
+then request C1; C1 or both -> remove the active outputs (combined event
+for both). C1 input/charging is not interrupted by source-only port events.
+The owner confirms removal before requesting another port. Manual OFF
+keeps WLED/AUX demand, allowing automatic A2 provisioning; attached but
+manually removed real ports remain ignored until they disconnect, reopen,
+or are selected again. During handover loads wait for a valid meter path.
+
+The SW6306 owner reuses a live C1/A1 path, activates a detected but idle
+real port (C1 before A1), or requests a shared synthetic A2 insertion
+when no eligible real port is present. Every operation is confirmed by
+rereading port status. A2 has
 no physical connector and its hardware auto-off is disabled in Init.
 A2 uses OFF/ON/PENDING/UNKNOWN with a latched command direction.
 When a real A1/C1 connection is detected (including C1 CC before its
@@ -793,7 +802,8 @@ does **not** use RTC DR1..DR4, whose contents would be lost on a full
 VDD power-down just like ordinary SRAM. Instead, a 16-byte
 `s_calibration_noinit` record shares the Keil linker scatter file's
 reserved `RW_NOINIT` section with `g_fault_record` (32 bytes) and
-the two battery statistics slots (32 bytes).
+the two battery statistics slots (32 bytes), and the MMC5603 magnetic
+bias record (12 bytes).
 The scatter currently reserves the **last 256 bytes of 36 KiB SRAM**
 for this area. The calibration consists of three signed 16-bit zero
 codes and three unsigned 16-bit Q14 slopes, plus a 16-bit magic/version

@@ -1,5 +1,5 @@
 ; PB10A · STM32G070KBTx：Flash 128 KiB / SRAM 36 KiB。
-; 仅末 256 B 为复位不清除区，供 FaultRecord(32B) + SC7A20(16B) + Battery(32B) 共享。
+; 仅末 256 B 为复位不清除区，供 FaultRecord(32B) + SC7A20(16B) + Battery(32B) + MMC5603(12B) 共享。
 ; 软件复位保留；VDD 掉电不保留。其余 RW/ZI（含栈堆）在 RW_IRAM1。
 LR_IROM1 0x08000000 0x00020000 {
   ER_IROM1 0x08000000 0x00020000 {

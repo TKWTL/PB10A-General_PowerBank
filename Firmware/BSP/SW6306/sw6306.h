@@ -1527,6 +1527,7 @@ uint8_t SW6306_WakeAndUnlock(void); /* 有限等待、版本寄存器读回与I2
 SW6306_RET SW6306_Unlock(SW6306_NOARG);       //无短按事件：解除低功耗并解锁寄存器写入
 SW6306_RET SW6306_Click(SW6306_NOARG);        //触发单击事件
 SW6306_RET SW6306_LPSet(SW6306_NOARG);        //打开低功耗
+SW6306_RET SW6306_PortEvents(SW6306_ARGS(uint8_t events)); /* combine PORT_EVT bits in one write */
 SW6306_RET SW6306_PortC1Remove(SW6306_NOARG); //触发C1口拔出事件
 SW6306_RET SW6306_PortC1Insert(SW6306_NOARG); //触发C1口插入事件
 SW6306_RET SW6306_PortC2Remove(SW6306_NOARG); //触发C2口拔出事件

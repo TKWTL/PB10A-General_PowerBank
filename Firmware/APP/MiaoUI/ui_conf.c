@@ -27,7 +27,7 @@ static ui_item_t s_power_limit_back, s_ports_back, s_protocol1_back, s_protocol2
 static ui_item_t s_display_item,s_sleep_wake_item,s_system_item,s_display_back,s_sleep_wake_back,s_system_back;
 static ui_item_t s_stat_power_item, s_stat_battery_item, s_stat_sensors_item, s_stat_fault_item, s_stat_system_item;
 static ui_item_t s_stat_power_back, s_stat_battery_back, s_stat_sensors_back, s_stat_fault_back, s_stat_system_back;
-static ui_item_t s_arkanoid, s_tetris, s_pacman, s_bomber, s_invaders, s_scanner, s_leveler, s_accel_cal, s_sos, s_compass, s_altimeter;
+static ui_item_t s_arkanoid, s_tetris, s_pacman, s_bomber, s_invaders, s_scanner, s_leveler, s_accel_cal, s_sos, s_compass, s_altimeter, s_compass_cal;
 static ui_item_t s_sleep_options_item;
 static ui_data_t s_sleep_data;
 static ui_element_t s_sleep_element;
@@ -125,6 +125,8 @@ void Create_MenuTree(ui_t *ui) {
         AddItem("-Accel Calibration",UI_ITEM_WORD,img_leveler_cal,
             &s_accel_cal,&s_tools,0,Motion_CalibrationRun);
         UI_SetLeaveHook(&s_accel_cal,Motion_CalibrationOnLeave);
+        AddItem("-Mag Calibration",UI_ITEM_WORD,img_compass_cal,&s_compass_cal,&s_tools,0,CompassCal_AppRun);
+        UI_SetLeaveHook(&s_compass_cal,CompassCal_AppOnLeave);
         AddItem("-I2C Scanner",UI_ITEM_WORD,img_scan,&s_scanner,&s_tools,0,i2c_Scanner);
 
     AddPage("[Settings]",&s_settings,UI_PAGE_TEXT,&s_home);
@@ -202,7 +204,7 @@ void Create_MenuTree(ui_t *ui) {
 // clang-format on
 
 uint8_t MiaoUi_ItemLocksRotation(const ui_item_t *item) {
-    return item->page.location == &s_game || item == &s_leveler || item == &s_accel_cal;
+    return item->page.location == &s_game || item == &s_leveler || item == &s_accel_cal || item == &s_compass_cal;
 }
 
 /* Called from foreground services, never modifies any ui_t directly.

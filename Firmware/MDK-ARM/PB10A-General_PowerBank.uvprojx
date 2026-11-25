@@ -930,6 +930,11 @@
               <FilePath>../APP/functions/compass_app.c</FilePath>
             </File>
             <File>
+              <FileName>compass_cal_app.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/functions/compass_cal_app.c</FilePath>
+            </File>
+            <File>
               <FileName>altimeter_app.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/functions/altimeter_app.c</FilePath>

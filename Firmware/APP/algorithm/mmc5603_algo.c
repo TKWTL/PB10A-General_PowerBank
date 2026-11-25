@@ -3,6 +3,7 @@
 #include "mmc5603.h"
 #include "sensor_common.h"
 #include "pt.h"
+#include "main.h"
 #define MMC_SAMPLE_MS 250u
 #define MMC_TOOL_SAMPLE_MS 40u
 #define MMC_RETRY_MS 2000u
@@ -29,6 +30,20 @@ static volatile uint8_t s_flag;
 static uint32_t s_due_at,s_conversion_at;
 static mmc5603_sample_t s_sample;
 static uint8_t s_valid, s_tool_mode;
+#define MMC_CAL_TAG 0x5603u
+#define MMC_CAL_OFFSET_ZERO 32768
+#define MMC_CAL_RANGE_MG 32000
+
+/* 12 bytes in the existing RW_NOINIT SRAM region. No Flash writes. */
+typedef struct {
+    uint16_t bias[3];
+    uint16_t crc;
+    uint32_t tag;
+} mmc_cal_record_t;
+static volatile mmc_cal_record_t s_cal_record
+    __attribute__((section(".noinit"), used, aligned(4)));
+static uint8_t s_calibrated;
+
 static ui_item_t s_items[3];
 static ui_data_t s_data[3];
 static ui_element_t s_elements[3];
@@ -54,6 +69,77 @@ uint8_t MMC5603Algo_GetSample(mmc5603_sample_t *out) {
     if (!out || !s_valid || s_paused || (uint32_t)(Millis() - s_sample.at_ms) > 800u)
         return 0u;
     *out = s_sample;
+    return 1u;
+}
+
+/* CRC16-CCITT, same byte order and initial value as the SC7A20 record. */
+static uint16_t mag_cal_crc(const uint16_t bias[3]) {
+    uint16_t crc = 0xffffu;
+    for (unsigned i = 0u; i < 3u; ++i) {
+        for (unsigned j = 0u; j < 2u; ++j) {
+            crc ^= (uint16_t)((bias[i] >> (8u * j)) & 255u) << 8;
+            for (unsigned k = 0u; k < 8u; ++k)
+                crc = (uint16_t)((crc & 0x8000u) ? (crc << 1) ^ 0x1021u : crc << 1);
+        }
+    }
+    return crc;
+}
+
+static uint8_t mag_bias_valid(uint16_t bias) {
+    int32_t value = (int32_t)bias - MMC_CAL_OFFSET_ZERO;
+    return value >= -MMC_CAL_RANGE_MG && value <= MMC_CAL_RANGE_MG;
+}
+
+static void mag_cal_load(void) {
+    uint16_t bias[3] = {s_cal_record.bias[0], s_cal_record.bias[1], s_cal_record.bias[2]};
+    if (s_cal_record.tag != MMC_CAL_TAG || s_cal_record.crc != mag_cal_crc(bias))
+        return;
+    for (unsigned i = 0u; i < 3u; ++i)
+        if (!mag_bias_valid(bias[i]))
+            return;
+    s_calibrated = 1u;
+}
+
+uint8_t MMC5603Algo_IsCalibrated(void) {
+    return s_calibrated;
+}
+
+uint8_t MMC5603Algo_GetCorrectedSample(mmc5603_sample_t *out) {
+    if (!MMC5603Algo_GetSample(out))
+        return 0u;
+    if (s_calibrated)
+        for (unsigned i = 0u; i < 3u; ++i)
+            out->mg[i] -= (int32_t)s_cal_record.bias[i] - MMC_CAL_OFFSET_ZERO;
+    return 1u;
+}
+
+uint8_t MMC5603Algo_ApplySixFace(const int16_t face_mg[6][3]) {
+    uint16_t bias[3];
+    uint32_t usq = 0u, vsq = 0u;
+    for (unsigned i = 0u; i < 3u; ++i) {
+        int32_t u = ((int32_t)face_mg[0][i] - face_mg[2][i]) / 2;
+        int32_t v = ((int32_t)face_mg[1][i] - face_mg[3][i]) / 2;
+        usq += (uint32_t)(u * u);
+        vsq += (uint32_t)(v * v);
+        /* b = (M5 + M6 - MN + MS) / 2. Round once, symmetrically. */
+        int32_t b2 = (int32_t)face_mg[4][i] + face_mg[5][i] - face_mg[0][i] + face_mg[2][i];
+        int32_t b = (b2 + (b2 < 0 ? -1 : 1)) / 2;
+        if (b < -MMC_CAL_RANGE_MG || b > MMC_CAL_RANGE_MG)
+            return 0u;
+        bias[i] = (uint16_t)(b + MMC_CAL_OFFSET_ZERO);
+    }
+    /* Reject a degenerate N/S or E/W response; no matrix correction. */
+    if (usq < 20u * 20u || vsq < 20u * 20u)
+        return 0u;
+    s_cal_record.tag = 0u;
+    __DMB();
+    for (unsigned i = 0u; i < 3u; ++i)
+        s_cal_record.bias[i] = bias[i];
+    s_cal_record.crc = mag_cal_crc(bias);
+    __DMB();
+    s_cal_record.tag = MMC_CAL_TAG;
+    __DSB();
+    s_calibrated = 1u;
     return 1u;
 }
 
@@ -195,6 +281,8 @@ void MMC5603Algo_Init(void) {
     s_due_at=Millis();
     s_valid = s_tool_mode = 0u;
     s_sample.seq = 0u;
+    s_calibrated = 0u;
+    mag_cal_load();
     PT_INIT(&s_transfer_pt);
     (void)pm_device_register(&s_node);
 }

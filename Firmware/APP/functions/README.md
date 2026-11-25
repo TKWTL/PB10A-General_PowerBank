@@ -64,13 +64,25 @@ them.
 
 - `compass_app.c/.h`: magnetic heading with gravity-based tilt compensation,
   vector EMA, rotating compass rose, eight directions and magnetic strength.
-  The displayed top edge is the forward axis; actual R2 display rotation
-  adds 180 degrees. Hold the screen sufficiently face-up to obtain a fix.
-  `COMPASS_MAG_*_AXIS` maps MMC5603 to native SC7A20 axes; the default
-  aligned-axis assumption requires physical verification. No magnetic
-  calibration or declination correction. Both sensors use the 40 ms tool
+  The displayed right edge (native SC7A20 -X) is forward; actual R2
+  display rotation adds 180 degrees. `COMPASS_MAG_*_AXIS` defaults to
+  Y,-X,Z based on the user's inferred mounting; verify against real north.
+  The compass subtracts the retained native-axis hard-iron offsets before
+  mapping and filtering. No gain matrix or declination correction. Both sensors use the 40 ms tool
   target; only long CONF exits. Invalid/stale samples, rapid acceleration,
   near-vertical forward axis or weak horizontal field suppress heading.
+- `compass_cal_app.c/.h`: guided six-pose magnetic offset calibration.
+  With the screen facing up (native SC7A20 Y-), aim its right edge N/E/S/W
+  in order. Then rest on the large face (Z-), aim right north, and flip
+  around the screen-left/right axis (Z+) without changing heading. Each
+  short CONF captures 16 new magnetic samples at the 40 ms target, within
+  5 degrees of the expected gravity axis. Stale data or a 50 mG per-axis
+  span aborts that capture; LEFT redoes the previous pose; long CONF exits.
+  The last two poses reuse the Leveler horizon, with progress at the bottom.
+  The bias is (M5+M6-MN+MS)/2, with a nondegenerate N/S and E/W check;
+  three native-axis uint16_t offsets (32768 = zero mG), CRC16 and tag use
+  twelve bytes of .noinit. Statistics remains raw; reset retention requires
+  powered SRAM. Calibration locks R0; the leave hook restores sampling/PM.
 - `altimeter_app.c/.h`: Pa snapshot, integer standard-atmosphere LUT,
   standard/relative height in 0.1 m, pressure, sensor temperature and
   vertical speed from the closest sample at least 5 s old. Short CONF

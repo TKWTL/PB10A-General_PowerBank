@@ -104,7 +104,7 @@ static uint32_t level_abs(int32_t value) {
     return (uint32_t)(value < 0 ? -value : value);
 }
 
-static void level_draw_horizon(int32_t x, int32_t y, int32_t h) {
+static void level_draw_horizon(int32_t x, int32_t y, int32_t h, int32_t z) {
     int16_t row, first, last, cross;
     uint8_t white = 1u, xor_color = 2u;
     if (h == 0) return;
@@ -114,7 +114,6 @@ static void level_draw_horizon(int32_t x, int32_t y, int32_t h) {
      * boundary so the product fits in 32 bits without losing its fraction.
      * Upright X < 0 is white above, positive Z moves the line down. */
     int32_t nx = y, ny = x;
-    int32_t z = s_level_z;
     int32_t offset = ((z / LEVEL_MG_SCALE) * h +
                       ((z % LEVEL_MG_SCALE) * h) / LEVEL_MG_SCALE) / 20;
     Disp_SetDrawColor(&white);
@@ -148,6 +147,14 @@ static void level_draw_horizon(int32_t x, int32_t y, int32_t h) {
     Disp_DrawLine(4u,32u,13u,32u);
     Disp_DrawLine(114u,32u,123u,32u);
 }
+/* Share the existing integer horizon geometry with magnetic calibration.
+ * Clip window and footer are owned by the caller. */
+void Motion_DrawHorizon(const int16_t level_mg[3]) {
+    int32_t x = level_mg[0], y = level_mg[1];
+    uint32_t h2 = (uint32_t)(x * x) + (uint32_t)(y * y);
+    level_draw_horizon(x, y, (int32_t)isqrt_u32(h2), (int32_t)level_mg[2] * LEVEL_MG_SCALE);
+}
+
 /* A 36px diameter XOR circle must use a half-pixel center:
  * an integer center and x*x+y*y<18*18 would render only 35
  * pixels across. As in PB02B, store twice the circle center and
@@ -299,7 +306,7 @@ void Motion_LevelerRun(ui_t *ui) {
     } else {
         int32_t ax = (int32_t)level_abs(x), ay = (int32_t)level_abs(y);
         angle = s_level_mode == 0u ? atan2_cdeg(ay, ax) : atan2_cdeg(ax, ay);
-        level_draw_horizon(x, y, h);
+        level_draw_horizon(x, y, h, s_level_z);
     }
     level_angle_footer(angle);
     Disp_SendBuffer();

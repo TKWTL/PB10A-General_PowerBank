@@ -9,6 +9,7 @@
 extern const unsigned char img_leveler[];
 extern const unsigned char img_leveler_cal[];
 
+void Motion_DrawHorizon(const int16_t level_mg[3]);
 void Motion_LevelerRun(ui_t *ui);
 void Motion_LevelerOnLeave(ui_t *ui);
 void Motion_CalibrationRun(ui_t *ui);

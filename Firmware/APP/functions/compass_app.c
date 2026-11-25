@@ -38,30 +38,28 @@ static uint8_t s_active, s_mag_seen, s_accel_seen, s_accel_quiet;
 static uint32_t s_mag_seq, s_accel_seq;
 static int32_t s_mag_q4[3], s_accel[3];
 
-/* Inputs are bounded by the 20-bit magnetometer and int16_t accelerometer.
- * Sum in unsigned arithmetic: each square fits signed 32 bits. */
+/* Accelerometer input is int16_t; magnetic vector is scaled before norm. */
 static uint32_t norm_sq(const int32_t v[3]) {
     return (uint32_t)(v[0] * v[0]) + (uint32_t)(v[1] * v[1]) + (uint32_t)(v[2] * v[2]);
 }
 
-/* Native SC7A20 acceleration measures UP. The user's measured Z- upright,
- * X+ right-edge-down and Y- face-up identify screen-top as native -Z.
- * R = F x A, F_h = A x R / |A|, F = (0,0,-1). F_h and R have equal
- * lengths, so atan2(-B.R, B.F_h) is the clockwise magnetic heading.
- * Dividing each F_h component first bounds all dot products to int32_t. */
+/* Native acceleration measures UP. Screen-right is native -X.
+ * R = F x A, F_h = A x R / |A|, F = (-1,0,0).
+ * The equal-length horizontal vectors give atan2(-B.R, B.F_h). */
 static uint8_t compass_heading(const int32_t a[3], const int32_t b[3], uint16_t *heading) {
     uint32_t gravity_sq = norm_sq(a);
     if (gravity_sq < 750u * 750u || gravity_sq > 1250u * 1250u)
         return 0u;
     int32_t gravity = (int32_t)isqrt_u32(gravity_sq);
-    int32_t xy_sq = a[0] * a[0] + a[1] * a[1];
-    int32_t horizontal = (int32_t)isqrt_u32((uint32_t)xy_sq);
+    int32_t yz_sq = a[1] * a[1] + a[2] * a[2];
+    int32_t horizontal = (int32_t)isqrt_u32((uint32_t)yz_sq);
     if (horizontal * 4 < gravity)
-        return 0u; /* screen-top projection is nearly vertical */
+        return 0u; /* screen-right projection is nearly vertical */
 
-    int32_t forward = b[0] * (a[2] * a[0] / gravity) +
-                      b[1] * (a[2] * a[1] / gravity) - b[2] * (xy_sq / gravity);
-    int32_t right = b[0] * a[1] - b[1] * a[0];
+    int32_t forward = -b[0] * (yz_sq / gravity) +
+                      b[1] * (a[0] * a[1] / gravity) +
+                      b[2] * (a[0] * a[2] / gravity);
+    int32_t right = b[1] * a[2] - b[2] * a[1];
     int32_t fh = forward / horizontal, rh = right / horizontal;
     if (fh > -COMPASS_MIN_HORIZONTAL_MG && fh < COMPASS_MIN_HORIZONTAL_MG &&
         rh > -COMPASS_MIN_HORIZONTAL_MG && rh < COMPASS_MIN_HORIZONTAL_MG &&
@@ -75,10 +73,23 @@ static uint8_t compass_heading(const int32_t a[3], const int32_t b[3], uint16_t 
     return 1u;
 }
 
+/* Raw minus bias can exceed int16_t. Scale before squaring and restore
+ * the magnitude to avoid 64-bit arithmetic and signed overflow. */
+static uint32_t compass_strength(const int32_t b[3]) {
+    int32_t v[3] = {b[0], b[1], b[2]};
+    uint32_t scale = 1u;
+    while (v[0] > 32767 || v[0] < -32767 || v[1] > 32767 || v[1] < -32767 || v[2] > 32767 || v[2] < -32767) {
+        for (unsigned i = 0u; i < 3u; ++i)
+            v[i] /= 2;
+        scale *= 2u;
+    }
+    return isqrt_u32(norm_sq(v)) * scale;
+}
+
 static uint8_t compass_magnetic(int32_t b[3], uint32_t now) {
     static const int8_t axes[3] = {COMPASS_MAG_X_AXIS, COMPASS_MAG_Y_AXIS, COMPASS_MAG_Z_AXIS};
     mmc5603_sample_t sample;
-    if (!MMC5603Algo_GetSample(&sample) || (uint32_t)(now - sample.at_ms) > COMPASS_FRESH_MS) {
+    if (!MMC5603Algo_GetCorrectedSample(&sample) || (uint32_t)(now - sample.at_ms) > COMPASS_FRESH_MS) {
         s_mag_seen = 0u;
         return 0u;
     }
@@ -146,7 +157,7 @@ static void compass_dial(uint16_t heading, uint8_t valid) {
     Disp_SetFont(font_home_h6w4);
     if (valid) {
         for (unsigned bearing = 0u; bearing < 360u; bearing += 30u) {
-            unsigned angle = (bearing + 360u - heading) % 360u;
+            unsigned angle = (bearing + 450u - heading) % 360u;
             uint16_t x1, y1, x2, y2;
             dial_point(angle, 27, &x1, &y1);
             dial_point(angle, bearing % 90u ? 24 : 22, &x2, &y2);
@@ -159,10 +170,10 @@ static void compass_dial(uint16_t heading, uint8_t valid) {
     } else {
         Disp_DrawStr(29u, 34u, "?");
     }
-    /* Fixed index at display top; the rose turns underneath. */
-    Disp_DrawLine(28u, 1u, 31u, 7u);
-    Disp_DrawLine(34u, 1u, 31u, 7u);
-    Disp_DrawLine(28u, 1u, 34u, 1u);
+    /* Fixed index at display right; the rose turns underneath. */
+    Disp_DrawLine(61u, 28u, 55u, 31u);
+    Disp_DrawLine(61u, 34u, 55u, 31u);
+    Disp_DrawLine(61u, 28u, 61u, 34u);
 }
 
 void Compass_AppOnLeave(ui_t *ui) {
@@ -205,7 +216,7 @@ void Compass_AppRun(ui_t *ui) {
     Disp_SetDrawColor(&fg);
     compass_dial(heading, valid);
     Disp_SetFont(UI_FONT);
-    Disp_DrawStr(68u, 11u, "Mag North");
+    Disp_DrawStr(68u, 11u, MMC5603Algo_IsCalibrated() ? "Mag North" : "Uncalibr.");
     char text[16];
     if (valid) {
         static const char *const directions[] = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
@@ -220,7 +231,7 @@ void Compass_AppRun(ui_t *ui) {
         Disp_DrawStr(73u, 49u, "No fix");
     }
     if (magnetic_valid)
-        mini_snprintf(text, sizeof(text), "B:%u mG", (unsigned)isqrt_u32(norm_sq(b)));
+        mini_snprintf(text, sizeof(text), "B:%u mG", (unsigned)compass_strength(b));
     else
         mini_snprintf(text, sizeof(text), "B:-- mG");
     Disp_DrawStr(67u, 62u, text);
