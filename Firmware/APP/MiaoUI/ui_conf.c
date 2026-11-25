@@ -20,6 +20,9 @@ static ui_page_t s_home,s_settings,s_stats,s_game,s_tools,s_display;
 static ui_page_t s_sys,s_sleep_wake,s_sleep_options,s_stat_power,s_stat_battery,s_stat_sensors,s_stat_system;
 static ui_item_t s_powerbank,s_radio,s_settings_item,s_stats_item,s_game_item,s_tools_item,s_about;
 static ui_item_t s_settings_back,s_stats_back,s_game_back,s_tools_back;
+static ui_page_t s_power_limit, s_ports, s_protocol1, s_protocol2;
+static ui_item_t s_power_limit_item, s_ports_item, s_protocol1_item, s_protocol2_item;
+static ui_item_t s_power_limit_back, s_ports_back, s_protocol1_back, s_protocol2_back;
 static ui_item_t s_display_item,s_sleep_wake_item,s_system_item,s_display_back,s_sleep_wake_back,s_system_back;
 static ui_item_t s_stat_power_item,s_stat_battery_item,s_stat_sensors_item,s_stat_system_item;
 static ui_item_t s_stat_power_back,s_stat_battery_back,s_stat_sensors_back,s_stat_system_back;
@@ -132,10 +135,26 @@ void Create_MenuTree(ui_t *ui) {
 
     AddPage("[Settings]",&s_settings,UI_PAGE_TEXT,&s_home);
         add_return(&s_settings,&s_home,&s_settings_back,0);
+        AddItem("-PowerLimit",UI_ITEM_PARENTS,0,&s_power_limit_item,&s_settings,&s_power_limit,0);
+        AddItem("-Ports",UI_ITEM_PARENTS,0,&s_ports_item,&s_settings,&s_ports,0);
+        AddItem("-Protocol#1",UI_ITEM_PARENTS,0,&s_protocol1_item,&s_settings,&s_protocol1,0);
+        AddItem("-Protocol#2",UI_ITEM_PARENTS,0,&s_protocol2_item,&s_settings,&s_protocol2,0);
         AddItem("-Display",UI_ITEM_PARENTS,0,&s_display_item,&s_settings,&s_display,0);
         AddItem("-Sleep&Wake",UI_ITEM_PARENTS,0,&s_sleep_wake_item,&s_settings,&s_sleep_wake,0);
         Add_TimeSet_Items(&s_settings);
         AddItem("-System",UI_ITEM_PARENTS,0,&s_system_item,&s_settings,&s_sys,0);
+
+        AddPage("[PowerLimit]",&s_power_limit,UI_PAGE_TEXT,&s_settings);
+            add_return(&s_power_limit,&s_settings,&s_power_limit_back,0);
+
+        AddPage("[Ports]",&s_ports,UI_PAGE_TEXT,&s_settings);
+            add_return(&s_ports,&s_settings,&s_ports_back,0);
+
+        AddPage("[Protocol#1]",&s_protocol1,UI_PAGE_TEXT,&s_settings);
+            add_return(&s_protocol1,&s_settings,&s_protocol1_back,0);
+
+        AddPage("[Protocol#2]",&s_protocol2,UI_PAGE_TEXT,&s_settings);
+            add_return(&s_protocol2,&s_settings,&s_protocol2_back,0);
 
         AddPage("[Display]",&s_display,UI_PAGE_TEXT,&s_settings);
             add_return(&s_display,&s_settings,&s_display_back,0);

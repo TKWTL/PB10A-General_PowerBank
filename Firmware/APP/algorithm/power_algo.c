@@ -328,7 +328,8 @@ static void aux_service(uint32_t now) {
 
     if (s_aux_command_pending) {
         s_aux_command_pending = 0u;
-        if (s_aux_command == AUX_CMD_DISABLE)
+        if (s_aux_command == AUX_CMD_DISABLE ||
+            (s_aux_command == AUX_CMD_TOGGLE && s_aux_state != AUX_STATE_OFF))
             aux_disable();
         else
             aux_enable();

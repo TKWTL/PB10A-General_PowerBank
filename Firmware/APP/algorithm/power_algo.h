@@ -39,7 +39,8 @@ pm_hook_result_t PowerAlgo_BackgroundSuspend(void);
 void PowerAlgo_BackgroundAbort(void);
 /* ADC_RTC_AuxAThread owns the ADC and SUB_EN. */
 typedef enum { AUX_CMD_ENABLE,
-               AUX_CMD_DISABLE } aux_command_t;
+               AUX_CMD_DISABLE,
+               AUX_CMD_TOGGLE } aux_command_t;
 void PowerAlgo_AdcInit(void);
 void PowerAlgo_AdcPoll(void);
 void PowerAlgo_AuxA_Request(aux_command_t command);

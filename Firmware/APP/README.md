@@ -53,6 +53,9 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 
 Powerbank, Radio, Game, Tools, Settings and Statistics appear in that order. Statistics contains Power, Battery, Sensors and System. Open About from Statistics → System. After reset the firmware first opens the Powerbank dashboard. Short or long CONF opens the home menu from the dashboard.
 
+Settings lists PowerLimit, Ports, Protocol#1 and Protocol#2 before Display.
+Those four pages currently contain a Back entry for navigation.
+
 The dashboard aligns BUS, battery and Aux-A power above their voltages.
 It shows the SW6306 NTC at the right and the RTC time/date at the bottom.
 ETA uses filtered battery power and measured full/remaining energy. It first
@@ -76,8 +79,8 @@ It publishes the mean of 16 scans sampled about 25 ms apart in every
 500 ms batch. RTC and system service run at 500 ms independently.
 `RTC_IsEditing()` protects pending time-editor changes.
 
-PA6/SUB_EN defaults LOW. A confirmed PA7 insertion or dashboard RIGHT
-press enables Aux-A. LEFT disables it. After a 10 ms startup delay, the
+PA6/SUB_EN defaults LOW. A confirmed PA7 insertion enables Aux-A.
+In the dashboard, each new RIGHT press toggles Aux-A. After a 10 ms startup delay, the
 ADC owner scans every 5 ms while Aux-A is active and cuts output on any
 valid VOUT reading at or below 2 V. Current below 50 mA for 60 continuous
 seconds also cuts output. Use `PowerAlgo_AuxA_SetAutoOffCurrent()` to

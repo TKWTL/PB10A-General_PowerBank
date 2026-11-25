@@ -249,14 +249,9 @@ void Powerbank_AppOnLeave(ui_t *ui) {
 void Powerbank_AppRun(ui_t *ui) {
     if (!ui || ui->action == UI_ACTION_ENTER || ui->action == UI_ACTION_BACK)
         return;
-    /* The dashboard is an icon-page item: RIGHT is DOWN, LEFT is UP.
-     * Held-key repeats must never restart output after protection trips. */
-    if (!indevActionIsRepeat()) {
-        if (ui->action == UI_ACTION_DOWN)
-            PowerAlgo_AuxA_Request(AUX_CMD_ENABLE);
-        else if (ui->action == UI_ACTION_UP)
-            PowerAlgo_AuxA_Request(AUX_CMD_DISABLE);
-    }
+    /* Icon pages translate RIGHT to DOWN. Toggle only on the initial press. */
+    if (ui->action == UI_ACTION_DOWN && !indevActionIsRepeat())
+        PowerAlgo_AuxA_Request(AUX_CMD_TOGGLE);
     ui->action = UI_ACTION_NONE;
     if (!s_active) {
         s_active = 1u;
