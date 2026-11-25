@@ -20,7 +20,6 @@ extern const unsigned char img_scan[];
 extern const unsigned char img_dinosuar[];
 extern const unsigned char img_screen[];
 extern const unsigned char img_power[];
-extern const unsigned char img_sos[];
 extern const unsigned char img_gradienter[];     /* Collar Radio leveler */
 extern const unsigned char img_gradienter_cal[]; /* Collar Radio 6-face tool */
 #endif
