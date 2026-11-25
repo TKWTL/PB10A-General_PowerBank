@@ -76,8 +76,8 @@ void Create_Disp_Parameters(ui_t *ui) {
     background_element.data = &background_data;
     Create_element(&s_background_item, &background_element);
 
-    /* Screen Flip now enables gravity rotation, not a manual 180-degree toggle. */
-    rotation_data.name = "Screen Flip";
+    /* Auto Rotation enables gravity rotation, not a manual 180-degree toggle. */
+    rotation_data.name = "Auto Rotation";
     rotation_data.ptr = &ui->rotation;
     rotation_data.function = Disp_ResumeRotation;
     rotation_data.dataType = UI_DATA_SWITCH;
@@ -88,8 +88,8 @@ void Create_Disp_Parameters(ui_t *ui) {
 
 void Add_Disp_Items(ui_page_t *parent_page) {
     AddItem(" Contrast", UI_ITEM_DATA, 0, &s_contrast_item, parent_page, 0, 0);
-    AddItem(" Auto Screen Rotation", UI_ITEM_DATA, 0, &s_rotation_item, parent_page, 0, 0);
-    AddItem(" Background Color", UI_ITEM_DATA, 0, &s_background_item, parent_page, 0, 0);
+    AddItem(" Auto Rotation", UI_ITEM_DATA, 0, &s_rotation_item, parent_page, 0, 0);
+    AddItem(" Background", UI_ITEM_DATA, 0, &s_background_item, parent_page, 0, 0);
     AddItem(" Burn-in Test", UI_ITEM_WORD, 0, &s_burnin_item, parent_page, 0, Disp_BurninPage);
 }
 

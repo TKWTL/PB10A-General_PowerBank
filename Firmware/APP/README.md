@@ -57,9 +57,9 @@ Settings lists Power Limits, Ports, Protocol#1 and Protocol#2 before Display.
 They expose 32 RAM-only settings and actions derived from PB02B.
 
 - Power Limits: input 5–100 W, output 5–105 W, both in 5 W steps; defaults 100 W / 105 W. Higher output requests were rejected in hardware testing.
-- Ports: C1 input/output and A1 output fast-charge switches, BUS Idle
-  Timeout (1 min by default), Idle Threshold (0–100 mA, 4 mA steps, default 12),
-  Aux-A Enable (on by default), and Aux Idle Current (10–100 mA, default 50).
+- Ports: C1 input/output and A1 output fast-charge switches,
+  Idle Timeout (1 min by default), Idle Limit mA (0–100 mA, 4 mA steps, default 12),
+  Aux-A Enable (on by default), and Aux-A Idle mA (10–100 mA, default 50).
   Turning Aux-A Enable off stops the output and rejects new manual and
   insertion requests. Re-enabling it permits a new request.
 - Protocol#1: PD input/output, PD yield to SCP/VOOC/UFCS, 11/21 V PPS,
@@ -171,18 +171,19 @@ internal channels; four ranks, software triggering, normal DMA1 Channel2,
 Keep `.ioc` as the configuration source of truth; do not maintain a
 private patch to the vendor HAL files.
 
-Statistics → Power shows BUS V, BUS A, Aux-A V and Aux-A A, each with two decimal places.
-BUS readings come from the shared SW6306 bus ADC. Chip Temp °C shows the SW6306 die temperature to one decimal place. Aux-A voltage comes from PA5
+Statistics → Power shows BUS Voltage V, BUS Current A, Aux-A Volt V and
+Aux-A Curr A, each with two decimal places.
+BUS readings come from the shared SW6306 bus ADC. Chip Temp°C shows the SW6306 die temperature to one decimal place. Aux-A voltage comes from PA5
 via the 680 kΩ / 220 kΩ divider, and Aux-A current comes from PA0 at 0.5 V/A.
 Both Aux-A channels use the VDDA measured from VREFINT.
 
 Statistics → Battery shows charge percentage, pack voltage in volts,
-full and remaining energy in Wh, and Batt Temp °C from the SW6306 NTC to one
+full and remaining energy in Wh, and Batt Temp°C from the SW6306 NTC to one
 decimal place. The SW6306 service supplies the readings from its ADC, status
 and capacity caches. Unavailable readings display as `--`.
-State of Health %, Equivalent Full Cycles and Capacity Learning are appended to this page.
+State of Health %, Equivalent Full Cycles and Cap. Learning are appended to this page.
 
-Statistics → System shows Supply Voltage V to two decimal places and MCU Temp°C
+Statistics → System shows MCU Supply V to two decimal places and MCU Temp°C
 to one decimal place. MCU temperature uses VREFINT-corrected ADC
 rank 3 and STM32G0 factory TS_CAL1/TS_CAL2.
 
@@ -449,11 +450,11 @@ parity bits. No option bytes have been changed by this commit.
 
 The SSD1306 initializes in native `U8G2_R0`. Game sessions, Leveler and
 Accel Calibration select `U8G2_R0` before each application draw. Menu draws
-apply the current Screen Flip setting from the first frame after exit.
+apply the current Auto Rotation setting from the first frame after exit.
 
 ### SC7A20 gravity rotation and STOP1 wake (2026-11-20)
 
-- Display > Screen Flip is an **auto-rotate permission**, default ON.
+- Display > Auto Rotation is an **auto-rotate permission**, default ON.
   It precedes Background in the Display menu. OFF always uses the
   SSD1306 native `U8G2_R0`; ON uses the SC7A20's
   confirmed orientation (`U8G2_R0` or `U8G2_R2`) in the MiaoUI thread
@@ -537,8 +538,8 @@ thresholds must still be verified on real hardware.
   waits 100 ms to allow a concurrent debounced headphone event to win.
   A higher-priority target can replace a temporary lower-priority
   application without losing the original bookmark. No nested stack.
-- `Settings > System`: `Headphone Auto UI`, `Port Auto UI` and
-  `Aux-A Auto UI` are three independent, default-OFF, RAM-only
+- `Settings > System`: `Headphone Nav`, `USB Port Nav` and
+  `Aux-A Nav` are three independent, default-OFF, RAM-only
   switches. They control page changes,
   not the Radio power policy or SW6306 output mode. Radio's MiaoUI leave
   hook resets its view state; `ON` keeps running in the background,
@@ -575,6 +576,9 @@ entry, so it aligns with the 'B' immediately following '['; `-Submenu`
 for a PARENTS entry, with '-' replacing that space. This also applies
 to Time and Sleep Options. The source hierarchy is indented to mirror
 the visible menu tree; ICON page label formatting is independent.
+Keep TEXT DATA labels within 14 glyphs, including the leading space,
+where meaning permits. Retain full battery health/cycle terms and
+wide-text fault descriptions; selected long labels may scroll.
 
 PA7 / SUB_INDET falling-edge wake events also receive a dedicated
 40 ms low-level confirmation, one-shot insertion latch and high-level
@@ -641,7 +645,7 @@ Radio mode logic (evaluated in the dedicated RadioServiceThread):
 - `ON`: MIC_INDET has no authority over receiver startup, shutdown,
   RTC WUT or sleep block. The receiver continues playing unattended
   even with no headphones, unless battery protection trips.
-- `Sleep&Wake > Radio Keep Awake`: RAM-only switch, default OFF.
+- `Sleep & Wake > Radio Awake`: RAM-only switch, default OFF.
   If enabled, ON prevents normal automatic idle sleep regardless of
   MIC_INDET; AUTO prevents idle sleep only with confirmed inserted
   headphones. Without the switch, active Radio never prevents PM

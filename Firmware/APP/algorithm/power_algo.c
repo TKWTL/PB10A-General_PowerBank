@@ -129,20 +129,20 @@ typedef struct {
 
 #define PROTO(name, proto, dir) {name, SET_PROTOCOL, SW6306_PROTO_##proto, SW6306_PROTO_DIR_##dir}
 static const setting_desc_t s_settings[CFG_COUNT] = {
-    [CFG_OUTPUT] = {" Output Power Limit W", SET_NUMBER},
-    [CFG_INPUT] = {" Input Power Limit W", SET_NUMBER},
-    [CFG_C1_INPUT] = {" C1 Input Fast Charge", SET_PORT, SW6306_PORT_C1, SW6306_PORT_DIR_IN},
-    [CFG_C1_OUTPUT] = {" C1 Output Fast Charge", SET_PORT, SW6306_PORT_C1, SW6306_PORT_DIR_OUT},
-    [CFG_A1_OUTPUT] = {" A1 Output Fast Charge", SET_PORT, SW6306_PORT_A1, SW6306_PORT_DIR_OUT},
-    [CFG_IDLE_TIMEOUT] = {" Idle Shutdown Timeout", SET_ENUM},
-    [CFG_IDLE_THRESHOLD] = {" Idle Shutdown Current mA", SET_NUMBER},
-    [CFG_AUX_ENABLE] = {" Aux-A Port Enable", SET_AUX_SWITCH},
-    [CFG_AUX_THRESHOLD] = {" Aux-A Idle Current mA", SET_NUMBER},
+    [CFG_OUTPUT] = {" Max Output W", SET_NUMBER},
+    [CFG_INPUT] = {" Max Input W", SET_NUMBER},
+    [CFG_C1_INPUT] = {" C1 Fast In", SET_PORT, SW6306_PORT_C1, SW6306_PORT_DIR_IN},
+    [CFG_C1_OUTPUT] = {" C1 Fast Out", SET_PORT, SW6306_PORT_C1, SW6306_PORT_DIR_OUT},
+    [CFG_A1_OUTPUT] = {" A1 Fast Out", SET_PORT, SW6306_PORT_A1, SW6306_PORT_DIR_OUT},
+    [CFG_IDLE_TIMEOUT] = {" Idle Timeout", SET_ENUM},
+    [CFG_IDLE_THRESHOLD] = {" Idle Limit mA", SET_NUMBER},
+    [CFG_AUX_ENABLE] = {" Aux-A Enable", SET_AUX_SWITCH},
+    [CFG_AUX_THRESHOLD] = {" Aux-A Idle mA", SET_NUMBER},
     [CFG_PD_OUT] = PROTO(" PD Output", PD, SOURCE),
     [CFG_PD_IN] = PROTO(" PD Input", PD, SINK),
-    [CFG_PD_SCP] = {" PD Yield to SCP", SET_PD_YIELD},
-    [CFG_PD_VOOC] = {" PD Yield to VOOC", SET_PD_YIELD},
-    [CFG_PD_UFCS] = {" PD Yield to UFCS", SET_PD_YIELD},
+    [CFG_PD_SCP] = {" PD Yield SCP", SET_PD_YIELD},
+    [CFG_PD_VOOC] = {" PD Yield VOOC", SET_PD_YIELD},
+    [CFG_PD_UFCS] = {" PD Yield UFCS", SET_PD_YIELD},
     [CFG_PPS_BROADCAST] = {" PPS Broadcast", SET_BROADCAST},
     [CFG_PPS_11] = {" 11V PPS", SET_PPS, SW6306_PPS_1},
     [CFG_PPS_21] = {" 21V PPS", SET_PPS, SW6306_PPS_3},
@@ -1427,7 +1427,7 @@ void PowerAlgo_AdcPoll(void) {
 }
 
 void PowerAlgo_AddStatisticsItems(ui_page_t *page) {
-    static const char *const names[POWER_ITEM_COUNT] = {" BUS Voltage V", " BUS Current A", " Aux-A Voltage V", " Aux-A Current A", " Chip Temperature°C"};
+    static const char *const names[POWER_ITEM_COUNT] = {" BUS Voltage V", " BUS Current A", " Aux-A Volt V", " Aux-A Curr A", " Chip Temp°C"};
     for (unsigned i = 0; i < POWER_ITEM_COUNT; ++i) {
         s_power_data[i].name = names[i];
         s_power_data[i].ptr = (i == POWER_AUX_VOLTAGE || i == POWER_AUX_CURRENT) ? &s_power_values[i] : NULL;
@@ -1469,8 +1469,8 @@ static void battery_publish_lifetime(void) {
 
 void PowerAlgo_AddBatteryItems(ui_page_t *page) {
     static const char *const names[BATTERY_ITEM_COUNT] = {
-        " Charge Level %", " Battery Voltage V", " Full Energy Wh", " Remaining Energy Wh", " Battery Temperature°C",
-        " State of Health %", " Equivalent Full Cycles", " Capacity Learning"};
+        " Charge %", " Voltage V", " Full Wh", " Remaining Wh", " Batt Temp°C",
+        " State of Health %", " Equivalent Full Cycles", " Cap. Learning"};
     for (unsigned i = 0; i < BATTERY_ITEM_COUNT; ++i) {
         s_battery_data[i].name = names[i];
         s_battery_data[i].dataType = i == BATTERY_LEARN ? UI_DATA_STRING : i == BATTERY_CHARGE ? UI_DATA_INT
