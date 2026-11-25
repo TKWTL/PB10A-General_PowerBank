@@ -37,6 +37,19 @@ uint8_t PowerAlgo_TakeRadioBatteryCheck(uint16_t *vbat_mv,uint8_t *capacity_pct)
 pm_hook_result_t PowerAlgo_BackgroundResume(void);
 pm_hook_result_t PowerAlgo_BackgroundSuspend(void);
 void PowerAlgo_BackgroundAbort(void);
+/* External consumers share one SW6306 meter path. Foreground callers only. */
+enum { EXT_LOAD_WLED = 0x01u,
+       EXT_LOAD_AUX = 0x02u };
+typedef enum { EXT_LOAD_BLOCKED,
+               EXT_LOAD_WAIT,
+               EXT_LOAD_READY } ext_load_state_t;
+#define EXT_LOAD_WAIT_MS 3000u
+uint8_t PowerAlgo_ExtLoadRequest(uint8_t load);
+void PowerAlgo_ExtLoadSetActive(uint8_t load, uint8_t active);
+void PowerAlgo_ExtLoadRelease(uint8_t load);
+ext_load_state_t PowerAlgo_ExtLoadState(uint8_t load, uint32_t now);
+int16_t PowerAlgo_ExtLoadTemperature(void);
+
 /* ADC_RTC_AuxAThread owns the ADC and SUB_EN. */
 typedef enum { AUX_CMD_ENABLE,
                AUX_CMD_DISABLE,

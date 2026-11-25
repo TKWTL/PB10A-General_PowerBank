@@ -62,7 +62,7 @@ ETA uses filtered battery power and measured full/remaining energy. It first
 appears after 5 seconds of stable mode at 200 mW or more, is recalculated
 every 10 seconds, and counts down between estimates. END adds ETA to RTC
 time and appends a day offset when needed. The two LED brightness lines
-are drawn at zero fill until a brightness value is supplied. The dashboard
+show the temperature-limited WLED brightness. The dashboard
 requests 5 ms during the slide and 50 ms after it settles. Published readings
 stay visible during refresh and wake-up. Failed transfers clear the affected
 SW6306 fields until a fresh result arrives.
@@ -79,16 +79,40 @@ It publishes the mean of 16 scans sampled about 25 ms apart in every
 500 ms batch. RTC and system service run at 500 ms independently.
 `RTC_IsEditing()` protects pending time-editor changes.
 
-PA6/SUB_EN defaults LOW. A confirmed PA7 insertion enables Aux-A.
-In the dashboard, each new RIGHT press toggles Aux-A. After a 10 ms startup delay, the
-ADC owner scans every 5 ms while Aux-A is active and cuts output on any
+PA6/SUB_EN defaults LOW. Confirmed PA7 insertion requests Aux-A.
+In the dashboard, each new DOWN press toggles Aux-A. Once the shared meter
+path is ready, SUB_EN goes high. After a 10 ms startup delay, the ADC
+owner scans every 5 ms while Aux-A is active and cuts output on any
 valid VOUT reading at or below 2 V. Current below 50 mA for 60 continuous
 seconds also cuts output. Use `PowerAlgo_AuxA_SetAutoOffCurrent()` to
 adjust the threshold. Display readings below 10 mA show as zero.
 
-Active Aux-A pauses automatic sleep. Forced STOP1 cuts output before
-stopping ADC. Aux-A stays off on ordinary wake and may start after an
-insertion wake. A shutdown waits for a fresh insertion or manual press.
+Active and pending external loads pause automatic sleep. Forced STOP1
+turns both outputs off and resolves the shared meter path before ADC
+shutdown. Aux-A stays off on ordinary wake and may start after an
+insertion wake. A protection shutdown waits for a new request.
+
+### WLED and external load metering
+
+In the Powerbank dashboard, RIGHT raises brightness and turns WLED on
+at level 12. LEFT lowers brightness and turns it off below level 4.
+TIM1 CH4 drives PA11 at 62.5 kHz (64 MHz timer clock, ARR 1023). PWM
+compare follows level squared over levels 4–25 and changes over 160 ms.
+The SOS API is available to firmware with no dashboard shortcut.
+
+WLED and Aux-A use fresh SW6306 battery voltage, capacity, NTC and
+fault status. They stop on confirmed cutoff or lost protection telemetry.
+The temperature lockout trips at 60 °C and clears at 45 °C. WLED uses
+the PB02B derating table and turns off if the limit falls below level 4.
+
+The SW6306 owner reuses a live path or requests a shared A1 insertion
+and then confirms it by rereading port status. Explicit A1 removal
+requires ownership and a fresh standalone BUS current below 20 mA.
+The hardware A1 idle policy is restored on cleanup or confirmed
+handover. A1 may remain on when C1 prevents independent attribution.
+Firmware suppresses a synthetic A1 in automatic navigation and the
+dashboard. ETA pauses during simultaneous charging and external load.
+
 
 The current CubeMX-generated configuration uses ADC1 HSI clock DIV1,
 39.5-cycle sampling for external channels and 79.5-cycle sampling for

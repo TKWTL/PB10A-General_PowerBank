@@ -1000,6 +1000,11 @@
               <FilePath>../APP/algorithm/power_algo.c</FilePath>
             </File>
             <File>
+              <FileName>wled_algo.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/algorithm/wled_algo.c</FilePath>
+            </File>
+            <File>
               <FileName>sc7a20_algo.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/algorithm/sc7a20_algo.c</FilePath>

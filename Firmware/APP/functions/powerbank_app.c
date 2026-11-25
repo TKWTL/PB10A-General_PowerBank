@@ -9,6 +9,7 @@
 #include "power_algo.h"
 #include "radio_app.h"
 #include "time_service.h"
+#include "wled_algo.h"
 #include <string.h>
 
 #define PB_COL_BUS 2u
@@ -37,7 +38,6 @@
 static int32_t s_remaining_q;
 static ui_animation_param_t s_slide_pid;
 static uint8_t s_active;
-static const uint8_t s_led_percent = 0u; /* Display-only input until LED control is added. */
 
 static const char *short_protocol(const char *protocol) {
     static const struct {
@@ -249,9 +249,13 @@ void Powerbank_AppOnLeave(ui_t *ui) {
 void Powerbank_AppRun(ui_t *ui) {
     if (!ui || ui->action == UI_ACTION_ENTER || ui->action == UI_ACTION_BACK)
         return;
-    /* Icon pages translate RIGHT to DOWN. Toggle only on the initial press. */
-    if (ui->action == UI_ACTION_DOWN && !indevActionIsRepeat())
+    /* Icon-page mappings: DOWN -> PLUS, LEFT -> UP, RIGHT -> DOWN. */
+    if (ui->action == UI_ACTION_PLUS && !indevActionIsRepeat())
         PowerAlgo_AuxA_Request(AUX_CMD_TOGGLE);
+    else if (ui->action == UI_ACTION_UP)
+        WLED_AlgoRequestStep(-1, indevActionIsRepeat());
+    else if (ui->action == UI_ACTION_DOWN)
+        WLED_AlgoRequestStep(1, indevActionIsRepeat());
     ui->action = UI_ACTION_NONE;
     if (!s_active) {
         s_active = 1u;
@@ -292,7 +296,7 @@ void Powerbank_AppRun(ui_t *ui) {
     }
 
     Disp_DrawLine(0u, PB_DIVIDER_Y, UI_HOR_RES - 1u, PB_DIVIDER_Y);
-    uint16_t led_width = (uint16_t)(UI_HOR_RES * s_led_percent / 100u);
+    uint16_t led_width = (uint16_t)(UI_HOR_RES * WLED_AlgoGetOutputPercent() / 100u);
     if (led_width) {
         Disp_DrawLine(0u, PB_DIVIDER_Y - 1u, led_width - 1u, PB_DIVIDER_Y - 1u);
         Disp_DrawLine(0u, PB_DIVIDER_Y + 1u, led_width - 1u, PB_DIVIDER_Y + 1u);

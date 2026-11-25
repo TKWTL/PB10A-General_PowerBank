@@ -46,7 +46,7 @@ void MX_TIM1_Init(void)
   htim1.Instance = TIM1;
   htim1.Init.Prescaler = 0;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 999;
+  htim1.Init.Period = 1023;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -260,6 +260,30 @@ void HAL_TIM_Base_MspDeInit(TIM_HandleTypeDef* tim_baseHandle)
 }
 
 /* USER CODE BEGIN 1 */
+
+/* Start from zero before enabling the advanced timer's output. The compare
+ * preload keeps regular brightness changes on a PWM period boundary. */
+void WLED_SetPwm(uint16_t pwm)
+{
+  TIM_TypeDef *timer = PB_WLED_TIM_INSTANCE;
+  if (pwm == 0u)
+  {
+    /* Clear any active/preloaded pulse before stopping the time base. */
+    timer->CCR4 = 0u;
+    timer->EGR = TIM_EGR_UG;
+    CLEAR_BIT(timer->CR1, TIM_CR1_CEN);
+    return;
+  }
+
+  timer->CCR4 = pwm;
+  if (!READ_BIT(timer->CR1, TIM_CR1_CEN))
+  {
+    timer->EGR = TIM_EGR_UG;
+    SET_BIT(timer->CCER, TIM_CCER_CC4E);
+    SET_BIT(timer->BDTR, TIM_BDTR_MOE);
+    SET_BIT(timer->CR1, TIM_CR1_CEN);
+  }
+}
 
 /* USER CODE END 1 */
 

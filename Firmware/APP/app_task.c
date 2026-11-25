@@ -10,6 +10,7 @@
 #include "beep_service.h"
 #include "algorithms.h"
 #include "radio_app.h"
+#include "wled_algo.h"
 static ui_t s_ui;
 static coro_scheduler_t s_scheduler;
 static coro_pt_t s_states[10];
@@ -71,6 +72,7 @@ THRD_DECLARE(SystemServiceThread) {
         if((uint32_t)(now-s_last_key_tick)>=10u) {
             s_last_key_tick=now;
             indevService_10ms();
+            WLED_AlgoService(now);
         }
         uint8_t events = pm_api_take_events();
         PowerAlgo_AuxA_OnEvents(events);

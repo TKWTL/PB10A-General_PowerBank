@@ -37,6 +37,7 @@ extern TIM_HandleTypeDef htim1;
 extern TIM_HandleTypeDef htim3;
 
 /* USER CODE BEGIN Private defines */
+#define PB_WLED_TIM_INSTANCE TIM1
 
 /* USER CODE END Private defines */
 
@@ -46,6 +47,7 @@ void MX_TIM3_Init(void);
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
 /* USER CODE BEGIN Prototypes */
+void WLED_SetPwm(uint16_t pwm);
 
 /* USER CODE END Prototypes */
 
