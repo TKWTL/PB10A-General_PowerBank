@@ -94,7 +94,7 @@ __attribute__((noinline)) void System_AddSettingsItems(ui_page_t *page) {
     Create_element(&s_click_item,&s_click_element);
     AddItem(" Click Beep",UI_ITEM_DATA,0,&s_click_item,page,0,0);
     s_volume_level = (int)beep_get_volume();
-    s_volume_data.name = "Beep Volume";
+    s_volume_data.name = " Beep Volume";
     s_volume_data.ptr = &s_volume_level;
     s_volume_data.function = system_volume_changed;
     s_volume_data.functionType = UI_DATA_FUNCTION_STEP_EXECUTE;

@@ -443,14 +443,14 @@ static void cal_draw(void) {
         cal_center(13u, "Accel Calibration");
         cal_center(27u, "Rest on each face");
         cal_center(41u, "Hold still for 2s");
-        cal_center(59u, "CONF:Start");
+        cal_center(59u, "CONF: Start");
     } else if (s_cal_state == CAL_SAVED) {
         cal_center(27u, "Calibration");
         cal_center(43u, "Cal saved");
     } else if (s_cal_state == CAL_FAILED) {
         cal_center(24u, "Cal error");
         cal_center(39u, "Check orientation");
-        cal_center(58u, "Any key:Exit");
+        cal_center(58u, "Any key: Exit");
     } else {
         char info[8];
         unsigned count = 0u;

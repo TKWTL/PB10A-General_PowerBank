@@ -25,9 +25,10 @@ remain ASCII; no 24px Chinese glyphs are needed.
 
 `font_fusion_pixel_p12_zhcn` remains the only Chinese-capable font.
 Regenerated from the supplied `fusion-pixel-12px-proportional-zh_hans.bdf`
-(FONT_VERSION 2026.09.25). All 399 previously supported code points
-plus 堂 and 者 are retained, with source-pixel and metric verification.
-The 401-glyph array occupies 9,047 bytes (previously 9,190).
+(FONT_VERSION 2026.09.25). All 96 Latin/degree glyphs and the 262 Han used by the translation
+catalog are retained. 43 unused Han glyphs have been removed; retained
+RLE payloads and metrics are unchanged. The 358-glyph array occupies
+7,954 bytes (previously 9,047).
 ASCII advances vary from 4 to 10 px; digits have 6px advances and Han
 12px advances. UI layout must measure actual text width.
 

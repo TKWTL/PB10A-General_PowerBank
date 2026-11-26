@@ -38,7 +38,7 @@ static ui_data_t s_sleep_data;
 static ui_element_t s_sleep_element;
 static int s_sleep_selected = 3; /* 1 min, matching the PM default. */
 static const char *const s_sleep_labels[] = {
-    "Off", "15s", "30s", "1min", "2min", "5min", "10min", "15min", "30min"};
+    "OFF", "15s", "30s", "1min", "2min", "5min", "10min", "15min", "30min"};
 static const int s_sleep_seconds[] = {0, 15, 30, 60, 120, 300, 600, 900, 1800};
 static ui_text_t s_about_text;
 static ui_element_t s_about_el;
@@ -60,7 +60,7 @@ static void sleep_option_changed(ui_t *ui) {
 }
 
 static void add_sleep_options(ui_page_t *parent) {
-    s_sleep_data.name = "Sleep";
+    s_sleep_data.name = " Sleep Options";
     s_sleep_data.ptr = &s_sleep_selected;
     s_sleep_data.function = sleep_option_changed;
     s_sleep_data.functionType = UI_DATA_FUNCTION_STEP_EXECUTE;

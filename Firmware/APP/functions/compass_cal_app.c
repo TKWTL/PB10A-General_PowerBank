@@ -149,7 +149,7 @@ static void draw_cal(uint8_t data_valid, uint8_t pose_valid) {
     Disp_SetDrawColor(&white);
     Disp_SetFont(UI_FONT);
     if (s_result) {
-        center_text(25u, s_result == 1u ? "Calibration saved" : "Calibration error");
+        center_text(25u, s_result == 1u ? "Cal saved" : "Cal error");
         center_text(40u, s_result == 1u ? "Any key: Exit" : "CONF: Retry");
         center_text(62u, s_result == 1u ? "CAL 6/6" : "Check headings");
     } else {
@@ -172,7 +172,7 @@ static void draw_cal(uint8_t data_valid, uint8_t pose_valid) {
 
         const char *prompt;
         if (!data_valid)
-            prompt = "Waiting data";
+            prompt = "WAIT DATA";
         else if (!pose_valid)
             prompt = "Adjust position";
         else if (s_sampling)

@@ -57,7 +57,7 @@ void Create_Disp_Parameters(ui_t *ui) {
     static ui_element_t background_element;
     static ui_element_t rotation_element;
 
-    contrast_data.name = "Contrast";
+    contrast_data.name = " Contrast";
     contrast_data.ptr = &Contrast;
     contrast_data.function = Disp_SetContrast;
     contrast_data.functionType = UI_DATA_FUNCTION_STEP_EXECUTE;
@@ -70,7 +70,7 @@ void Create_Disp_Parameters(ui_t *ui) {
     contrast_element.data = &contrast_data;
     Create_element(&s_contrast_item, &contrast_element);
 
-    background_data.name = "Background";
+    background_data.name = " Background";
     background_data.ptr = &ui->bgColor;
     background_data.dataType = UI_DATA_SWITCH;
     background_data.actionType = UI_DATA_ACTION_RW;
@@ -78,7 +78,7 @@ void Create_Disp_Parameters(ui_t *ui) {
     Create_element(&s_background_item, &background_element);
 
     /* Auto Rotation enables gravity rotation, not a manual 180-degree toggle. */
-    rotation_data.name = "Auto Rotation";
+    rotation_data.name = " Auto Rotation";
     rotation_data.ptr = &ui->rotation;
     rotation_data.function = Disp_ResumeRotation;
     rotation_data.dataType = UI_DATA_SWITCH;

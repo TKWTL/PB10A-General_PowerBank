@@ -167,7 +167,7 @@ static const setting_desc_t s_settings[CFG_COUNT] = {
 #undef PROTO
 
 static const unsigned s_idle_seconds[] = {5u, 10u, 30u, 60u, 300u, 900u, 1800u};
-static const char *const s_idle_labels[] = {"5s", "10s", "30s", "1min", "5min", "15min", "30min", "Off"};
+static const char *const s_idle_labels[] = {"5s", "10s", "30s", "1min", "5min", "15min", "30min", "OFF"};
 static int s_output_w = SW6306_OUTPUT_POWER_MAX, s_input_w = SW6306_INPUT_POWER_MAX;
 static uint8_t s_output_requested = SW6306_OUTPUT_POWER_MAX, s_input_requested = SW6306_INPUT_POWER_MAX;
 #define CFG_IDLE_TIMEOUT_DEFAULT 3 /* 1 min */
@@ -225,14 +225,12 @@ static void add_settings(ui_page_t *page, unsigned first, unsigned end) {
             switch (i) {
             case CFG_OUTPUT:
             case CFG_INPUT:
-                data->name = i == CFG_OUTPUT ? "Output W" : "Input W";
                 data->ptr = i == CFG_OUTPUT ? &s_output_w : &s_input_w;
                 data->min = 5;
                 data->max = i == CFG_OUTPUT ? SW6306_OUTPUT_POWER_MAX : SW6306_INPUT_POWER_MAX;
                 data->step = 5;
                 break;
             case CFG_IDLE_TIMEOUT:
-                data->name = "Timeout";
                 data->ptr = &s_idle_timeout;
                 data->dataType = UI_DATA_ENUM;
                 data->options = s_idle_labels;
@@ -240,13 +238,11 @@ static void add_settings(ui_page_t *page, unsigned first, unsigned end) {
                 data->step = 1;
                 break;
             case CFG_IDLE_THRESHOLD:
-                data->name = "Idle mA";
                 data->ptr = &s_idle_threshold;
                 data->max = 100;
                 data->step = 4;
                 break;
             case CFG_AUX_THRESHOLD:
-                data->name = "Aux Idle mA";
                 data->ptr = &s_aux_threshold;
                 data->min = 10;
                 data->max = 100;
@@ -709,7 +705,7 @@ void PowerAlgo_UpdateFaultItems(ui_t *ui) {
     power_fault_view_t view;
     PowerAlgo_GetFaultView(&view);
     if (!view.code)
-        (void)mini_snprintf(s_fault_labels[0], sizeof(s_fault_labels[0]), "%s", I18N_Text(" NO FAULT"));
+        (void)mini_snprintf(s_fault_labels[0], sizeof(s_fault_labels[0]), " %s", I18N_Text("NO FAULT"));
     else
         (void)mini_snprintf(s_fault_labels[0], sizeof(s_fault_labels[0]), " E%02u %s", (unsigned)view.code,
                             I18N_Text(!view.valid ? "UNKNOWN" : view.active ? "ACTIVE"

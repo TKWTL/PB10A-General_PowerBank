@@ -188,7 +188,7 @@ static ui_item_t s_time_item,s_back,s_fields[6];
 static ui_page_t s_time_page;
 static ui_data_t s_data[6];
 static ui_element_t s_element[6];
-static const char *const s_names[6]={"Second","Minute","Hour","Date","Month","Year"};
+static const char *const s_names[6] = {" Second", " Minute", " Hour", " Date", " Month", " Year"};
 uint8_t RTC_IsEditing(const ui_t *ui) {
     uint8_t i;
     if(!ui || (ui->menuState!=UI_ITEM_RUNING &&
@@ -219,12 +219,9 @@ void Create_TimeSet_Parameters(ui_t *ui) {
 
 void Add_TimeSet_Items(ui_page_t *parent) {
     uint8_t i;
-    static const char *const labels[6]={
-        " Second"," Minute"," Hour"," Date"," Month"," Year"
-    };
     AddItem("-Time & Date", UI_ITEM_PARENTS, img_home, &s_time_item, parent, &s_time_page, 0);
     AddPage("[Time & Date]", &s_time_page, UI_PAGE_TEXT, parent);
     AddItem("[Back]",UI_ITEM_RETURN,0,&s_back,&s_time_page,parent,0);
     for(i=0u;i<6u;i++)
-        AddItem(labels[i],UI_ITEM_DATA,0,&s_fields[i],&s_time_page,0,0);
+        AddItem(s_names[i], UI_ITEM_DATA, 0, &s_fields[i], &s_time_page, 0, 0);
 }

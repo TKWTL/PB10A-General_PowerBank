@@ -174,7 +174,7 @@ static void draw_measurement(const bmp180_sample_t *sample, uint8_t sample_valid
         draw_height(height_dm, 1u);
     } else if (s_mode == ALT_CAL && !s_reference_pa) {
         draw_center(25u, "-- m");
-        draw_center(37u, I18N_Text("No calibration"));
+        draw_center(37u, I18N_Text("Uncalibr."));
     } else {
         draw_center(33u, "-- m");
     }
@@ -211,7 +211,7 @@ static void draw_editor(void) {
 static void draw_sampling(void) {
     char text[12];
     draw_center(13u, I18N_Text("Calibrating"));
-    draw_center(30u, I18N_Text("Keep still"));
+    draw_center(30u, I18N_Text("Hold still"));
     Disp_DrawFrame(8u, 38u, 112u, 8u);
     if (s_sample_count)
         Disp_DrawBox(10u, 40u, 108u * s_sample_count / ALT_CAL_SAMPLES, 4u);

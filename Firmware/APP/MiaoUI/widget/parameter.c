@@ -62,6 +62,8 @@ void ParameterSetting_Widget(ui_t *ui) {
         if(ui->nowItem->element->data->name == NULL) ui->nowItem->element->data->name = "Null!!";
 
         const char *name = I18N_Text(ui->nowItem->element->data->name);
+        if (*name == ' ')
+            ++name; /* The menu's leading space is not part of a dialog title. */
         switch (ui->nowItem->element->data->dataType) {
         case UI_DATA_ENUM: {
             const ui_data_t *data = ui->nowItem->element->data;
