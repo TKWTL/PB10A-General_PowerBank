@@ -31,14 +31,14 @@ static volatile uint8_t s_flag;
 static uint32_t s_due_at,s_conversion_at;
 static mmc5603_sample_t s_sample;
 static uint8_t s_valid, s_tool_mode;
-#define MMC_CAL_TAG 0x5603u
+#define MMC_CAL_TAG 0x5604u
 #define MMC_CAL_OFFSET_ZERO 32768
 #define MMC_CAL_RANGE_MG 32000
 
-/* 12 bytes in the existing RW_NOINIT SRAM region. No Flash writes. */
+/* 16 bytes in the existing RW_NOINIT SRAM region. No Flash writes. */
 typedef struct {
     uint16_t bias[3];
-    uint16_t crc;
+    uint32_t crc;
     uint32_t tag;
 } mmc_cal_record_t;
 static volatile mmc_cal_record_t s_cal_record
@@ -73,7 +73,6 @@ uint8_t MMC5603Algo_GetSample(mmc5603_sample_t *out) {
     return 1u;
 }
 
-/* CRC16-CCITT, same byte order and initial value as the SC7A20 record. */
 static uint8_t mag_bias_valid(uint16_t bias) {
     int32_t value = (int32_t)bias - MMC_CAL_OFFSET_ZERO;
     return value >= -MMC_CAL_RANGE_MG && value <= MMC_CAL_RANGE_MG;
@@ -81,7 +80,7 @@ static uint8_t mag_bias_valid(uint16_t bias) {
 
 static void mag_cal_load(void) {
     uint16_t bias[3] = {s_cal_record.bias[0], s_cal_record.bias[1], s_cal_record.bias[2]};
-    if (s_cal_record.tag != MMC_CAL_TAG || s_cal_record.crc != crc16_ccitt(bias, sizeof(bias)))
+    if (s_cal_record.tag != MMC_CAL_TAG || s_cal_record.crc != crc32_words3(bias[0], bias[1], bias[2]))
         return;
     for (unsigned i = 0u; i < 3u; ++i)
         if (!mag_bias_valid(bias[i]))
@@ -124,7 +123,7 @@ uint8_t MMC5603Algo_ApplySixFace(const int16_t face_mg[6][3]) {
     __DMB();
     for (unsigned i = 0u; i < 3u; ++i)
         s_cal_record.bias[i] = bias[i];
-    s_cal_record.crc = crc16_ccitt(bias, sizeof(bias));
+    s_cal_record.crc = crc32_words3(bias[0], bias[1], bias[2]);
     __DMB();
     s_cal_record.tag = MMC_CAL_TAG;
     __DSB();

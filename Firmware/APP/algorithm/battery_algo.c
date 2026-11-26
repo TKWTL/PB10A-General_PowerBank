@@ -6,7 +6,7 @@
 
 #define BAT_FULL_MIN_MWH 500u
 #define BAT_FULL_MAX_MWH 200000u
-#define BAT_RECORD_TAG 0xBA01u
+#define BAT_RECORD_TAG 0xBA02u
 #define BAT_START_SAMPLES 2u
 #define BAT_STOP_SAMPLES 4u
 
@@ -14,7 +14,8 @@ typedef struct {
     uint32_t sequence;
     uint32_t full_mwh;
     uint32_t efc_q10000;
-    uint32_t tag_crc;
+    uint32_t crc;
+    uint32_t tag;
 } battery_noinit_t;
 
 static volatile battery_noinit_t s_record[2]
@@ -35,11 +36,10 @@ static uint8_t full_valid(uint32_t full) {
     return full >= BAT_FULL_MIN_MWH && full <= BAT_FULL_MAX_MWH;
 }
 
-/* Same CRC16-CCITT (little-endian 3 words, initial 0xffff) as SC7A20. */
 static uint8_t record_valid(const battery_noinit_t *r) {
-    return (r->tag_crc >> 16) == BAT_RECORD_TAG &&
+    return r->tag == BAT_RECORD_TAG &&
            full_valid(r->full_mwh) &&
-           (uint16_t)r->tag_crc == crc16_ccitt_words3(r->sequence, r->full_mwh, r->efc_q10000);
+           r->crc == crc32_words3(r->sequence, r->full_mwh, r->efc_q10000);
 }
 
 static void record_save(void) {
@@ -49,14 +49,14 @@ static void record_save(void) {
     uint32_t seq = s_sequence + 1u;
     /* Invalidate only the non-current slot. The old slot remains
      * recoverable if a reset occurs midway through this commit. */
-    s_record[next].tag_crc = 0u;
+    s_record[next].tag = 0u;
     __DMB();
     s_record[next].sequence = seq;
     s_record[next].full_mwh = s_full_mwh;
     s_record[next].efc_q10000 = s_efc;
+    s_record[next].crc = crc32_words3(seq, s_full_mwh, s_efc);
     __DMB();
-    s_record[next].tag_crc = ((uint32_t)BAT_RECORD_TAG << 16) |
-                             crc16_ccitt_words3(seq, s_full_mwh, s_efc);
+    s_record[next].tag = BAT_RECORD_TAG;
     __DSB();
     s_slot = next;
     s_sequence = seq;

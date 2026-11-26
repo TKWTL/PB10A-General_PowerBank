@@ -1,7 +1,8 @@
 # Hardware-independent firmware algorithms
 
-`Firmware/LIB/` holds small, pure C utilities without STM32 HAL, MiaoUI,
-U8g2 or application dependencies. Pac-Man, Bomber and Invaders now use
+`Firmware/LIB/` holds small utilities without STM32 HAL, MiaoUI,
+U8g2 or application dependencies. The CRC utility optionally uses the
+STM32G0 LL CRC peripheral. Pac-Man, Bomber and Invaders now use
 this RLE codec for native page data, and Beep Service uses FIFO records. Add an algorithm's
 `.c` file to the Keil project only when it is used; with `-Os` and LTO,
 measure the final linked Flash rather than assuming abstraction saves space.
@@ -84,8 +85,12 @@ interpolation/rounding error of 0.993 m against the stated model.
 
 ## Shared calibration utilities
 
-`mini_crc.c/.h` computes CRC16-CCITT-FALSE over byte sequences; the
-three-word helper preserves the little-endian retained record layout.
+`mini_crc.c/.h` computes CRC-32/MPEG-2 over three MSB-first 32-bit words.
+On STM32G070, `MINI_CRC_USE_HW` defaults to 1 and reuses the default
+CubeMX CRC32 configuration initialized before the application. Other
+targets can use the equivalent software path. Retained records store
+the full CRC32 and a separate version marker; old CRC16 records are
+not compatible.
 `mini_math.c/.h` shares the three-axis accumulation, span check and mean
 for the magnetometer and accelerometer, while callers retain their own
 pose, sampling and retry policies.

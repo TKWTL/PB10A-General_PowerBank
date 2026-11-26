@@ -9,7 +9,7 @@
 #include <string.h>
 #define SC_SAMPLE_MS 200u
 #define SC_LEVEL_SAMPLE_MS 40u
-#define SC_CAL_RECORD_TAG 0xA720u
+#define SC_CAL_RECORD_TAG 0xA721u
 #define SC_RETRY_MS 2000u
 #define SC_ORIENT_ENTER_MG 650
 #define SC_ORIENT_CONFIRM 10u /* 10 stable updates at 5 Hz ~2 seconds */
@@ -50,7 +50,8 @@ typedef struct {
     uint32_t a;   /* Yzero:Xzero */
     uint32_t b;   /* XscaleQ14:Zzero */
     uint32_t c;   /* ZscaleQ14:YscaleQ14 */
-    uint32_t tag; /* Version/magic:CRC16; commit LAST */
+    uint32_t crc;
+    uint32_t tag; /* Version/magic; commit LAST */
 } sc_cal_noinit_t;
 static volatile sc_cal_noinit_t s_calibration_noinit
     __attribute__((section(".bss.noinit"), used, aligned(4)));
@@ -124,7 +125,7 @@ uint8_t SC7A20Algo_GetRotation(uint8_t *flipped) {
     return 1u;
 }
 
-/* CRC16-CCITT protects the uninitialized SRAM record across a warm reset.
+/* Hardware CRC32 protects the uninitialized SRAM record across a warm reset.
  * Q14 slopes retain roughly 0.000061 mg/LSB resolution. */
 static void sc_calibration_load(void) {
     uint32_t a,b,c,tag;
@@ -133,8 +134,8 @@ static void sc_calibration_load(void) {
     b=s_calibration_noinit.b;
     c=s_calibration_noinit.c;
     tag=s_calibration_noinit.tag;
-    if ((tag >> 16) != SC_CAL_RECORD_TAG ||
-        (uint16_t)tag != crc16_ccitt_words3(a, b, c))
+    if (tag != SC_CAL_RECORD_TAG ||
+        s_calibration_noinit.crc != crc32_words3(a, b, c))
         return;
     xq=(uint16_t)(b>>16);yq=(uint16_t)c;zq=(uint16_t)(c>>16);
     if(xq<4096u||yq<4096u||zq<4096u ||
@@ -166,9 +167,9 @@ uint8_t SC7A20Algo_ApplySixFace(const int16_t face_raw[6][3]) {
     s_calibration_noinit.a=a;
     s_calibration_noinit.b=b;
     s_calibration_noinit.c=c;
+    s_calibration_noinit.crc = crc32_words3(a, b, c);
     __DMB();
-    s_calibration_noinit.tag =
-        ((uint32_t)SC_CAL_RECORD_TAG << 16) | crc16_ccitt_words3(a, b, c);
+    s_calibration_noinit.tag = SC_CAL_RECORD_TAG;
     __DSB();
     SC7A20_SetCalibrationQ14(zero, q);
     s_orientation=SC7A20_ORIENT_UNKNOWN;

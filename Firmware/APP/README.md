@@ -287,8 +287,8 @@ A2 alone does not count as discharge; actual WLED/Aux-A and BUS loads
 share the same energy counter. Mixed charging/external loads settle the
 previous discharge estimate and pause EFC.
 
-Two alternating 16-byte .bss.noinit slots store full mWh, settled EFC,
-sequence and CRC16/version tag, written last. Warm reset restores the
+Two alternating 20-byte .bss.noinit slots store full mWh, settled EFC,
+sequence, hardware CRC32 and a separate version marker written last. Warm reset restores the
 newest valid slot. STOP1 settles any confirmed session after LPSET
 succeeds; SW6306 reinitialization discards the unfinished session.
 No Flash writes, independent task, or additional float dependency.
@@ -821,15 +821,16 @@ auto-rotation eligibility.
 **Calibration retention (corrected for PB10A power hardware):**
 PB10A has no independent backup-domain supply. Calibration therefore
 does **not** use RTC DR1..DR4, whose contents would be lost on a full
-VDD power-down just like ordinary SRAM. Instead, a 16-byte
+VDD power-down just like ordinary SRAM. Instead, a 20-byte
 `s_calibration_noinit` record shares the Keil linker scatter file's
 reserved `RW_NOINIT` section with `g_fault_record` (32 bytes) and
-the two battery statistics slots (32 bytes), and the MMC5603 magnetic
-bias record (12 bytes) plus the altitude reference (8 bytes).
+the two battery statistics slots (40 bytes), and the MMC5603 magnetic
+bias record (16 bytes) plus the altitude reference (12 bytes).
 The scatter currently reserves the **last 256 bytes of 36 KiB SRAM**
 for this area. The calibration consists of three signed 16-bit zero
-codes and three unsigned 16-bit Q14 slopes, plus a 16-bit magic/version
-and CRC16-CCITT. The marker is written last to reject interrupted
+codes and three unsigned 16-bit Q14 slopes, plus a 32-bit version marker
+and hardware CRC32. Older CRC16 records are intentionally invalidated.
+The marker is written last to reject interrupted
 updates, and every boot checks the marker, CRC and plausible slopes.
 `SC7A20Algo_Init()` recovers it after reset without asking the RTC.
 It is retained only if SRAM stayed powered (e.g. software reset,

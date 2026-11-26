@@ -87,7 +87,7 @@ uses the original atan2/Q15 acceptance boundaries without square root or
 angle evaluation. Short stale gaps
   preserve progress, and three fresh bad flat poses abort the capture.
   Any key exits after success. The six-face storage order and existing
-  bias formula are preserved. Offsets use twelve bytes of .bss.noinit;
+  bias formula are preserved. The bias record uses sixteen bytes of .bss.noinit;
   Statistics remains raw. The leave hook restores sampling/PM.
 - `altimeter_app.c/.h`: pressure, temperature and altitude from the raw
   BMP180 sample. LEFT/RIGHT cycle Calib. Height, Relative Height and
@@ -97,7 +97,7 @@ angle evaluation. Short stale gaps
   16 fresh samples, and LEFT cancels. CONF exits the tool and discards
   edits or samples in progress. An inverse lookup and the pressure ratio
   determine the sea-level reference using 32-bit integer arithmetic.
-  The 8-byte CRC-protected record in .bss.noinit survives powered SRAM resets.
+  The 12-byte CRC32-protected record in .bss.noinit survives powered SRAM resets.
   Relative zero remains session-only. Altimeter and Accel Calibration use
   12 px text with translation keys and leave the display corners clear.
 

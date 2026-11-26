@@ -31,7 +31,7 @@ const unsigned char img_altimeter[] = {
 
 #define ALTIMETER_FRAME_MS 200u
 #define ALT_CAL_SAMPLES 16u
-#define ALT_REFERENCE_TAG 0x4131u
+#define ALT_REFERENCE_TAG 0x4132u
 /* Round(30 kPa * 101325 / 110 kPa) through 110 kPa * 101325 / 30 kPa. */
 #define ALT_REFERENCE_MIN_PA 27634u
 #define ALT_REFERENCE_MAX_PA 371525u
@@ -53,7 +53,8 @@ typedef enum { ALT_STATUS_NONE,
 
 typedef struct {
     uint32_t reference_pa;
-    uint32_t tag_crc;
+    uint32_t crc;
+    uint32_t tag;
 } alt_cal_record_t;
 
 static volatile alt_cal_record_t s_cal_record __attribute__((section(".bss.noinit"), used, aligned(4)));
@@ -67,19 +68,20 @@ static uint32_t s_reference_pa, s_last_seq, s_pressure_sum;
 
 static uint32_t reference_load(void) {
     uint32_t pressure = s_cal_record.reference_pa;
-    uint32_t tag_crc = s_cal_record.tag_crc;
-    if (pressure < ALT_REFERENCE_MIN_PA || pressure > ALT_REFERENCE_MAX_PA ||
-        tag_crc != ((uint32_t)ALT_REFERENCE_TAG << 16 | crc16_ccitt(&pressure, sizeof(pressure))))
+    if (s_cal_record.tag != ALT_REFERENCE_TAG ||
+        pressure < ALT_REFERENCE_MIN_PA || pressure > ALT_REFERENCE_MAX_PA ||
+        s_cal_record.crc != crc32_words3(pressure, 0u, 0u))
         return 0u;
     return pressure;
 }
 
 static void reference_save(uint32_t pressure) {
-    s_cal_record.tag_crc = 0u;
+    s_cal_record.tag = 0u;
     __DMB();
     s_cal_record.reference_pa = pressure;
+    s_cal_record.crc = crc32_words3(pressure, 0u, 0u);
     __DMB();
-    s_cal_record.tag_crc = (uint32_t)ALT_REFERENCE_TAG << 16 | crc16_ccitt(&pressure, sizeof(pressure));
+    s_cal_record.tag = ALT_REFERENCE_TAG;
     __DSB();
     s_reference_pa = pressure;
 }
