@@ -1,7 +1,7 @@
 # PB10A MiaoUI font subsets
 
 Radio shares the 12px Fusion Pixel font; there is no separate 12px
-ASCII font. The shared font now uses proportional ASCII advances.
+ASCII font. The shared font uses the original fixed 6px ASCII advances.
 
 ## Spleen 24px status subset
 
@@ -24,13 +24,13 @@ remain ASCII; no 24px Chinese glyphs are needed.
 ## Shared 12px Chinese subset
 
 `font_fusion_pixel_p12_zhcn` remains the only Chinese-capable font.
-Regenerated from the supplied `fusion-pixel-12px-proportional-zh_hans.bdf`
-(FONT_VERSION 2026.09.25). All 96 Latin/degree glyphs and the 262 Han used by the translation
-catalog are retained. 43 unused Han glyphs have been removed; retained
-RLE payloads and metrics are unchanged. The 358-glyph array occupies
-7,954 bytes (previously 9,047).
-ASCII advances vary from 4 to 10 px; digits have 6px advances and Han
-12px advances. UI layout must measure actual text width.
+The 262 Han glyphs are from the supplied
+`fusion-pixel-12px-proportional-zh_hans.bdf` (FONT_VERSION 2026.09.25).
+The 96 Latin/degree glyphs are restored from PB10A's earlier
+MiaoUI-based font, byte-for-byte. The Han glyph records and Unicode
+index are unchanged. The 358-glyph array occupies 8,130 bytes
+(previously 7,954); the ASCII/degree advance is 6px and Han advance
+is 12px. Layout still measures actual text width.
 
 `font_home_h6w4` remains byte-for-byte identical. SOS and magnetic
 calibration no longer use it; powerbank, I2C scanner, game interiors

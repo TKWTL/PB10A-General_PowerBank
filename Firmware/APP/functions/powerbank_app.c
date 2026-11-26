@@ -87,7 +87,7 @@ static void draw_measurements(uint16_t x, uint16_t mv, uint16_t ma, uint8_t vali
     draw_quantity(x, PB_ROW_VOLTAGE, mv, 'V', valid);
 }
 
-/* Measure the shared proportional font rather than counting ASCII cells. */
+/* Measure the shared font rather than counting ASCII cells. */
 static void draw_centered(uint16_t center, uint16_t y, const char *text) {
     Disp_DrawStr((uint16_t)(center - Disp_GetUTF8Width(text) / 2u), y, text);
 }

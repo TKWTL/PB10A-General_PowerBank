@@ -1,4 +1,4 @@
-/* Shared 12px font subset: proportional ASCII (4..10px), 6px digits and 12px Han advance. */
+/* Shared 12px font subset: fixed 6px ASCII/degree and 12px Han advance. */
 #ifndef MIAOUI_FONTS_H
 #define MIAOUI_FONTS_H
 #include <stdint.h>

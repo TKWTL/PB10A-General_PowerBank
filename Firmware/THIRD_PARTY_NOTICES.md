@@ -13,12 +13,12 @@
 | **Tetris (ported from Tiny Tris v3, 2025)** | Daniel C（2019–2021），Tinyjoypad/ATtiny85，<https://github.com/phoenixbozo/TinyJoypad>；基于用户提供的 `tiny-tris_v3.ino` 和 `spritebank_TTRIS.h` | [`APP/functions/games/tetris/`](APP/functions/games/tetris/) | **GPL-3.0-or-later**；保留原版方块、画面和数字素材，使用 MiaoUI 和 Beep Service。完整 [GPL 许可证](APP/functions/games/tetris/LICENSE-GPL-3.0)。 |
 | **MiaoUI** | JFeng-Z，<https://github.com/JFeng-Z/MiaoUI> | [`APP/MiaoUI/`](APP/MiaoUI/) | **MIT License**；保留 [`APP/MiaoUI/LICENSE`](APP/MiaoUI/LICENSE) 与源文件版权头。项目中进行了 MiaoUI 菜单、交互、帧调度与显示驱动等定制。 |
 | **u8g2**（Universal 8bit Graphics Library） | olikraus，<https://github.com/olikraus/u8g2> | [`BSP/u8g2/`](BSP/u8g2/) | **BSD 2-Clause 风格许可**；版权及完整条款见 [`BSP/u8g2/u8g2.h`](BSP/u8g2/u8g2.h) 与对应源文件头。 |
-| **Fusion Pixel Font**（缝合像素字体） | TakWolf，<https://github.com/TakWolf/fusion-pixel-font> | [`APP/MiaoUI/fonts/font_fusion_pixel_p12_zhcn.c`](APP/MiaoUI/fonts/font_fusion_pixel_p12_zhcn.c) 中的全部字形子集（比例版） | **SIL Open Font License 1.1**；见 [`LICENSE-OFL-FUSION`](APP/MiaoUI/fonts/LICENSE-OFL-FUSION)。 |
+| **Fusion Pixel Font**（缝合像素字体） | TakWolf，<https://github.com/TakWolf/fusion-pixel-font> | [`APP/MiaoUI/fonts/font_fusion_pixel_p12_zhcn.c`](APP/MiaoUI/fonts/font_fusion_pixel_p12_zhcn.c) 中的汉字子集 | **SIL Open Font License 1.1**；见 [`LICENSE-OFL-FUSION`](APP/MiaoUI/fonts/LICENSE-OFL-FUSION)。 |
 | **Ark Pixel Font**（方舟像素字体） | TakWolf，<https://github.com/TakWolf/ark-pixel-font> | 同一混合中文字库中的部分基础/补充字形 | **SIL Open Font License 1.1**；见 [`LICENSE-OFL-ARK`](APP/MiaoUI/fonts/LICENSE-OFL-ARK)。 |
 | **Protothreads 1.4** | Adam Dunkels / Swedish Institute of Computer Science（SICS），<https://dunkels.com/adam/pt/> | [`Scheduler/pt1.4/`](Scheduler/pt1.4/) | **BSD 3-Clause 风格许可**；完整版权、条件及免责声明保留于 [`Scheduler/pt1.4/pt.h`](Scheduler/pt1.4/pt.h) 等上游头文件中。 |
 | **STM32CubeG0 HAL/LL、CMSIS** | STMicroelectronics、Arm 及相应贡献者 | [`Core/`](Core/)、[`Drivers/`](Drivers/) | 各厂商组件的许可证以仓库内相应文件头及分发包声明为准，勿将其误认为项目原创源码。 |
 
-**共享中文字库说明：** `font_fusion_pixel_p12_zhcn.c` 是由用户提供的 Fusion Pixel 12px Prop zh_Hans BDF（FONT_VERSION 2026.09.25）筛选并重新编码的 u8g2 RLE 字形子集，保留原始位图及字符度量。此前混合版的 MiaoUI、Fusion Pixel、Ark Pixel 许可声明保留；Fusion Pixel 上游组件 Cubic 11、Galmuri 的原始许可附在 `LICENSE-OFL-FUSION` 文件中。字体的再分发、修改和名称使用应符合原始许可证；本说明不赋予超出原许可证的权利。
+**共享中文字库说明：** `font_fusion_pixel_p12_zhcn.c` 为单一 u8g2 RLE 混合字库，ASCII 与度数符号恢复自原 MiaoUI 字形，汉字来自用户提供的 Fusion Pixel 12px Prop zh_Hans BDF（FONT_VERSION 2026.09.25）的裁剪子集。各保留字形的位图、字符度量与 RLE 记录不变。MiaoUI、Fusion Pixel、Ark Pixel 许可声明保留；Fusion Pixel 上游组件 Cubic 11、Galmuri 的原始许可附在 `LICENSE-OFL-FUSION` 文件中。字体的再分发、修改和名称使用应符合原始许可证；本说明不赋予超出原许可证的权利。
 
 **Protothreads 与 coroOS 的区别：** `Scheduler/pt1.4/` 为第三方的栈less Protothreads 实现；`Scheduler/coroOS.c/.h` 为本项目基于 Protothreads 的协程调度封装，不应将两者混同或抹去上游版权。
 

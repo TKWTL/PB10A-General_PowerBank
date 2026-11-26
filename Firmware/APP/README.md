@@ -52,7 +52,7 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
   Game interiors, I2C scanner and powerbank/radio dashboards stay English.
   Landscape toast translates on draw; portrait toast always uses original
   English with h6w4. SOS and magnetic calibration use the shared 12px font.
-  ENUM values are at most 30px in the proportional 12px font.
+  ENUM values are at most 30px in the shared 12px font.
   Shared prompts use canonical English keys; numeric editors reuse menu
   labels without their leading indent. The catalog has 232 unique entries
   and the 12px subset contains precisely the 262 Han it uses.
