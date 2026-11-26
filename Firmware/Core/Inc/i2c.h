@@ -68,6 +68,8 @@ char I2C_RegTransferPT(struct pt *pt, uint16_t address, uint8_t read, uint8_t re
                        uint8_t *data, uint16_t count, volatile uint8_t *flag);
 uint8_t I2C_AsyncProbe(uint16_t address, volatile uint8_t *flag);
 void I2C_AsyncService(void);
+/* Foreground recovery diagnostics; NACK alone is not a recovery trigger. */
+extern volatile uint32_t g_i2c_recovery_attempts, g_i2c_recovery_failures;
 void I2C_TransferIRQ(void);
 /* USER CODE END Prototypes */
 

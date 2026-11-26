@@ -1,6 +1,7 @@
 /* PB10A task table: MiaoUI, OLED DMA, PM and shared services. */
 #include "app_task.h"
 #include "coroOS.h"
+#include "fault_record.h"
 #include "miaoui.h"
 #include "ssd1306_display.h"
 #include "pm_api.h"
@@ -193,6 +194,9 @@ static const coro_thread_fn_t s_threads[] = {
 };
 
 void APP_TaskInit(void) {
+#if COROOS_USE_WATCHDOG
+    Watchdog_Init(); /* CubeMX peripherals ready; protect application initialization. */
+#endif
     if(!diapInit()) return;
     beep_init(); /* one-shot hardware/queue init */
     indevInit();
@@ -212,7 +216,12 @@ void APP_TaskInit(void) {
 }
 
 void APP_TaskRunOnce(void) {
-    /* IRQ continues I2C, this watchdog only bounds a stalled request. */
+#if COROOS_USE_WATCHDOG
+    if (!s_scheduler.count)
+        return; /* Failed init: keep INIT trace; do not feed. */
+    Watchdog_BeginRound();
+#endif
+    /* I2C service handles transfer timeout and bounded local bus recovery. */
     I2C_AsyncService();
     CoroOS_RunOnce(&s_scheduler);
 }

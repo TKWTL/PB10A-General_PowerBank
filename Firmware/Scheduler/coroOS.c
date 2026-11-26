@@ -1,4 +1,7 @@
 #include "coroOS.h"
+#if COROOS_USE_WATCHDOG
+#include "fault_record.h"
+#endif
 
 #if COROOS_USE_IDLE_SLEEP
 #include "coroOS_port.h"
@@ -16,7 +19,15 @@ void CoroOS_Init(coro_scheduler_t *scheduler, const coro_thread_fn_t *threads, c
 void CoroOS_RunOnce(coro_scheduler_t *scheduler) {
     uint8_t i;
     if (!scheduler || !scheduler->threads || !scheduler->states || !scheduler->count) return;
-    for (i = 0u; i < scheduler->count; ++i) (void)scheduler->threads[i](&scheduler->states[i]);
+    for (i = 0u; i < scheduler->count; ++i) {
+#if COROOS_USE_WATCHDOG
+        Watchdog_Thread(i);
+#endif
+        (void)scheduler->threads[i](&scheduler->states[i]);
+    }
+#if COROOS_USE_WATCHDOG
+    Watchdog_EndRound();
+#endif
 
 #if COROOS_USE_IDLE_SLEEP
     CoroOS_PortIdle();

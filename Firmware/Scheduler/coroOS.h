@@ -6,6 +6,11 @@
 #include "pt.h"
 #include "pt-sem.h"
 
+/* Optional PB10A watchdog/trace hooks; disabled for other ports. */
+#ifndef COROOS_USE_WATCHDOG
+#define COROOS_USE_WATCHDOG 0
+#endif
+
 /* Optional interrupt-driven polling: sleep once after every full round.
  * Platforms enabling this must provide CoroOS_PortIdle() in coroOS_port.h. */
 #ifndef COROOS_USE_IDLE_SLEEP

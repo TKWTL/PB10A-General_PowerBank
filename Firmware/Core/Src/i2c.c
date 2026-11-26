@@ -95,6 +95,10 @@ void MX_I2C1_Init(void)
 /* USER CODE BEGIN 1 */
 #define PB_I2C_TIMEOUT_MS 30u
 #define PB_I2C_ABORT_TIMEOUT_MS 10u
+#define PB_I2C_IDLE_TIMEOUT_MS 50u
+#define PB_I2C_RECOVERY_RETRY_MS 1000u
+#define PB_I2C_SCL LL_GPIO_PIN_8
+#define PB_I2C_SDA LL_GPIO_PIN_9
 #define PB_I2C_DATA_IRQS (I2C_CR1_TXIE | I2C_CR1_RXIE | I2C_CR1_TCIE)
 #define PB_I2C_END_IRQS (I2C_CR1_STOPIE | I2C_CR1_NACKIE | I2C_CR1_ERRIE)
 
@@ -118,10 +122,18 @@ static uint8_t s_register;
 static uint8_t s_send_register;
 static uint8_t s_restart_read;
 static uint8_t s_failed;
+static uint8_t s_idle_fault;
+static uint32_t s_idle_bad_since, s_recovery_at;
+volatile uint32_t g_i2c_recovery_attempts, g_i2c_recovery_failures;
+
+static uint8_t i2c_bus_idle(void) {
+    return (uint8_t)(!LL_I2C_IsActiveFlag_BUSY(PB_I2C_INSTANCE) &&
+                     LL_GPIO_IsInputPinSet(GPIOB, PB_I2C_SCL | PB_I2C_SDA));
+}
 
 uint8_t I2C_BusIsLocked(void) {
     return (uint8_t)(s_lock_depth != 0u || s_state == I2C_BUSY || s_state == I2C_ABORTING ||
-                     s_state == I2C_POISONED || LL_I2C_IsActiveFlag_BUSY(PB_I2C_INSTANCE));
+                     s_state == I2C_POISONED || !i2c_bus_idle());
 }
 
 uint8_t I2C_TransactionBegin(void) {
@@ -185,6 +197,7 @@ static void i2c_start(i2c_op_t op, uint16_t address, uint8_t reg, uint8_t *data,
     s_failed = 0u;
     s_async_flag = flag;
     s_start_ms = Millis();
+    s_idle_fault = 0u;
     s_state = I2C_BUSY;
 
     WRITE_REG(PB_I2C_INSTANCE->ICR, I2C_ICR_STOPCF | I2C_ICR_NACKCF | I2C_ICR_BERRCF | I2C_ICR_ARLOCF | I2C_ICR_OVRCF);
@@ -256,24 +269,113 @@ void I2C_TransferIRQ(void) {
     }
 }
 
+/* Bus Clear uses only open-drain GPIO. A bounded delay based on the
+ * awake CPU clock is independent of SysTick and is deliberately conservative. */
+static void i2c_clear_delay(void) {
+    for (uint32_t i = SystemCoreClock / 200000u; i != 0u; --i)
+        __NOP();
+}
+
+/* Return after at most nine pulses; never drive a line high or wait
+ * indefinitely for a clock-stretching/slave-held SCL. */
+static uint8_t i2c_clear_lines(void) {
+    LL_GPIO_InitTypeDef gpio = {0};
+    LL_GPIO_SetOutputPin(GPIOB, PB_I2C_SCL | PB_I2C_SDA);
+    gpio.Pin = PB_I2C_SCL | PB_I2C_SDA;
+    gpio.Mode = LL_GPIO_MODE_OUTPUT;
+    gpio.OutputType = LL_GPIO_OUTPUT_OPENDRAIN;
+    gpio.Speed = LL_GPIO_SPEED_FREQ_MEDIUM;
+    gpio.Pull = LL_GPIO_PULL_UP;
+    LL_GPIO_Init(GPIOB, &gpio);
+    i2c_clear_delay();
+    if (!LL_GPIO_IsInputPinSet(GPIOB, PB_I2C_SCL))
+        return 0u;
+    for (unsigned i = 0u; i < 9u && !LL_GPIO_IsInputPinSet(GPIOB, PB_I2C_SDA); ++i) {
+        LL_GPIO_ResetOutputPin(GPIOB, PB_I2C_SCL);
+        i2c_clear_delay();
+        LL_GPIO_SetOutputPin(GPIOB, PB_I2C_SCL);
+        i2c_clear_delay();
+        if (!LL_GPIO_IsInputPinSet(GPIOB, PB_I2C_SCL))
+            return 0u;
+    }
+    if (!LL_GPIO_IsInputPinSet(GPIOB, PB_I2C_SDA))
+        return 0u;
+
+    /* STOP: SDA rises while released SCL is actually high. */
+    LL_GPIO_ResetOutputPin(GPIOB, PB_I2C_SCL);
+    i2c_clear_delay();
+    LL_GPIO_ResetOutputPin(GPIOB, PB_I2C_SDA);
+    i2c_clear_delay();
+    LL_GPIO_SetOutputPin(GPIOB, PB_I2C_SCL);
+    i2c_clear_delay();
+    uint8_t scl = LL_GPIO_IsInputPinSet(GPIOB, PB_I2C_SCL);
+    LL_GPIO_SetOutputPin(GPIOB, PB_I2C_SDA);
+    i2c_clear_delay();
+    return (uint8_t)(scl && LL_GPIO_IsInputPinSet(GPIOB, PB_I2C_SCL | PB_I2C_SDA));
+}
+
+/* Foreground only, with no active transfer or synchronous owner.
+ * The old requester already received ERROR; never replay its command. */
+static void i2c_recover(uint32_t now) {
+    ++g_i2c_recovery_attempts;
+    s_state = I2C_POISONED;
+    CLEAR_BIT(PB_I2C_INSTANCE->CR1, PB_I2C_DATA_IRQS | PB_I2C_END_IRQS);
+    NVIC_DisableIRQ(I2C1_IRQn);
+    LL_I2C_Disable(PB_I2C_INSTANCE);
+    uint8_t released = i2c_clear_lines();
+    LL_GPIO_SetOutputPin(GPIOB, PB_I2C_SCL | PB_I2C_SDA);
+    LL_APB1_GRP1_ForceReset(LL_APB1_GRP1_PERIPH_I2C1);
+    LL_APB1_GRP1_ReleaseReset(LL_APB1_GRP1_PERIPH_I2C1);
+    NVIC_ClearPendingIRQ(I2C1_IRQn);
+    MX_I2C1_Init(); /* restore the CubeMX AF and timing configuration */
+    s_idle_fault = 0u;
+    if (released && i2c_bus_idle()) {
+        s_state = I2C_IDLE;
+    } else {
+        ++g_i2c_recovery_failures;
+        s_recovery_at = now + PB_I2C_RECOVERY_RETRY_MS;
+    }
+}
+
 void I2C_AsyncService(void) {
     uint8_t state = s_state;
+    uint32_t now = Millis();
+    if (state == I2C_POISONED) {
+        if (!s_lock_depth && (int32_t)(now - s_recovery_at) >= 0)
+            i2c_recover(now);
+        return;
+    }
+    if (state == I2C_IDLE && !s_lock_depth) {
+        if (i2c_bus_idle()) {
+            s_idle_fault = 0u;
+        } else if (!s_idle_fault) {
+            s_idle_fault = 1u;
+            s_idle_bad_since = now;
+        } else if ((uint32_t)(now - s_idle_bad_since) >= PB_I2C_IDLE_TIMEOUT_MS) {
+            i2c_recover(now);
+        }
+        return;
+    }
+    s_idle_fault = 0u;
     if (state != I2C_BUSY && state != I2C_ABORTING) return;
 
     uint32_t start = s_start_ms;
     uint32_t timeout = state == I2C_BUSY ? PB_I2C_TIMEOUT_MS : PB_I2C_ABORT_TIMEOUT_MS;
-    if ((uint32_t)(Millis() - start) < timeout) return;
+    if ((uint32_t)(now - start) < timeout) return;
 
     uint32_t irq_mask = __get_PRIMASK();
     __disable_irq();
     /* Recheck after masking: the IRQ may have completed the transaction. */
-    uint32_t now = Millis();
+    now = Millis();
     if (s_state == I2C_BUSY && (uint32_t)(now - s_start_ms) >= PB_I2C_TIMEOUT_MS) {
         if (READ_BIT(PB_I2C_INSTANCE->ISR, I2C_ISR_STOPF | I2C_ISR_ARLO)) I2C_TransferIRQ();
         if (s_state == I2C_BUSY) i2c_abort(now);
     } else if (s_state == I2C_ABORTING && (uint32_t)(now - s_start_ms) >= PB_I2C_ABORT_TIMEOUT_MS) {
         if (READ_BIT(PB_I2C_INSTANCE->ISR, I2C_ISR_STOPF | I2C_ISR_ARLO)) I2C_TransferIRQ();
-        if (s_state == I2C_ABORTING) i2c_finish(0u, 1u);
+        if (s_state == I2C_ABORTING) {
+            i2c_finish(0u, 1u);
+            s_recovery_at = now;
+        }
     }
     __set_PRIMASK(irq_mask);
 }
@@ -286,7 +388,7 @@ static uint8_t i2c_submit(i2c_op_t op, uint16_t address, uint8_t reg, uint8_t *d
         return 1u;
     }
     if (s_state != I2C_IDLE || s_lock_depth) return 0u;
-    if (LL_I2C_IsActiveFlag_BUSY(PB_I2C_INSTANCE)) {
+    if (!i2c_bus_idle()) {
         *flag = I2C_ASYNC_ERROR;
         return 1u;
     }
@@ -324,7 +426,7 @@ uint8_t I2C_AsyncProbe(uint16_t a, volatile uint8_t *flag) {
 
 /* Blocking callers use the same IRQ engine and hold the transaction lock. */
 static uint8_t i2c_sync(i2c_op_t op, uint16_t address, uint8_t reg, uint8_t *data, uint16_t count) {
-    if (s_state != I2C_IDLE || LL_I2C_IsActiveFlag_BUSY(PB_I2C_INSTANCE)) return I2C_ERROR;
+    if (s_state != I2C_IDLE || !i2c_bus_idle()) return I2C_ERROR;
     i2c_start(op, address, reg, data, count, 0);
     while (s_state == I2C_BUSY || s_state == I2C_ABORTING) I2C_AsyncService();
     uint8_t result = (uint8_t)(s_state == I2C_DONE ? I2C_OK : I2C_ERROR);

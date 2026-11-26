@@ -68,13 +68,14 @@ extern "C" {
 /* Current calibration is selected with SW6306_USE_FLOAT_API.
  * BAT read gain = nominal / actual shunt; Init uses the reciprocal for
  * CHG_IBAT/DCHG_IBAT. Resistances must be positive, in mOhm.
- * BUS is an empirical readout gain (4.97A reference / 4.46A reported).
+ * Integer BUS gain is PB10A-specific (4.97A reference / 4.46A reported).
+ * Float mode defaults to unity for reuse on other hardware.
  * It does not change SW6306 hardware current limits or protocol PDOs.
  */
 #if SW6306_USE_FLOAT_API
 #define SW6306_BATT_RSHUNT_NOMINAL 5.0f
 #define SW6306_BATT_RSHUNT_ACTUAL  5.0f
-#define SW6306_BUS_CURRENT_GAIN    (4.97f / 4.46f)
+#define SW6306_BUS_CURRENT_GAIN 1.0f
 #else
 #define SW6306_BATT_CURRENT_NUM 1U
 #define SW6306_BATT_CURRENT_DEN 1U

@@ -58,7 +58,7 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
   and the 12px subset contains precisely the 262 Han it uses.
 - `BSP/BMP180` ports Collar-Radio compensation code with Cortex-M0+ safe endian calibration; `BSP/MMC5603` supports register I/O, product ID and low-power configuration
 - `Core/Src/i2c.c` USER CODE owns the LL I2C1 master state machine and IRQ completion, including new `ASYNC_I2C_Transmit/Receive`, asynchronous scanner probe and bounded abort handling. Old `BSP/I2C/bsp_i2c.c/.h` were removed and Keil references updated. The sensor and radio application paths use IRQ-completed register transactions; legacy synchronous compatibility functions remain in the BSP drivers. **SW6306 now enables `SW6306_USE_PROTOTHREAD`** and uses the IRQ-backed asynchronous transfer API from its own exclusive service coroutine. Other modules must not directly run another SW6306 protothread concurrently.
-- In the I2C transaction layer, synchronous `I2C_TransactionBegin/End` brackets non-yielding legacy transactions. Asynchronous operations use an independent single-in-flight admission check and persistent completion flags; on timeout, a stalled abort poisons the HAL adapter until reset. Do not use stack buffers for asynchronous transfers
+- In the I2C transaction layer, synchronous `I2C_TransactionBegin/End` brackets non-yielding legacy transactions. Asynchronous operations use an independent single-in-flight admission check and persistent completion flags; on timeout, a stalled abort requests foreground bus recovery. Do not use stack buffers for asynchronous transfers
 
 ### Home menu
 
@@ -257,11 +257,11 @@ and verified battery/thermal margins; setting PISET alone cannot
 guarantee it.
 
 Runtime floating-point SHUNT setters remain removed. The integer build
-uses BAT 1/1 and BUS 497/446; the float build uses compile-time BAT
-nominal/actual shunt values (5.0/5.0 mΩ) and BUS gain 4.97/4.46.
-The BUS gain is from the user's single 4.97 A / 4.46 A calibration
-point, applied only to current readback. Internal SW6306 BUS current
-limits are unaffected. See the SW6306 BSP README for both numeric paths.
+uses BAT 1/1 and PB10A-specific BUS 497/446; the float build uses
+compile-time BAT nominal/actual shunt values (5.0/5.0 mΩ), with BUS gain
+1.0 for reuse on other hardware. The integer BUS gain is from a single
+4.97 A / 4.46 A point, applied only to current readback. Internal SW6306
+BUS current limits are unaffected. See the SW6306 BSP README.
 Earlier measurements are in the
 [SW6306 debug note](../../Docs/Debug/2026-11-19_sw6306_monitor.md).
 
@@ -455,6 +455,36 @@ UI sends commands through `RadioAlgo_Request()` and reads
 polls the FSM and asynchronous RDA5807 I2C, including when the
 Radio page is not visible.
 
+### Bus and scheduler recovery
+
+- I2C retains the 30 ms transfer and 10 ms abort deadlines. An abort
+  failure or 50 ms of idle BUSY/low SCL or SDA starts foreground recovery:
+  disable I2C IRQ/PE, release open-drain PB8/PB9, pulse SCL up to nine times if released SDA remains low, issue STOP if both lines can release, RCC-reset I2C1
+  and restore the generated initializer. A stuck SCL is never driven
+  high. A failed recovery leaves the bus unavailable and retries after
+  1 s; no automatic MCU reset or replay of the failed command. NACK alone
+  is not a recovery trigger. Inspect `g_i2c_recovery_attempts` and
+  `g_i2c_recovery_failures` in the debugger.
+- `COROOS_USE_WATCHDOG=1` enables WWDG in PB10A. It starts before
+  application initialization, after the CubeMX clock/peripheral setup.
+  At 64 MHz PCLK, prescaler 128, counter/window 0x7F gives nominal
+  524.288 ms. Feed only after a complete scheduler round with an advancing
+  Millis tick, before ordinary Sleep; refresh once immediately before
+  actual STOP1. WWDG uses APB and stops during STOP1, not during ordinary
+  Sleep. No Option Bytes, IWDG, RTC wakeup or extra actor.
+- Inspect `g_watchdog_max_round_ms` for maximum round duration in awake
+  SysTick time, excluding scheduler idle and suspended STOP time.
+  `g_watchdog_trace` holds round, tick, thread index (0..9 in app_task's
+  table), and INIT/I2C/THREAD/IDLE/STOP/RESUME phase (1..6). At boot,
+  WWDGRSTF copies the trace to `g_fault_record.watchdog`, reason 5, then
+  reset flags are cleared. The recorded thread is the last execution
+  location, not necessarily the cause. Neither WWDG nor this trace
+  detects a yielding-but-stalled actor or complete APB clock loss.
+
+Board verification is still required: fault injection with controlled
+hardware, actual STOP1/Sleep timing and maximum legal awake round time.
+See STM32 RM0454 (WWDG/RCC) and NXP UM10204 (Bus Clear).
+
 ### Fatal exception snapshot and reset
 
 `APP/algorithm/fault_record.c` defines `g_fault_record` in the 256-byte
@@ -474,7 +504,8 @@ drivers, display or serial logging, or program Flash in a fault context.
 Inspect the public `g_fault_record` symbol in the Keil debugger after a
 software reset. The layout is defined in `fault_record.h`:
 `magic`, `version`, `reason`, `exception` (IPSR),
-`flash_eccr`, `syscfg_cfgr2`, `rcc_csr`, and `checksum`.
+`flash_eccr`, `syscfg_cfgr2`, `rcc_csr`, the copied watchdog trace, and
+`checksum`. Version 2 invalidates older fatal-fault records.
 Call `FaultRecord_IsValid()` before treating the record as genuine.
 Only the latest fault is retained; it can be overwritten by a repeated
 reset loop. SRAM retention is not guaranteed across power loss, boot
@@ -880,7 +911,8 @@ PB10A has no independent backup-domain supply. Calibration therefore
 does **not** use RTC DR1..DR4, whose contents would be lost on a full
 VDD power-down just like ordinary SRAM. Instead, a 20-byte
 `s_calibration_noinit` record shares the Keil linker scatter file's
-reserved `RW_NOINIT` section with `g_fault_record` (32 bytes) and
+reserved `RW_NOINIT` section with `g_fault_record` (48 bytes), the live
+watchdog trace (16 bytes) and
 the two battery statistics slots (40 bytes), and the MMC5603 magnetic
 bias record (16 bytes) plus the altitude reference (12 bytes).
 The scatter currently reserves the **last 256 bytes of 36 KiB SRAM**

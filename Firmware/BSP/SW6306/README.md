@@ -18,11 +18,12 @@ PB10A 的 Keil 工程选择整数，应用通过现有的 Protothread 任务访�
 | 参数 | 整数模式 | 浮点模式 |
 | --- | --- | --- |
 | BAT 校准 | `BATT_CURRENT_NUM/DEN = 1/1` | `BATT_RSHUNT_NOMINAL / BATT_RSHUNT_ACTUAL = 5.0f/5.0f`（mΩ） |
-| BUS 校准 | `BUS_CURRENT_NUM/DEN = 497/446` | `BUS_CURRENT_GAIN = 4.97f/4.46f` |
+| BUS 校准 | `BUS_CURRENT_NUM/DEN = 497/446` | `BUS_CURRENT_GAIN = 1.0f` |
 
 BAT 增益为标称采样电阻与实际采样电阻之比，两个电阻值必须为正。
-BUS 增益来自 4.97 A 参考仪表读数、4.46 A SW6306 未补偿读数的
-单点实测，约为 1.11435；它不是对实际电阻值的认定。
+PB10A 整数 BUS 增益来自 4.97 A 参考仪表读数、4.46 A SW6306 未补偿读数的
+单点实测，约为 1.11435；它不是对实际电阻值的认定。浮点模式
+默认 1.0，便于移植到其他硬件。
 
 | 路径 | 当前实现 |
 | --- | --- |

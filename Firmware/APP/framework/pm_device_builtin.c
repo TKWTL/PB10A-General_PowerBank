@@ -9,6 +9,8 @@
 #include "radio_algo.h"
 #include "pm_api.h"
 #include "rtc.h"
+#include "coroOS.h"
+#include "fault_record.h"
 #define OLED_PM_TIMEOUT_MS 500u
 /* Production Radio battery inspection period: 30 minutes from 1Hz ck_spre. */
 #define RADIO_WUT_SECONDS 1800u
@@ -78,8 +80,15 @@ static void stm32_deepsleep(void *ctx) {
      * the edge might otherwise be cleared before STOP1 is entered. */
     if (!pm_api_rtc_wakeup_pending() && !pm_api_rtc_alarm_pending() &&
         !pm_api_external_wake_pending() &&
-        LL_GPIO_IsInputPinSet(INT_GPIO_Port, INT_Pin))
+        LL_GPIO_IsInputPinSet(INT_GPIO_Port, INT_Pin)) {
+#if COROOS_USE_WATCHDOG
+        Watchdog_BeforeStop();
+#endif
         HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON,PWR_STOPENTRY_WFI);
+#if COROOS_USE_WATCHDOG
+        Watchdog_AfterStop();
+#endif
+    }
     SystemClock_Config();
     RadioAlgo_RestoreClock();
     if(suspended)stm32_restore();
