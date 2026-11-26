@@ -41,7 +41,7 @@ typedef struct {
     uint32_t tag;
 } mmc_cal_record_t;
 static volatile mmc_cal_record_t s_cal_record
-    __attribute__((section(".noinit"), used, aligned(4)));
+    __attribute__((section(".bss.noinit"), used, aligned(4)));
 static uint8_t s_calibrated;
 
 static ui_item_t s_items[3];

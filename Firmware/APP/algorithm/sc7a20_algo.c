@@ -52,7 +52,7 @@ typedef struct {
     uint32_t tag; /* Version/magic:CRC16; commit LAST */
 } sc_cal_noinit_t;
 static volatile sc_cal_noinit_t s_calibration_noinit
-    __attribute__((section(".noinit"), used, aligned(4)));
+    __attribute__((section(".bss.noinit"), used, aligned(4)));
 static ui_item_t s_items[3],s_wake_items[2];
 static ui_data_t s_data[3],s_wake_data[2];
 static ui_element_t s_elements[3],s_wake_elements[2];

@@ -17,7 +17,7 @@ typedef struct {
 } battery_noinit_t;
 
 static volatile battery_noinit_t s_record[2]
-    __attribute__((section(".noinit"), used, aligned(4)));
+    __attribute__((section(".bss.noinit"), used, aligned(4)));
 static uint32_t s_sequence, s_full_mwh, s_efc;
 static uint8_t s_slot;
 static sw6306_learn_state_t s_learn;

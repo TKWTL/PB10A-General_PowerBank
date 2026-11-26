@@ -58,7 +58,7 @@ them.
   its `img_leveler` and `img_leveler_cal` 30x30 XBM icons live in this
   module (derived from Collar-Radio).
   Calibration uses six stable ±axis placements, then records zero/slope
-  with CRC into the Keil `.noinit` SRAM area; this retains calibration
+  with CRC into the Keil `.bss.noinit` SRAM area; this retains calibration
   across MCU reset while SRAM has power, **not** across total power loss.
   Short CONF starts sampling from the introductory page. Arrow and side-view
   icons show the six poses, with an inverted active pose, completed checks
@@ -85,7 +85,7 @@ them.
   5 degrees and 50 mG for the four screen-up poses. Short stale gaps
   preserve progress, and three fresh bad flat poses abort the capture.
   Any key exits after success. The six-face storage order and existing
-  bias formula are preserved. Offsets use twelve bytes of .noinit;
+  bias formula are preserved. Offsets use twelve bytes of .bss.noinit;
   Statistics remains raw. The leave hook restores sampling/PM.
 - `altimeter_app.c/.h`: pressure, temperature and altitude from the raw
   BMP180 sample. LEFT/RIGHT cycle Calib. Height, Relative Height and
@@ -95,7 +95,7 @@ them.
   16 fresh samples, and LEFT cancels. CONF exits the tool and discards
   edits or samples in progress. An inverse lookup and the pressure ratio
   determine the sea-level reference using 32-bit integer arithmetic.
-  The 8-byte CRC-protected record in .noinit survives powered SRAM resets.
+  The 8-byte CRC-protected record in .bss.noinit survives powered SRAM resets.
   Relative zero remains session-only. Altimeter and Accel Calibration use
   12 px text with translation keys and leave the display corners clear.
 

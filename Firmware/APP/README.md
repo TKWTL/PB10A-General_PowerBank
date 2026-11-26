@@ -272,7 +272,7 @@ A2 alone does not count as discharge; actual WLED/Aux-A and BUS loads
 share the same energy counter. Mixed charging/external loads settle the
 previous discharge estimate and pause EFC.
 
-Two alternating 16-byte .noinit slots store full mWh, settled EFC,
+Two alternating 16-byte .bss.noinit slots store full mWh, settled EFC,
 sequence and CRC16/version tag, written last. Warm reset restores the
 newest valid slot. STOP1 settles any confirmed session after LPSET
 succeeds; SW6306 reinitialization discards the unfinished session.
@@ -412,9 +412,12 @@ Radio page is not visible.
 ### Fatal exception snapshot and reset
 
 `APP/algorithm/fault_record.c` defines `g_fault_record` in the 256-byte
-`.noinit` SRAM region reserved by
+`.bss.noinit` SRAM region reserved by
 `MDK-ARM/Ld/PB10A-General_PowerBank.sct`. This also gives the previously
-empty `RW_NOINIT` region an actual input section.
+empty `RW_NOINIT` region an actual input section. Arm Compiler 6 requires
+the `.bss` prefix to emit these objects as ZI; `UNINIT` alone does not
+suppress initialization of a PROGBITS section. Check that the AXF describes
+`RW_NOINIT` as NOBITS and that no startup copy or zero operation targets it.
 
 NMI, HardFault, CubeMX `Error_Handler()`, and weak startup default IRQ
 handlers invoke `FaultRecord_Reset()` instead of remaining in their
@@ -440,8 +443,8 @@ detection*, not correcting ECC; set the active-low
 `RAM_PARITY_CHECK` option bit to **0** to enable. Both parts change
 from 36KB usable SRAM to 32KB when parity is enabled. **Do not enable
 that option byte with this repository's current 36KB scatter file or
-uninitialized .noinit retention policy.** First redesign the scatter
-regions (e.g. move last-256B .noinit from 0x20008F00 to 0x20007F00),
+uninitialized .bss.noinit retention policy.** First redesign the scatter
+regions (e.g. move last-256B .bss.noinit from 0x20008F00 to 0x20007F00),
 update startup SRAM parity initialization, and decide how to preserve
 and validate previous fault records without reading uninitialized
 parity bits. No option bytes have been changed by this commit.

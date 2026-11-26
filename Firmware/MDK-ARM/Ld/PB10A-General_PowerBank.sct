@@ -11,7 +11,8 @@ LR_IROM1 0x08000000 0x00020000 {
   RW_IRAM1 0x20000000 0x00008F00 {
     .ANY (+RW +ZI)
   }
+  ; Arm Compiler 6: .bss prefix creates ZI; UNINIT skips startup zeroing.
   RW_NOINIT 0x20008F00 UNINIT 0x00000100 {
-    *.o (.noinit)
+    *.o (.bss.noinit)
   }
 }

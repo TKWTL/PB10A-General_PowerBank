@@ -47,7 +47,7 @@ APP (framework / algorithm / functions)
 | 目标 | `PB10A-General_PowerBank` |
 | 输出 | `MDK-ARM/Objects/`（`Objects/`、`Listings/` 不入库） |
 | 宏定义 | `USE_HAL_DRIVER`, `USE_FULL_LL_DRIVER`, `STM32G070xx` |
-| 设备内存 | IROM 0x08000000 / 128 KB，IRAM 0x20000000 / 36 KB；布局见 `MDK-ARM/Ld/PB10A-General_PowerBank.sct`（末 256 B 为 `.noinit` 复位不清除区） |
+| 设备内存 | IROM 0x08000000 / 128 KB，IRAM 0x20000000 / 36 KB；布局见 `MDK-ARM/Ld/PB10A-General_PowerBank.sct`（末 256 B 为 `.bss.noinit` 复位不清除区） |
 | 现有分组 | `Application/MDK-ARM`、`Application/User/Core`、`Drivers/STM32G0xx_HAL_Driver`、`Drivers/CMSIS`、`::CMSIS` |
 
 已新增 `Application/APP`、`Application/MiaoUI`、`Application/BSP` 和 `ThirdParty/u8g2` 分组，包含 OLED 最小系统所需的源码。`MiaoUI` 保留库原有子目录，作为目录深度约定的例外。未加入不需要的电源管理和外设驱动。

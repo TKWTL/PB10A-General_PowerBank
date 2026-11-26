@@ -55,7 +55,7 @@ typedef struct {
     uint32_t tag_crc;
 } alt_cal_record_t;
 
-static volatile alt_cal_record_t s_cal_record __attribute__((section(".noinit"), used, aligned(4)));
+static volatile alt_cal_record_t s_cal_record __attribute__((section(".bss.noinit"), used, aligned(4)));
 static uint8_t s_active, s_zero_valid, s_repeat_count;
 static uint8_t s_sample_count;
 static alt_mode_t s_mode;

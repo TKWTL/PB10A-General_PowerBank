@@ -2,7 +2,7 @@
  * NEVER log by UART, OLED, I2C, malloc, printf, or Flash programming here.
  * IRQs are masked before writing; magic is stored last for atomic validity.
  *
- * The scatter file maps .noinit to the last 256 bytes of 36KB G070 SRAM.
+ * The scatter file maps .bss.noinit to the last 256 bytes of 36KB G070 SRAM.
  * If SRAM parity is enabled through Option Bytes, SRAM shrinks to 32KB:
  * the scatter layout and startup parity initialization MUST be redesigned
  * first. Do NOT enable SRAM parity with the current 36KB scatter layout.
@@ -14,11 +14,11 @@
 #define FAULT_RECORD_VERSION   1u
 #define FAULT_RECORD_XOR_SALT  0xA5F0231Du
 
-/* Real .noinit object prevents the linker reporting an unused RW_NOINIT.
+/* Real .bss.noinit object prevents the linker reporting an unused RW_NOINIT.
  * 'used' also retains the symbol for debugger/watch inspection.
  * No initializer: C runtime must not touch this reserved SRAM area. */
 volatile FaultRecord_t g_fault_record
-__attribute__((section(".noinit"), used, aligned(4)));
+    __attribute__((section(".bss.noinit"), used, aligned(4)));
 
 static uint32_t fault_checksum(uint32_t version, uint32_t reason,
     uint32_t exception, uint32_t flash_eccr,
