@@ -47,7 +47,7 @@ extern "C" {
 #define UI_FONT   font_fusion_pixel_p12_zhcn
 // 字体尺寸定义
 #define UI_FONT_HIGHT   12 // 字体高度
-// Compatibility-only nominal width; Fusion Pixel is proportional.
+// Nominal halfwidth cell; Fusion Pixel ASCII advances vary from 4 to 10px.
 // Actual layout and cursor measurement must use Disp_GetUTF8Width().
 #define UI_FONT_WIDTH  6
 // 文本间距

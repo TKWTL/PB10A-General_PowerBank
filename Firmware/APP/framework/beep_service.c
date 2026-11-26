@@ -62,20 +62,13 @@ static void beep_hw_set_frequency(uint16_t frequency_hz) {
 static const uint16_t s_key_sound[] = {2700u, 100u, BEEP_END};
 static const uint16_t s_fault_sound[] = {
     2400u, 150u, BEEP_REST, 80u, 2400u, 150u, BEEP_REST, 80u, 2400u, 150u, BEEP_END};
-static const uint16_t s_alarm_tone1[] = {
-    2000u, 180u, BEEP_REST, 100u, 2000u, 180u, BEEP_REST, 540u, BEEP_REPEAT};
-static const uint16_t s_alarm_tone2[] = {
-    BEEP_C5, 180u, BEEP_E5, 180u, BEEP_G5, 360u, BEEP_REST, 280u, BEEP_REPEAT};
-static const uint16_t s_alarm_tone3[] = {
-    1600u, 180u, 2400u, 180u, 1600u, 180u, 2400u, 180u, BEEP_REST, 280u, BEEP_REPEAT};
-static const uint16_t *const s_alarm_tones[] = {s_alarm_tone1, s_alarm_tone2, s_alarm_tone3};
 /* PB10A is 32-bit. Queue stores one 4-byte pointer value per entry. */
 #if defined(__arm__) || defined(__thumb__)
 typedef char beep_pointer_must_be_32bit[(sizeof(const uint16_t *) == 4u) ? 1 : -1];
 #endif
 static uint8_t s_queue_storage[BEEP_QUEUE_CAPACITY * 4u];
 static fifo_t s_queue;
-static const uint16_t *s_current, *s_alarm_sequence;
+static const uint16_t *s_current, *s_loop_sequence;
 static uint32_t s_step_started;
 static uint16_t s_step_duration, s_word_position, s_tone_frequency, s_tone_duration;
 static uint8_t s_note_index, s_key_enabled;
@@ -84,7 +77,7 @@ static uint8_t s_tone_active, s_need_note;
 void beep_init(void) {
     (void)FIFO_Init(&s_queue, s_queue_storage, sizeof(s_queue_storage));
     s_note_index = 0u;
-    s_current = s_alarm_sequence = 0;
+    s_current = s_loop_sequence = 0;
     s_step_started = 0u;
     s_step_duration = s_word_position = s_tone_frequency = s_tone_duration = 0u;
     s_tone_active = s_need_note = 0u;
@@ -95,7 +88,7 @@ void beep_init(void) {
 }
 
 uint8_t beep_enqueue(const uint16_t *sequence) {
-    if (s_alarm_sequence || s_current == s_fault_sound ||
+    if (s_loop_sequence || s_current == s_fault_sound ||
         s_volume == 0u || !sequence || sequence[0] == BEEP_END ||
         sequence[0] == BEEP_REPEAT)
         return 0u;
@@ -116,7 +109,7 @@ uint8_t beep_fault_active(void) {
 }
 
 void beep_stop(void) {
-    s_alarm_sequence = 0;
+    s_loop_sequence = 0;
     beep_clear();
 }
 
@@ -128,15 +121,15 @@ void beep_fault(void) {
     s_need_note = 1u;
 }
 
-void beep_alarm(uint8_t enabled, unsigned melody) {
-    const uint16_t *previous = s_alarm_sequence;
-    s_alarm_sequence = enabled ? s_alarm_tones[melody] : 0;
-    if (s_alarm_sequence != previous && !beep_fault_active())
+void beep_set_loop(const uint16_t *sequence) {
+    const uint16_t *previous = s_loop_sequence;
+    s_loop_sequence = sequence;
+    if (s_loop_sequence != previous && !beep_fault_active())
         beep_clear();
 }
 
 void beep_play(const uint16_t *sequence) {
-    if (s_alarm_sequence || beep_fault_active())
+    if (s_loop_sequence || beep_fault_active())
         return;
     beep_clear();
     if (!sequence || s_volume == 0u || sequence[0] == BEEP_END ||
@@ -147,7 +140,7 @@ void beep_play(const uint16_t *sequence) {
 }
 
 void beep_tone(uint16_t frequency_hz, uint16_t duration_ms) {
-    if (s_alarm_sequence || beep_fault_active())
+    if (s_loop_sequence || beep_fault_active())
         return;
     beep_clear();
     if (s_volume == 0u || (frequency_hz == 0u && duration_ms == 0u))
@@ -187,8 +180,8 @@ __attribute__((noinline)) void beep_poll(uint32_t now_ms) {
      */
     for (uint8_t attempt = 0u; attempt <= BEEP_QUEUE_CAPACITY + 2u; ++attempt) {
         if (!s_current) {
-            if (s_alarm_sequence) {
-                s_current = s_alarm_sequence;
+            if (s_loop_sequence) {
+                s_current = s_loop_sequence;
             } else {
                 uint32_t address;
                 if (!FIFO_Pop4(&s_queue, &address))
@@ -236,7 +229,7 @@ __attribute__((noinline)) void beep_poll(uint32_t now_ms) {
 }
 
 uint8_t beep_busy(void) {
-    return (uint8_t)(s_alarm_sequence != 0 || s_current != 0 || s_tone_active ||
+    return (uint8_t)(s_loop_sequence != 0 || s_current != 0 || s_tone_active ||
                      FIFO_Count(&s_queue) != 0u);
 }
 
@@ -264,7 +257,7 @@ void beep_set_volume(uint8_t volume) {
 
     s_volume = volume;
     if (volume == 0u) {
-        beep_clear(); /* Keep the alarm request; silence every priority. */
+        beep_clear(); /* Keep the loop request; silence every priority. */
     } else if (s_beep_pwm_running) {
         uint16_t arr = (uint16_t)__HAL_TIM_GET_AUTORELOAD(&htim3);
         __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, beep_hw_get_ccr(arr, volume));

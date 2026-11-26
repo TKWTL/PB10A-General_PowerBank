@@ -401,7 +401,7 @@ const char *PowerAlgo_NoticeText(uint8_t code) {
     case NOTICE_LEARN_DONE:
         return "CAP LEARN DONE";
     case NOTICE_LOW_CURRENT:
-        return "LOW CURRENT ERROR";
+        return "LOW CURR ERROR";
     case NOTICE_DATA_INVALID:
         return "DATA INVALID";
     default:
@@ -1430,7 +1430,7 @@ static uint32_t battery_round_div(uint32_t value, uint32_t divisor) {
 }
 
 static void battery_publish_lifetime(void) {
-    static const char *const learn_names[] = {"WAIT", "LEARN", "DONE", "--"};
+    static const char *const learn_names[] = {"WAIT", "Learn", "DONE", "--"};
     battery_view_t view;
     BatteryAlgo_GetView(&view);
     s_battery_values[BATTERY_SOH] = view.soh_d10;

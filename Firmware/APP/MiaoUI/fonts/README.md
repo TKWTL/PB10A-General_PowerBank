@@ -1,9 +1,7 @@
 # PB10A MiaoUI font subsets
 
-The Radio 12px ASCII font was removed: all **95 printable ASCII glyphs** from
-`font_radio_h12w6` and the ASCII part of `font_fusion_pixel_p12_zhcn`
-have identical decoded pixels, offsets and 6px advances despite different
-u8g2 RLE encoding parameters. Radio now uses the latter font directly.
+Radio shares the 12px Fusion Pixel font; there is no separate 12px
+ASCII font. The shared font now uses proportional ASCII advances.
 
 ## Spleen 24px status subset
 
@@ -26,12 +24,12 @@ remain ASCII; no 24px Chinese glyphs are needed.
 ## Shared 12px Chinese subset
 
 `font_fusion_pixel_p12_zhcn` remains the only Chinese-capable font.
-The original 96 Latin/degree and 118 Han glyph payloads are unchanged.
-185 missing Han glyphs are added from the official Fusion Pixel
-12px Mono zh_hans BDF release **2026.11.10**, aligned to the existing
-baseline. The 399-glyph array is 9,190 bytes (previously 4,342);
-the Unicode lookup is indexed in blocks of 32 glyphs.
-The complete catalog and settings language selector are covered.
+Regenerated from the supplied `fusion-pixel-12px-proportional-zh_hans.bdf`
+(FONT_VERSION 2026.09.25). All 399 previously supported code points
+plus 堂 and 者 are retained, with source-pixel and metric verification.
+The 401-glyph array occupies 9,047 bytes (previously 9,190).
+ASCII advances vary from 4 to 10 px; digits have 6px advances and Han
+12px advances. UI layout must measure actual text width.
 
 `font_home_h6w4` remains byte-for-byte identical. SOS and magnetic
 calibration no longer use it; powerbank, I2C scanner, game interiors

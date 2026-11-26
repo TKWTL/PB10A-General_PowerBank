@@ -17,7 +17,6 @@
 #define BEEP_QUEUE_CAPACITY 8u
 #define BEEP_SEQUENCE_MAX_STEPS 64u
 #define BEEP_VOLUME_MAX 5u
-#define BEEP_ALARM_MELODY_COUNT 3u
 
 /* Musical notes are frequencies in Hz (A4 = 440 Hz), not timer ARR. */
 #define BEEP_C4 262u
@@ -59,7 +58,8 @@ void beep_poll(uint32_t now_ms);
 void beep_stop(void); /* Explicitly stop all audio (system reset). */
 void beep_fault(void); /* Finite high-priority cue, coalesced while active. */
 uint8_t beep_fault_active(void);
-void beep_alarm(uint8_t enabled, unsigned melody); /* melody 0..BEEP_ALARM_MELODY_COUNT-1 */
+/* Persistent high-priority repeating sequence, below FAULT. NULL clears it. */
+void beep_set_loop(const uint16_t *sequence);
 uint8_t beep_busy(void);
 uint8_t beep_queue_count(void);
 uint8_t beep_note_index(void); /* Zero-based index within the current sequence. */

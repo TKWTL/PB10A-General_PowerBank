@@ -4,7 +4,7 @@
 
 | 目录 | 放什么 |
 |---|---|
-| `framework/` | 系统级基础服务：`beep_service`（TIM3 PWM + 队列）、`time_service`（RTC 时间与日历编辑）、低功耗框架 |
+| `framework/` | 系统级基础服务：`beep_service`（TIM3 PWM + 队列）、`time_service`（RTC 时间与日历编辑）、`alarm_service`（双闹钟与响铃页）、低功耗框架 |
 | `algorithm/` | 设备服务与算法：ADC/功率、FM、传感器、系统配置、故障记录以及标定与滤波 |
 
 规则：
@@ -35,7 +35,7 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 
 ### Application versus service separation
 
-`APP/functions/` contains user-facing MiaoUI apps such as the I2C scanner. `APP/framework/time_service.c` owns RTC timekeeping and calendar editing; `APP/framework/beep_service.c` owns the PWM buzzer backend and asynchronous tone queue. Device algorithms, PM hooks and fault logging reside in `APP/algorithm/`. The application-layer 1 ms clock now uses the independent `BSP/Time/millis.c` counter, incremented from the SysTick IRQ user region. coroOS, PM, UI keys, OLED timeout, scanning and BSP device-driver delays read this clock, independently of HAL's `uwTick`. `Millis_Delay()` requires enabled SysTick interrupts and must not execute during STOP1.
+`APP/functions/` contains user-facing MiaoUI apps such as the I2C scanner. `APP/framework/time_service.c` owns RTC timekeeping and calendar editing; `APP/framework/alarm_service.c` owns RTC alarm scheduling, test/ringing page, and alarm melodies; `APP/framework/beep_service.c` owns the PWM buzzer backend, tone queue and audio priority arbitration. Device algorithms, PM hooks and fault logging reside in `APP/algorithm/`. The application-layer 1 ms clock now uses the independent `BSP/Time/millis.c` counter, incremented from the SysTick IRQ user region. coroOS, PM, UI keys, OLED timeout, scanning and BSP device-driver delays read this clock, independently of HAL's `uwTick`. `Millis_Delay()` requires enabled SysTick interrupts and must not execute during STOP1.
 
 
 ## Architecture (2026-11)
@@ -45,13 +45,14 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 - `APP/framework/beep_service.c` consolidates the former beep hardware PWM and nonblocking melody sequencer; `APP/framework/time_service.c` consolidates RTC calendar/uptime calculations with the MiaoUI time editor. Remaining device logic, fault recorder and system algorithms reside in `APP/algorithm/`
 - `APP/functions/` hosts independent user-facing MiaoUI applications. Powerbank displays cached SW6306 voltage, current, percentage and protocol; Radio is forced low-power at boot and starts only when its WORD page is entered (or kept running in explicit background ON mode)
 - `APP/i18n.c/h` contains the English/Simplified Chinese catalog.
-  `Settings > Display > Language` selects EN (default) or 中文, in RAM.
+  `Settings > System > Language` is a RAM-only switch immediately before
+  !System Reset: ON = Chinese (default), OFF = English.
   Menu labels (including games), parameters, About, fault history,
   radio settings and standalone tools resolve through `I18N_Text()`.
   Game interiors, I2C scanner and powerbank/radio dashboards stay English.
   Landscape toast translates on draw; portrait toast always uses original
   English with h6w4. SOS and magnetic calibration use the shared 12px font.
-  ENUM values are at most 30px (five ASCII cells or equivalent Han width).
+  ENUM values are at most 30px in the proportional 12px font.
 - `BSP/BMP180` ports Collar-Radio compensation code with Cortex-M0+ safe endian calibration; `BSP/MMC5603` supports register I/O, product ID and low-power configuration
 - `Core/Src/i2c.c` USER CODE owns the LL I2C1 master state machine and IRQ completion, including new `ASYNC_I2C_Transmit/Receive`, asynchronous scanner probe and bounded abort handling. Old `BSP/I2C/bsp_i2c.c/.h` were removed and Keil references updated. The sensor and radio application paths use IRQ-completed register transactions; legacy synchronous compatibility functions remain in the BSP drivers. **SW6306 now enables `SW6306_USE_PROTOTHREAD`** and uses the IRQ-backed asynchronous transfer API from its own exclusive service coroutine. Other modules must not directly run another SW6306 protothread concurrently.
 - In the I2C transaction layer, synchronous `I2C_TransactionBegin/End` brackets non-yielding legacy transactions. Asynchronous operations use an independent single-in-flight admission check and persistent completion flags; on timeout, a stalled abort poisons the HAL adapter until reset. Do not use stack buffers for asynchronous transfers
@@ -66,7 +67,7 @@ catch-up time. Pac-Man/Bomber/Invaders release the shared asset cache on
 leave and rebuild it on re-entry; MCU reset discards saved games.
 Tools order: Alarm, Leveler, Compass, Altimeter, SOS Blink.
 Alarm uses its own icon and a text submenu: Back, Alarm 1, Alarm 2,
-Effect, !Alarm Test. Both alarms share one configuration page, with
+Alarm Effect, !Alarm Test. Both alarms share one configuration page, with
 Enable, Hour, Minute and Sun through Sat switches.
 
 Settings order: Powerbank, Display, Sleep & Wake, Time & Date, Sensors,
@@ -803,16 +804,17 @@ RUN wake rather than the silent Radio background patrol.
   enables [21:20], reserved [23:22] and format tag 0xA1 [31:24].
   Settings survive MCU reset while the backup domain remains powered.
   Boot and clock edits schedule afresh; stale boot events are discarded.
-- Shared Effect selects Tone1/2/3, 1min/5min/Never (default 5min),
+- Shared Alarm Effect selects Bell1/2/3, 1min/5min/Never (default 5min),
   Press/Seq (default Press). Test and RTC alarms use the same
   full-screen page, with current time and source. Test does not change
   alarm enables; simultaneous events merge. Any key or UUDDLRLR
   dismisses according to the selected mode; held repeats and BACK
-  cannot bypass Sequence. Key directions follow screen rotation.
+  cannot bypass Seq. Key directions follow screen rotation.
 - A ringing session holds a PM sleep block and suppresses forced sleep.
   Dismissal or timeout releases it and returns to the original menu
   bookmark. Enabled alarms alone do not prevent sleep. No extra coroutine,
-  timer, font or source file; RTC WUT remains independent.
+  timer or font; RTC WUT remains independent. The alarm code and melodies
+  reside in alarm_service, using the generic high-priority beep loop.
 
 The RTC calendar uses the correct LSE prescaler product
 `(127+1)*(255+1)=32768`. For the measured +10 s over 41 hours

@@ -1,7 +1,7 @@
 #include "i18n.h"
 #include <string.h>
 
-static i18n_language_t s_language = I18N_LANG_EN;
+static i18n_language_t s_language = I18N_LANG_ZH_CN;
 
 /* Sorted English keys; Chinese text shares the existing 12px font.
  * Leave protocol names, units and untranslated application text alone. */
@@ -103,17 +103,17 @@ static const struct {
     {"-Alarm", "-闹钟"},
     {"-Alarm 1", "-闹钟1"},
     {"-Alarm 2", "-闹钟2"},
+    {"-Alarm Effect", "-闹钟效果"},
     {"-All Clear and Seek-", "-清空并搜台-"},
     {"-Altimeter", "-海拔计"},
     {"-Arkanoid", "-打砖块"},
     {"-Battery", "-电池"},
-    {"-Bomber", "-炸弹人"},
+    {"-Bomber", "-炸弹堂"},
     {"-Compass", "-指南针"},
     {"-Display", "-显示"},
-    {"-Effect", "-效果"},
     {"-Fault", "-故障"},
     {"-Game", "-游戏"},
-    {"-Invaders", "-太空入侵"},
+    {"-Invaders", "-太空入侵者"},
     {"-Leveler", "-水平仪"},
     {"-Pac-Man", "-吃豆人"},
     {"-Ports", "-端口"},
@@ -151,6 +151,9 @@ static const struct {
     {"BAT TOO LOW", "电池电量低"},
     {"BAT UVLO", "电池欠压"},
     {"Beep Volume", "音量"},
+    {"Bell1", "铃声1"},
+    {"Bell2", "铃声2"},
+    {"Bell3", "铃声3"},
     {"CAL 6/6", "校准6/6"},
     {"CAP LEARN DONE", "容量学习完成"},
     {"CC OVERVOLT", "CC过压"},
@@ -192,10 +195,9 @@ static const struct {
     {"L/R:Mode", "左右:模式"},
     {"L:Cancel", "左:取消"},
     {"L:Prev", "<返回"},
-    {"LEARN", "学习"},
-    {"LOW CURRENT ERROR", "小电流异常"},
-    {"Language", "语言"},
+    {"LOW CURR ERROR", "小电流异常"},
     {"Lay flat", "水平放置"},
+    {"Learn", "学习"},
     {"Mag North", "磁北"},
     {"Minute", "分"},
     {"Month", "月"},
@@ -243,9 +245,6 @@ static const struct {
     {"TEMP LIMIT", "温度限制"},
     {"TRANSMITTING", "正在发送"},
     {"Timeout", "空载时间"},
-    {"Tone1", "铃声1"},
-    {"Tone2", "铃声2"},
-    {"Tone3", "铃声3"},
     {"U/D:Adjust", "上下:调整"},
     {"U/D:Cal", "上下:校准"},
     {"U/D:Zero", "上下:归零"},

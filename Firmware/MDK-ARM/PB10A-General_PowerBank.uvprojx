@@ -895,6 +895,11 @@
               <FilePath>../APP/framework/time_service.c</FilePath>
             </File>
             <File>
+              <FileName>alarm_service.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../APP/framework/alarm_service.c</FilePath>
+            </File>
+            <File>
               <FileName>i2c_scanner.c</FileName>
               <FileType>1</FileType>
               <FilePath>../APP/functions/i2c_scanner.c</FilePath>

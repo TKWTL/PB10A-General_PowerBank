@@ -16,7 +16,7 @@
 #include <string.h>
 
 #define PB_COL_BUS 2u
-#define PB_COL_BAT 46u
+#define PB_COL_BAT 45u
 #define PB_COL_AUX 90u
 
 #define PB_ROW_TITLE 10u
@@ -34,7 +34,7 @@
 #define PB_AUX_ARROW_X 82u
 #define PB_DISCHARGE_ARROW_MW 100u
 #define PB_BUS_CENTER (PB_COL_BUS + 18u)
-#define PB_BAT_CENTER (PB_COL_BAT + 18u)
+#define PB_BAT_CENTER 64u
 #define PB_AUX_CENTER (PB_COL_AUX + 18u)
 #define PB_ANIM_START UI_FX(48)
 #define PB_ANIM_FRAME_MS 5u
@@ -87,9 +87,9 @@ static void draw_measurements(uint16_t x, uint16_t mv, uint16_t ma, uint8_t vali
     draw_quantity(x, PB_ROW_VOLTAGE, mv, 'V', valid);
 }
 
-/* Status fields use only the font's fixed six-pixel ASCII glyphs. */
+/* Measure the shared proportional font rather than counting ASCII cells. */
 static void draw_centered(uint16_t center, uint16_t y, const char *text) {
-    Disp_DrawStr((uint16_t)(center - strlen(text) * 3u), y, text);
+    Disp_DrawStr((uint16_t)(center - Disp_GetUTF8Width(text) / 2u), y, text);
 }
 
 static void draw_bus(const power_monitor_t *power) {
@@ -144,7 +144,8 @@ static void draw_battery(const power_monitor_t *power, uint32_t now) {
 
 static void draw_aux(const power_monitor_t *power, uint8_t bg, uint8_t fg) {
     if (power->aux_enabled) {
-        Disp_DrawBox(PB_AUX_CENTER - 16u, 0u, 32u, 12u);
+        uint16_t width = Disp_GetUTF8Width("AUX-A") + 2u;
+        Disp_DrawBox(PB_AUX_CENTER - width / 2u, 0u, width, 12u);
         Disp_SetDrawColor(&bg);
     }
     draw_centered(PB_AUX_CENTER, PB_ROW_TITLE, "AUX-A");

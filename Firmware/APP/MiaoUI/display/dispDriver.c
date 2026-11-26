@@ -8,7 +8,6 @@
 #include "ssd1306_display.h"
 #include "sc7a20_algo.h"
 #include "system_algo.h"
-#include "i18n.h"
 
 u8g2_t u8g2;
 /* SSD1315: level 0 blanks the panel; levels 1..15 map to raw 3..255. */
@@ -27,13 +26,7 @@ static ui_item_t s_contrast_item;
 static ui_item_t s_background_item;
 static ui_item_t s_rotation_item;
 static uint8_t s_applied_rotation;
-static ui_item_t s_burnin_item, s_language_item;
-static int s_language_selected = I18N_LANG_EN;
-
-static void language_changed(ui_t *ui) {
-    (void)ui;
-    I18N_SetLanguage((i18n_language_t)s_language_selected);
-}
+static ui_item_t s_burnin_item;
 
 /* Adapted from DPC27A service_pages.c: a pass-based MiaoUI WORD page.
  * An action is left unconsumed so the UI state machine exits on ANY key. */
@@ -60,12 +53,9 @@ void Create_Disp_Parameters(ui_t *ui) {
     static ui_data_t contrast_data;
     static ui_data_t background_data;
     static ui_data_t rotation_data;
-    static ui_data_t language_data;
-    static const char *const language_labels[] = {"EN", "中文"};
     static ui_element_t contrast_element;
     static ui_element_t background_element;
     static ui_element_t rotation_element;
-    static ui_element_t language_element;
 
     contrast_data.name = "Contrast";
     contrast_data.ptr = &Contrast;
@@ -96,24 +86,12 @@ void Create_Disp_Parameters(ui_t *ui) {
     rotation_element.data = &rotation_data;
     Create_element(&s_rotation_item, &rotation_element);
 
-    language_data.name = "Language";
-    language_data.ptr = &s_language_selected;
-    language_data.function = language_changed;
-    language_data.functionType = UI_DATA_FUNCTION_STEP_EXECUTE;
-    language_data.dataType = UI_DATA_ENUM;
-    language_data.actionType = UI_DATA_ACTION_RW;
-    language_data.max = I18N_LANG_ZH_CN;
-    language_data.step = 1;
-    language_data.options = language_labels;
-    language_element.data = &language_data;
-    Create_element(&s_language_item, &language_element);
 }
 
 void Add_Disp_Items(ui_page_t *parent_page) {
     AddItem(" Contrast", UI_ITEM_DATA, 0, &s_contrast_item, parent_page, 0, 0);
     AddItem(" Auto Rotation", UI_ITEM_DATA, 0, &s_rotation_item, parent_page, 0, 0);
     AddItem(" Background", UI_ITEM_DATA, 0, &s_background_item, parent_page, 0, 0);
-    AddItem(" Language", UI_ITEM_DATA, 0, &s_language_item, parent_page, 0, 0);
     System_AddNavItems(parent_page);
     AddItem("!Burn-in Test", UI_ITEM_WORD, 0, &s_burnin_item, parent_page, 0, Disp_BurninPage);
 }

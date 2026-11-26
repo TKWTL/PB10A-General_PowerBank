@@ -8,6 +8,7 @@
 #include "ui_conf.h"
 #include "miaoui.h"
 #include "time_service.h"
+#include "alarm_service.h"
 #include "apps.h"
 #include "games/arkanoid/arkanoid_assets.h"
 #include "games/pacman/pacman_assets.h"

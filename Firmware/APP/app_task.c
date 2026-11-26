@@ -7,6 +7,7 @@
 #include "millis.h"
 #include "i2c.h"
 #include "time_service.h"
+#include "alarm_service.h"
 #include "beep_service.h"
 #include "algorithms.h"
 #include "radio_app.h"

@@ -7,7 +7,7 @@
 #include "buttons.h"
 #include "pm_api.h"
 #include "beep_service.h"
-#include "time_service.h"
+#include "alarm_service.h"
 #define KEY_QUEUE_SIZE 16u
 #define KEY_EVENT_REPEAT 0x80u
 #define KEY_EVENT_ENTER ((uint8_t)KeyIndex_Max)

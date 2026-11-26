@@ -6,7 +6,12 @@
 #include "power_algo.h"
 #include "main.h"
 #include "core/ui.h"
+#include "i18n.h"
 static ui_item_t s_click_item,s_volume_item,s_play_music_item,s_reset_item;
+static ui_item_t s_language_item;
+static ui_data_t s_language_data;
+static ui_element_t s_language_element;
+static uint8_t s_language_on;
 static ui_item_t s_vdda_item,s_temp_item;
 static ui_data_t s_vdda_data,s_temp_data;
 static ui_element_t s_vdda_element,s_temp_element;
@@ -64,6 +69,11 @@ static void system_volume_changed(ui_t *ui) {
     (void)ui;
     beep_set_volume((uint8_t)s_volume_level);
 }
+static void system_language_changed(ui_t *ui) {
+    (void)ui;
+    I18N_SetLanguage(s_language_on ? I18N_LANG_ZH_CN : I18N_LANG_EN);
+}
+
 void System_Reset(void) {
     beep_stop();
     NVIC_SystemReset();
@@ -97,6 +107,15 @@ __attribute__((noinline)) void System_AddSettingsItems(ui_page_t *page) {
     Create_element(&s_volume_item, &s_volume_element);
     AddItem(" Beep Volume", UI_ITEM_DATA, 0, &s_volume_item, page, 0, 0);
     AddItem("!Play Music", UI_ITEM_ONCE_FUNCTION, 0, &s_play_music_item, page, 0, system_play_music);
+    s_language_on = I18N_GetLanguage() == I18N_LANG_ZH_CN;
+    s_language_data.name = " Language";
+    s_language_data.ptr = &s_language_on;
+    s_language_data.function = system_language_changed;
+    s_language_data.dataType = UI_DATA_SWITCH;
+    s_language_data.actionType = UI_DATA_ACTION_RW;
+    s_language_element.data = &s_language_data;
+    Create_element(&s_language_item, &s_language_element);
+    AddItem(" Language", UI_ITEM_DATA, 0, &s_language_item, page, 0, 0);
     AddItem("!System Reset", UI_ITEM_ONCE_FUNCTION, 0, &s_reset_item, page, 0, system_reset_selected);
 }
 

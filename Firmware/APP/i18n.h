@@ -1,7 +1,7 @@
 #ifndef PB10A_I18N_H
 #define PB10A_I18N_H
 #include <stdint.h>
-/* Shared UI/functions translation API. English is the default. */
+/* Shared UI/functions translation API. Simplified Chinese is the default. */
 typedef enum {I18N_LANG_EN=0, I18N_LANG_ZH_CN=1} i18n_language_t;
 void I18N_SetLanguage(i18n_language_t language);
 i18n_language_t I18N_GetLanguage(void);
