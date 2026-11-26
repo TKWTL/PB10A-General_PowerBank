@@ -1094,7 +1094,8 @@ static uint8_t s_aux_low_current;
 static unsigned s_aux_auto_off_ma = 50u;
 
 static void aux_publish(uint16_t mv, uint16_t ma) {
-    if (ma < AUX_CURRENT_ZERO_MA)
+    /* PA0 current-sense output is not reliable with SUB_EN low. */
+    if (!s_monitor.aux_enabled || ma < AUX_CURRENT_ZERO_MA)
         ma = 0u;
     s_monitor.aux_valid = 1u;
     s_monitor.aux_mv = mv;
@@ -1108,6 +1109,10 @@ static void aux_publish(uint16_t mv, uint16_t ma) {
 static void aux_output_off(void) {
     LL_GPIO_ResetOutputPin(SUB_EN_GPIO_Port, SUB_EN_Pin);
     s_monitor.aux_enabled = 0u;
+    /* Publish zero immediately, without waiting for the next ADC batch. */
+    s_monitor.aux_ma = 0u;
+    s_power_values[POWER_AUX_CURRENT] = 0;
+    s_power_data[POWER_AUX_CURRENT].ptr = &s_power_values[POWER_AUX_CURRENT];
     s_aux_low_current = 0u;
     s_scan_for_protection = 0u;
 }
@@ -1411,7 +1416,10 @@ void PowerAlgo_AddStatisticsItems(ui_page_t *page) {
     static const char *const names[POWER_ITEM_COUNT] = {" BUS Voltage V", " BUS Current A", " Aux-A Volt V", " Aux-A Curr A", " Chip Temp°C"};
     for (unsigned i = 0; i < POWER_ITEM_COUNT; ++i) {
         s_power_data[i].name = names[i];
-        s_power_data[i].ptr = s_monitor.aux_valid && (i == POWER_AUX_VOLTAGE || i == POWER_AUX_CURRENT) ? &s_power_values[i] : NULL;
+        s_power_data[i].ptr = (i == POWER_AUX_CURRENT && (!s_monitor.aux_enabled || s_monitor.aux_valid)) ||
+                                      (i == POWER_AUX_VOLTAGE && s_monitor.aux_valid)
+                                  ? &s_power_values[i]
+                                  : NULL;
         s_power_data[i].dataType = UI_DATA_FLOAT;
         s_power_data[i].actionType = UI_DATA_ACTION_RO;
         s_power_data[i].decimals = i == POWER_CHIP_TEMP ? 1u : 2u;

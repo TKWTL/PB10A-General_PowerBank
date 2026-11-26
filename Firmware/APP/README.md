@@ -139,9 +139,10 @@ owner scans every 5 ms while Aux-A is active and cuts output on any
 valid VOUT reading at or below 2 V. Current below 50 mA for 60 continuous
 seconds also cuts output. Use `PowerAlgo_AuxA_SetAutoOffCurrent()` to
 adjust the threshold. Display readings below 10 mA show as zero.
-AUX voltage/current use measured ADC data in all output states, including
-OFF. The first measurement replaces `--`; subsequent display updates retain
-the last reading until a new valid ADC result is available.
+AUX voltage remains measured in all output states. With SUB_EN LOW,
+report current as zero immediately and ignore PA0 current-sense readings
+until enabled. With SUB_EN HIGH, current and voltage use the measured ADC
+data; valid measurements replace `--` or the previous reading.
 
 Active and pending external loads pause automatic sleep. Forced STOP1
 turns both outputs off and resolves the shared meter path before ADC
@@ -225,7 +226,8 @@ Statistics → Power shows BUS Voltage V, BUS Current A, Aux-A Volt V and
 Aux-A Curr A, each with two decimal places.
 BUS readings come from the shared SW6306 bus ADC. Chip Temp°C shows the SW6306 die temperature to one decimal place. Aux-A voltage comes from PA5
 via the 680 kΩ / 220 kΩ divider, and Aux-A current comes from PA0 at 0.5 V/A.
-Both Aux-A channels use the VDDA measured from VREFINT.
+Both Aux-A channels use the VDDA measured from VREFINT. Aux-A current
+is reported as 0.00 A whenever SUB_EN is LOW, independent of ADC readings.
 SW6306 ADC values are cached once in physical units and used by the
 dashboard, common protection, ETA and Statistics conversion. Each
 protection sample retains its independent freshness tracking.
