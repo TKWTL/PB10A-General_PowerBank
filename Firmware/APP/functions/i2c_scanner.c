@@ -50,8 +50,7 @@ void i2c_Scanner(ui_t *ui) {
     uint32_t now=Millis();
     if(!ui)return;
     if(ui->action!=UI_ACTION_NONE && ui->action!=UI_ACTION_ENTER) {
-        /* Physical LEFT/RIGHT/UP/DOWN map to UP/DOWN/MINUS/PLUS
-         * on a MiaoUI ICON WORD page. All four exit like long CONF. */
+        /* All four directional actions exit like long CONF. */
         s_active=0u;
         pm_api_set_sleep_block(SCANNER_SLEEP_BLOCK,0u);
         ui->action=UI_ACTION_BACK;

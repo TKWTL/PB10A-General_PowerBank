@@ -16,6 +16,7 @@ extern const unsigned char img_statistics[];
 extern const unsigned char img_radio[];
 extern const unsigned char img_games[];
 extern const unsigned char img_tools[];
+extern const unsigned char img_alarm[120];
 extern const unsigned char img_scan[];
 extern const unsigned char img_dinosuar[];
 extern const unsigned char img_screen[];

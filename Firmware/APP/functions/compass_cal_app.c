@@ -230,7 +230,7 @@ void CompassCal_AppRun(ui_t *ui) {
     uint8_t accel_valid = SC7A20Algo_GetSample(&a) && (uint32_t)(now - a.at_ms) <= CAL_FRESH_MS;
     uint8_t mag_valid = MMC5603Algo_GetSample(&m) && (uint32_t)(now - m.at_ms) <= CAL_FRESH_MS;
 
-    if (ui->action == UI_ACTION_UP && !s_result) { /* screen LEFT, previous */
+    if (ui->action == UI_ACTION_MINUS && !s_result) { /* screen LEFT on TEXT menu, previous */
         cancel_capture();
         if (s_step)
             --s_step;

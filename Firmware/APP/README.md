@@ -64,9 +64,15 @@ Game order: Tetris, Pac-Man, Bomber, Invaders, Arkanoid. Leaving a game
 retains its current state in static RAM; re-entry resumes without
 catch-up time. Pac-Man/Bomber/Invaders release the shared asset cache on
 leave and rebuild it on re-entry; MCU reset discards saved games.
-Tools order: Leveler, Compass, Altimeter, SOS Blink, Accel Calibration, Mag Calibration, I2C Scanner.
+Tools order: Alarm (placeholder), Leveler, Compass, Altimeter, SOS Blink.
+Alarm uses its own icon and a text submenu containing only Back until the
+alarm service is implemented.
 
-Settings lists Ports, Protocol#1, Protocol#2 and Power Limits before Display.
+Settings order: Powerbank, Display, Sleep & Wake, Time & Date, Sensors,
+System. Sensors contains !Accel Calibration, !Mag Calibration and
+!I2C Scanner; the original icons remain archived in source.
+
+Settings > Powerbank groups Ports, Protocol#1, Protocol#2 and Power Limits.
 They expose 32 RAM-only settings and actions derived from PB02B plus `!SW6306 Reset`.
 
 - Power Limits: input 5–100 W, output 5–105 W, both in 5 W steps; defaults 100 W / 105 W. Higher output requests were rejected in hardware testing.

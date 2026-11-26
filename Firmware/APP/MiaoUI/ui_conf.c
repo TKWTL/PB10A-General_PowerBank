@@ -22,7 +22,10 @@ static ui_page_t s_home,s_settings,s_stats,s_game,s_tools,s_display;
 static ui_page_t s_sys, s_sleep_wake, s_stat_power, s_stat_battery, s_stat_sensors, s_stat_fault, s_stat_system;
 static ui_item_t s_powerbank,s_radio,s_settings_item,s_stats_item,s_game_item,s_tools_item,s_about;
 static ui_item_t s_settings_back,s_stats_back,s_game_back,s_tools_back;
+static ui_page_t s_power_settings, s_sensors, s_alarm;
 static ui_page_t s_power_limit, s_ports, s_protocol1, s_protocol2;
+static ui_item_t s_power_settings_item, s_sensors_item, s_alarm_item;
+static ui_item_t s_power_settings_back, s_sensors_back, s_alarm_back;
 static ui_item_t s_power_limit_item, s_ports_item, s_protocol1_item, s_protocol2_item;
 static ui_item_t s_power_limit_back, s_ports_back, s_protocol1_back, s_protocol2_back;
 static ui_item_t s_display_item,s_sleep_wake_item,s_system_item,s_display_back,s_sleep_wake_back,s_system_back;
@@ -114,6 +117,7 @@ void Create_MenuTree(ui_t *ui) {
 
     AddPage("[Tools]",&s_tools,UI_PAGE_ICON,&s_home);
         add_return(&s_tools,&s_home,&s_tools_back,0);
+        AddItem("-Alarm",UI_ITEM_PARENTS,img_alarm,&s_alarm_item,&s_tools,&s_alarm,0);
         AddItem("-Leveler",UI_ITEM_WORD,img_leveler,
             &s_leveler,&s_tools,0,Motion_LevelerRun);
         UI_SetLeaveHook(&s_leveler,Motion_LevelerOnLeave);
@@ -123,39 +127,40 @@ void Create_MenuTree(ui_t *ui) {
         UI_SetLeaveHook(&s_altimeter,Altimeter_AppOnLeave);
         AddItem("-SOS Blink",UI_ITEM_WORD,img_sos,&s_sos,&s_tools,0,SOS_AppRun);
         UI_SetLeaveHook(&s_sos,SOS_AppOnLeave);
-        AddItem("-Accel Calibration",UI_ITEM_WORD,img_leveler_cal,
-            &s_accel_cal,&s_tools,0,Motion_CalibrationRun);
-        UI_SetLeaveHook(&s_accel_cal,Motion_CalibrationOnLeave);
-        AddItem("-Mag Calibration",UI_ITEM_WORD,img_compass_cal,&s_compass_cal,&s_tools,0,CompassCal_AppRun);
-        UI_SetLeaveHook(&s_compass_cal,CompassCal_AppOnLeave);
-        AddItem("-I2C Scanner",UI_ITEM_WORD,img_scan,&s_scanner,&s_tools,0,i2c_Scanner);
+        AddPage("[Alarm]",&s_alarm,UI_PAGE_TEXT,&s_tools);
+            add_return(&s_alarm,&s_tools,&s_alarm_back,0);
 
     AddPage("[Settings]",&s_settings,UI_PAGE_TEXT,&s_home);
         add_return(&s_settings,&s_home,&s_settings_back,0);
-        AddItem("-Ports",UI_ITEM_PARENTS,0,&s_ports_item,&s_settings,&s_ports,0);
-        AddItem("-Protocol#1",UI_ITEM_PARENTS,0,&s_protocol1_item,&s_settings,&s_protocol1,0);
-        AddItem("-Protocol#2",UI_ITEM_PARENTS,0,&s_protocol2_item,&s_settings,&s_protocol2,0);
-        AddItem("-Power Limits",UI_ITEM_PARENTS,0,&s_power_limit_item,&s_settings,&s_power_limit,0);
+        AddItem("-Powerbank",UI_ITEM_PARENTS,0,&s_power_settings_item,&s_settings,&s_power_settings,0);
         AddItem("-Display",UI_ITEM_PARENTS,0,&s_display_item,&s_settings,&s_display,0);
         AddItem("-Sleep & Wake",UI_ITEM_PARENTS,0,&s_sleep_wake_item,&s_settings,&s_sleep_wake,0);
         Add_TimeSet_Items(&s_settings);
+        AddItem("-Sensors",UI_ITEM_PARENTS,0,&s_sensors_item,&s_settings,&s_sensors,0);
         AddItem("-System",UI_ITEM_PARENTS,0,&s_system_item,&s_settings,&s_sys,0);
 
-        AddPage("[Ports]",&s_ports,UI_PAGE_TEXT,&s_settings);
-            add_return(&s_ports,&s_settings,&s_ports_back,0);
-            PowerAlgo_AddPortItems(&s_ports);
+        AddPage("[Powerbank]",&s_power_settings,UI_PAGE_TEXT,&s_settings);
+            add_return(&s_power_settings,&s_settings,&s_power_settings_back,0);
+            AddItem("-Ports",UI_ITEM_PARENTS,0,&s_ports_item,&s_power_settings,&s_ports,0);
+            AddItem("-Protocol#1",UI_ITEM_PARENTS,0,&s_protocol1_item,&s_power_settings,&s_protocol1,0);
+            AddItem("-Protocol#2",UI_ITEM_PARENTS,0,&s_protocol2_item,&s_power_settings,&s_protocol2,0);
+            AddItem("-Power Limits",UI_ITEM_PARENTS,0,&s_power_limit_item,&s_power_settings,&s_power_limit,0);
 
-        AddPage("[Protocol#1]",&s_protocol1,UI_PAGE_TEXT,&s_settings);
-            add_return(&s_protocol1,&s_settings,&s_protocol1_back,0);
-            PowerAlgo_AddProtocolItems(&s_protocol1,1u);
+            AddPage("[Ports]",&s_ports,UI_PAGE_TEXT,&s_power_settings);
+                add_return(&s_ports,&s_power_settings,&s_ports_back,0);
+                PowerAlgo_AddPortItems(&s_ports);
 
-        AddPage("[Protocol#2]",&s_protocol2,UI_PAGE_TEXT,&s_settings);
-            add_return(&s_protocol2,&s_settings,&s_protocol2_back,0);
-            PowerAlgo_AddProtocolItems(&s_protocol2,2u);
+            AddPage("[Protocol#1]",&s_protocol1,UI_PAGE_TEXT,&s_power_settings);
+                add_return(&s_protocol1,&s_power_settings,&s_protocol1_back,0);
+                PowerAlgo_AddProtocolItems(&s_protocol1,1u);
 
-        AddPage("[Power Limits]",&s_power_limit,UI_PAGE_TEXT,&s_settings);
-            add_return(&s_power_limit,&s_settings,&s_power_limit_back,0);
-            PowerAlgo_AddPowerLimitItems(&s_power_limit);
+            AddPage("[Protocol#2]",&s_protocol2,UI_PAGE_TEXT,&s_power_settings);
+                add_return(&s_protocol2,&s_power_settings,&s_protocol2_back,0);
+                PowerAlgo_AddProtocolItems(&s_protocol2,2u);
+
+            AddPage("[Power Limits]",&s_power_limit,UI_PAGE_TEXT,&s_power_settings);
+                add_return(&s_power_limit,&s_power_settings,&s_power_limit_back,0);
+                PowerAlgo_AddPowerLimitItems(&s_power_limit);
 
         AddPage("[Display]",&s_display,UI_PAGE_TEXT,&s_settings);
             add_return(&s_display,&s_settings,&s_display_back,0);
@@ -166,6 +171,14 @@ void Create_MenuTree(ui_t *ui) {
             add_sleep_options(&s_sleep_wake);
             SC7A20Algo_AddWakeSettingsItems(&s_sleep_wake);
             RadioAlgo_AddSleepWakeItems(&s_sleep_wake);
+
+        AddPage("[Sensors]",&s_sensors,UI_PAGE_TEXT,&s_settings);
+            add_return(&s_sensors,&s_settings,&s_sensors_back,0);
+            AddItem("!Accel Calibration",UI_ITEM_WORD,0,&s_accel_cal,&s_sensors,0,Motion_CalibrationRun);
+            UI_SetLeaveHook(&s_accel_cal,Motion_CalibrationOnLeave);
+            AddItem("!Mag Calibration",UI_ITEM_WORD,0,&s_compass_cal,&s_sensors,0,CompassCal_AppRun);
+            UI_SetLeaveHook(&s_compass_cal,CompassCal_AppOnLeave);
+            AddItem("!I2C Scanner",UI_ITEM_WORD,0,&s_scanner,&s_sensors,0,i2c_Scanner);
 
         AddPage("[System]",&s_sys,UI_PAGE_TEXT,&s_settings);
             add_return(&s_sys,&s_settings,&s_system_back,0);
