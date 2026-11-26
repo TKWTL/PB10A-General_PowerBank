@@ -81,14 +81,15 @@ unmodified. See [shared porting guide](../SKILL.md).
 ## Lossless background/collision storage
 
 `bomber_BackBlitz_rle[257]` reconstructs the exact original 1024-byte
-image into the existing OLED framebuffer on every redraw. On first
+image into the existing OLED framebuffer on every redraw. On each
 entry `bomber_back_rle[125]` reconstructs the original fixed-wall
 collision mask into shared 1024-byte GameBuffer; the core binds to that
 SRAM image for random collision tests. The separate 14-byte destructible
 map remains in `bomber_game_t`. The `0xFE` drawing/collision sentinel
 and PB10A's 40x40 cross size remain unchanged, with wall-aware propagation. On UI leave, the core
-unbinds and the owner-checked resource cache is zeroed; STOP1 does not
-release it.
+unbinds and the owner-checked resource cache is zeroed. Re-entry restores
+the cache, retaining the mutable map, actors, bomb and fuse. STOP1 does
+not release it.
  
 ## Fixed-wall / destructible-wall blast occlusion
 

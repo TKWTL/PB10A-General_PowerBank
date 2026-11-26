@@ -18,11 +18,14 @@
 #define WELL_ROWS 19
 #define WELL_FULL ((1u << WELL_COLUMNS) - 1u)
 #define WELL_X 2
+#define WELL_LEFT (WELL_X - 2)
 #define WELL_Y 1
 #define CELL_PIXELS 5
 #define BLOCK_PIXELS 4
 #define WELL_RIGHT (WELL_X + WELL_COLUMNS * CELL_PIXELS)
 #define WELL_BOTTOM (WELL_Y + WELL_ROWS * CELL_PIXELS)
+#define GAME_OVER_ROW 1
+#define GAME_OVER_Y (WELL_Y + (GAME_OVER_ROW + 1) * CELL_PIXELS - 1)
 #define HUD_MARGIN 4
 #define WIDTH 64
 #define HEIGHT 128
@@ -144,7 +147,7 @@ static void spawn(tetris_game_t *game, uint8_t soft_drop) {
     game->y = -1;
     game->drop_ms = 0u;
     game->drop_armed = (uint8_t)!soft_drop;
-    if (game->well[1] || !fits(game, tetris_pieces[game->rotation], game->x, game->y)) {
+    if (game->well[GAME_OVER_ROW] || !fits(game, tetris_pieces[game->rotation], game->x, game->y)) {
         end_game(game);
         return;
     }
@@ -312,7 +315,7 @@ static void render(const tetris_game_t *game) {
     Disp_SetDrawColor(&white);
     if (game->phase == TETRIS_TITLE) {
         char line[13];
-        Disp_DrawFrame(WELL_X - 1, WELL_Y - 1, WELL_RIGHT - WELL_X + 2, WELL_BOTTOM + 1);
+        Disp_DrawFrame(WELL_LEFT, WELL_Y - 1, WELL_RIGHT - WELL_LEFT + 1, WELL_BOTTOM + 1);
         Disp_SetFont(UI_FONT);
         draw_centered(23, "TETRIS");
         Disp_SetFont(font_home_h6w4);
@@ -326,9 +329,12 @@ static void render(const tetris_game_t *game) {
         }
         draw_score(&s_record);
     } else {
-        Disp_DrawLine(WELL_X - 1, 0, WELL_X - 1, WELL_BOTTOM);
+        Disp_DrawLine(WELL_LEFT, 0, WELL_LEFT, WELL_BOTTOM);
         Disp_DrawLine(WELL_RIGHT, 0, WELL_RIGHT, WELL_BOTTOM);
-        Disp_DrawLine(WELL_X - 1, WELL_BOTTOM, WELL_RIGHT, WELL_BOTTOM);
+        Disp_DrawLine(WELL_LEFT, WELL_BOTTOM, WELL_RIGHT, WELL_BOTTOM);
+        /* Mark the bottom of the top-out zone in the inter-row gap. */
+        for (unsigned x = WELL_X; x < WELL_RIGHT; x += CELL_PIXELS)
+            Disp_DrawLine(x + 1, GAME_OVER_Y, x + 2, GAME_OVER_Y);
         for (int y = 0; y < WELL_ROWS; ++y) {
             if (game->phase == TETRIS_CLEARING && ((game->phase_ms / FRAME_MS) & 1u) &&
                 (game->full_lines & (1u << y)))
@@ -370,9 +376,7 @@ void Game_TetrisRun(ui_t *ui) {
     if (!s_active) {
         s_active = 1u;
         s_rotate_held = rotate_up;
-        s_last_ms = now;
-        s_game.phase = TETRIS_TITLE;
-        s_game.phase_ms = 0u;
+        s_last_ms = now; /* Resume the retained phase; BSS starts at TETRIS_TITLE. */
     }
 
     /* R1 maps screen right/down/up to native DOWN/LEFT/RIGHT. */

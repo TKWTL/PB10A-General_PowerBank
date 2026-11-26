@@ -7,7 +7,8 @@ MiaoUI framebuffer and uses the existing OLED DMA and Beep Service.
 
 Turn the board 90° counterclockwise as for Pac-Man. The board's UP and DOWN
 buttons become the paddle's left and right. Tap CONF to start, and tap again
-to serve. Hold CONF to pause. A long hold returns to the Game menu.
+to serve. Hold CONF to pause. A long hold returns to the Game menu. Re-entry resumes the retained ball,
+paddle, bricks, lives and level in RAM.
 
 Ball position and velocity use hundredths of a pixel. The fixed-step clock
 discards elapsed time on STOP1 wake. Short PWM cues use the original

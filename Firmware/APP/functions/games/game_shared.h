@@ -9,6 +9,12 @@ typedef enum {
     GAME_OWNER_BOMBER = 2u,
     GAME_OWNER_INVADERS = 3u
 } game_owner_t;
+/* Cached games retain their core state while releasing immutable assets. */
+enum {
+    GAME_SESSION_NEW = 0,
+    GAME_SESSION_ACTIVE,
+    GAME_SESSION_PAUSED
+};
 /* Acquire is idempotent for current owner and does not clear the buffer.
  * A different owner cannot acquire until the current one calls Release.
  * Neither STOP1 nor ordinary render calls release the cache. */

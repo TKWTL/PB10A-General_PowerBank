@@ -173,8 +173,9 @@ is not part of the 30px UI and may be dropped; all visible data stays intact.
   and GAME_OVER; normal scene composition is otherwise unchanged.
 - Cache is bound by game adapter to a pure C game core; the core does
   not call MiaoUI, RLE or GameBuffer to allocate anything. The game
-  adapter performs resource decompression only on first entry, and
-  continues to preserve existing long STOP1-gap timing behavior.
+  adapter performs resource decompression on each activation after a
+  cache release, without reinitializing the retained game state, and
+  preserves existing long STOP1-gap timing behavior.
 - Host tests must reconstruct every original 1024-byte image and
   Pac-Man's 64-dot bitmap and compare historical CRC32s; they must
   additionally verify ownership exclusivity, owner-safe release,

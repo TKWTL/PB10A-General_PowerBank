@@ -19,7 +19,7 @@
 
 static bomber_game_t s_game;
 static uint32_t s_previous_ms, s_elapsed_ms;
-static uint8_t s_active, s_place_pending;
+static uint8_t s_session, s_place_pending;
 
 static uint8_t pressed(KeyIndex_t key) {
     KeyState_t state = KEY_GetState(key);
@@ -154,7 +154,9 @@ static void render(void) {
 
 void Game_BomberOnLeave(ui_t *ui) {
     (void)ui;
-    s_active = 0u;
+    if (s_session != GAME_SESSION_ACTIVE)
+        return;
+    s_session = GAME_SESSION_PAUSED;
     s_place_pending = 0u;
     s_elapsed_ms = 0u;
     Bomber_CoreBindBack(0);
@@ -182,14 +184,15 @@ void Game_BomberRun(ui_t *ui) {
         return; /* MiaoUI restores its own BACK action and exits WORD page. */
     }
     now = Millis();
-    if (!s_active) {
+    if (s_session != GAME_SESSION_ACTIVE) {
         if (!load_collision_map()) {
             ui->action = UI_ACTION_NONE;
             UI_RequestNextFrame(ui, BOMBER_RENDER_MS);
             return;
         }
-        Bomber_CoreNewGame(&s_game, now);
-        s_active = 1u;
+        if (s_session == GAME_SESSION_NEW)
+            Bomber_CoreNewGame(&s_game, now);
+        s_session = GAME_SESSION_ACTIVE;
         s_elapsed_ms = 0u;
         s_place_pending = 0u;
         s_previous_ms = now;

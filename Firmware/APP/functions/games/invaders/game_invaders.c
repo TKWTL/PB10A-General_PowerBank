@@ -18,7 +18,7 @@
 
 static invaders_game_t s_game;
 static uint32_t s_last_ms, s_accum;
-static uint8_t s_active;
+static uint8_t s_session;
 
 static uint8_t held(KeyIndex_t key) {
     KeyState_t state = KEY_GetState(key);
@@ -55,7 +55,9 @@ static void play(invaders_sound_t event) {
 
 void Game_InvadersOnLeave(ui_t *ui) {
     (void)ui;
-    s_active = 0u;
+    if (s_session != GAME_SESSION_ACTIVE)
+        return;
+    s_session = GAME_SESSION_PAUSED;
     s_accum = 0u;
     Invaders_CoreBindBackground(0);
     GameBuffer_Release(GAME_OWNER_INVADERS);
@@ -80,14 +82,15 @@ void Game_InvadersRun(ui_t *ui) {
     if (!ui) return;
     if (ui->action == UI_ACTION_BACK) return; /* MiaoUI long-CONF exit. */
     now = Millis();
-    if (!s_active) {
+    if (s_session != GAME_SESSION_ACTIVE) {
         if (!load_background()) {
             ui->action = UI_ACTION_NONE;
             UI_RequestNextFrame(ui, INVADERS_FRAME_MS);
             return;
         }
-        Invaders_CoreInit(&s_game, now);
-        s_active = 1u;
+        if (s_session == GAME_SESSION_NEW)
+            Invaders_CoreInit(&s_game, now);
+        s_session = GAME_SESSION_ACTIVE;
         s_accum = 0u;
         s_last_ms = now;
     }

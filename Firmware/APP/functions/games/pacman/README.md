@@ -88,4 +88,6 @@ logic tick is now O(64) rather than O(1024).
 
 On leave, `Pacman_CoreBindBack(NULL)` precedes
 `GameBuffer_Release(GAME_OWNER_PACMAN)`; the cache is cleared to zero.
-On STOP1 the cached collision image persists, with no catch-up ticks.
+Re-entry rebuilds the collision cache and resumes the retained maze progress,
+actors and power-pill timer. On STOP1 the cached collision image persists,
+with no catch-up ticks.

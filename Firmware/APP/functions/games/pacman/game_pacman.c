@@ -21,7 +21,7 @@
 
 static pacman_game_t s_game;  /* all mutable game state, no heap or NVM */
 static uint32_t s_last_time, s_accum;
-static uint8_t s_active, s_prev_dpad_mask;
+static uint8_t s_session, s_prev_dpad_mask;
 
 static uint8_t pressed(KeyIndex_t k) {
     KeyState_t v = KEY_GetState(k);
@@ -218,7 +218,9 @@ static void render(void) {
 
 void Game_PacmanOnLeave(ui_t *ui) {
     (void)ui;
-    s_active = 0u; /* Re-entry calls NewGame; no NVM and no pointless memset. */
+    if (s_session != GAME_SESSION_ACTIVE)
+        return;
+    s_session = GAME_SESSION_PAUSED;
     s_accum = 0u;
     s_prev_dpad_mask = 0u;
     Pacman_CoreClearQueuedDirection(&s_game);
@@ -251,14 +253,15 @@ void Game_PacmanRun(ui_t *ui) {
         return; /* MiaoUI owns long-CONF exit. */
     }
     now = Millis();
-    if (!s_active) {
+    if (s_session != GAME_SESSION_ACTIVE) {
         if (!load_collision_map()) {
             ui->action = UI_ACTION_NONE;
             UI_RequestNextFrame(ui, PACMAN_FRAME_MS);
             return;
         }
-        Pacman_CoreNewGame(&s_game, now);
-        s_active = 1u;
+        if (s_session == GAME_SESSION_NEW)
+            Pacman_CoreNewGame(&s_game, now);
+        s_session = GAME_SESSION_ACTIVE;
         s_accum = 0u;
         s_last_time = now;
         s_prev_dpad_mask = 0u;

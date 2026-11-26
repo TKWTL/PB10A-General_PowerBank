@@ -326,8 +326,7 @@ void Game_ArkanoidRun(ui_t *ui) {
     uint32_t now = Millis();
     if (!s_active) {
         s_active = 1u;
-        s_game.phase = ARKANOID_TITLE;
-        s_last = now;
+        s_last = now; /* Resume the retained phase; BSS starts at ARKANOID_TITLE. */
         s_accum = 0u;
     }
 

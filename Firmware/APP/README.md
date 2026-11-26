@@ -60,7 +60,10 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 
 Powerbank, Radio, Game, Tools, Settings and Statistics appear in that order. Statistics contains Power, Battery, Sensors, Fault, System and About. After reset the firmware first opens the Powerbank dashboard. Short or long CONF opens the home menu from the dashboard.
 
-Game order: Tetris, Pac-Man, Bomber, Invaders, Arkanoid.
+Game order: Tetris, Pac-Man, Bomber, Invaders, Arkanoid. Leaving a game
+retains its current state in static RAM; re-entry resumes without
+catch-up time. Pac-Man/Bomber/Invaders release the shared asset cache on
+leave and rebuild it on re-entry; MCU reset discards saved games.
 Tools order: Leveler, Compass, Altimeter, SOS Blink, Accel Calibration, Mag Calibration, I2C Scanner.
 
 Settings lists Ports, Protocol#1, Protocol#2 and Power Limits before Display.

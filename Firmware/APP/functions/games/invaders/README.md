@@ -75,4 +75,5 @@ directly into the OLED framebuffer on title/game-over screens. Neither
 operation allocates a second display buffer. The title image is handled
 by `Invaders_CoreRender()`; `Invaders_CorePixel()` composes active-scene
 pixels only. Exit unbinds the cached backdrop and clears owner data,
-while STOP1 preserves SRAM and discards simulation backlog.
+but the game state is retained and the backdrop is restored on re-entry.
+STOP1 preserves SRAM and discards simulation backlog.
