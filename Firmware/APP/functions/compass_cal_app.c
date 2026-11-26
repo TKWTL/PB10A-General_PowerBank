@@ -10,6 +10,7 @@
 #include "millis.h"
 #include "mini_math.h"
 #include "mini_format.h"
+#include "i18n.h"
 
 /* Original PB10A calibration icon, 30x30 XBM. */
 // clang-format off
@@ -152,7 +153,7 @@ static void center_text(uint16_t y, const char *text) {
 }
 
 static void draw_cal(uint8_t data_valid, uint8_t pose_valid) {
-    static const char *const directions[4] = {"N", "E", "S", "W"};
+    static const char *const directions[4] = {"North", "East", "South", "West"};
     uint8_t black = 0u, white = 1u;
     char text[22];
     Disp_SetMaxClipWindow();
@@ -162,19 +163,25 @@ static void draw_cal(uint8_t data_valid, uint8_t pose_valid) {
     Disp_SetFont(UI_FONT);
     if (s_result) {
         center_text(25u, s_result == 1u ? "Calibration saved" : "Calibration error");
-        center_text(40u, s_result == 1u ? "Hold CONF: Exit" : "CONF: Retry");
+        center_text(40u, s_result == 1u ? "Any key: Exit" : "CONF: Retry");
         center_text(62u, s_result == 1u ? "CAL 6/6" : "Check headings");
     } else {
         uint8_t face = s_face_order[s_step];
         const char *title = face < 4u ? "Screen face up" : face == 4u ? "Lay flat"
-                                                                      : "Flip long axis";
+                                                                      : "Upside Down";
         center_text(10u, title);
-        /* All poses aim the screen's right edge at the indicated heading.
-         * Keep the same north heading when flipping the flat device. */
+        /* Keep the arrow pointing screen-right. Under R2 that direction is
+         * the opposite native edge: swap the requested heading instead,
+         * so every captured face retains the algorithm's native heading. */
+        unsigned direction_index = face < 4u ? face : 0u;
+        if (Disp_GetRotation())
+            direction_index = (direction_index + 2u) % 4u;
         Disp_DrawBox(17u, 24u, 42u, 3u);
         Disp_DrawLine(58u, 18u, 68u, 25u);
         Disp_DrawLine(58u, 32u, 68u, 25u);
-        Disp_DrawStr(84u, 30u, directions[face < 4u ? face : 0u]);
+        const char *direction = I18N_Text(directions[direction_index]);
+        uint16_t width = Disp_GetUTF8Width(direction);
+        Disp_DrawStr(74u + (width < 50u ? (50u - width) / 2u : 0u), 30u, direction);
 
         const char *prompt;
         if (!data_valid)
@@ -227,13 +234,16 @@ void CompassCal_AppRun(ui_t *ui) {
         MMC5603Algo_SetToolMode(1u);
         SC7A20Algo_SetToolMode(3u);
     }
+    if (s_result == 1u && ui->action != UI_ACTION_NONE)
+        return;
+
     sc7a20_sample_t a;
     mmc5603_sample_t m;
     uint32_t now = Millis();
     uint8_t accel_valid = SC7A20Algo_GetSample(&a) && (uint32_t)(now - a.at_ms) <= CAL_FRESH_MS;
     uint8_t mag_valid = MMC5603Algo_GetSample(&m) && (uint32_t)(now - m.at_ms) <= CAL_FRESH_MS;
 
-    if (ui->action == UI_ACTION_UP && !s_result) { /* physical LEFT, previous */
+    if (ui->action == UI_ACTION_UP && !s_result) { /* screen LEFT, previous */
         cancel_capture();
         if (s_step)
             --s_step;

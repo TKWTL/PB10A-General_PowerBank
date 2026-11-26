@@ -35,8 +35,8 @@ extern "C" {
 
 void indevInit(void);
 void indevClearPending(void); /* Discard key actions captured before external navigation. */
-/* Continuous LEFT/RIGHT mode returns the eligible held-key bitmask.
- * Other keys retain normal queued actions and DAS. */
+/* Continuous LEFT/RIGHT mode returns the screen-relative held-key bitmask.
+ * Queued directions and DAS also follow the applied display rotation. */
 uint8_t indevService_10ms(uint8_t continuous_lr);
 uint8_t indevHasPending(void); /* Read-only queue status; does not consume. */
 UI_ACTION indevScan(const ui_t *ui);

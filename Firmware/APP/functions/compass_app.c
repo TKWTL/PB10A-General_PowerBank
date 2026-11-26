@@ -10,6 +10,7 @@
 #include "millis.h"
 #include "mini_math.h"
 #include "mini_format.h"
+#include "i18n.h"
 
 /* Original PB10A compass icon, 30 x 30 XBM. */
 // clang-format off
@@ -155,7 +156,7 @@ static void dial_point(unsigned angle, int radius, uint16_t *x, uint16_t *y) {
 static void compass_dial(uint16_t heading, uint8_t valid) {
     static const char *const cardinal[] = {"N", "E", "S", "W"};
     Disp_DrawCircle(31u, 31u, 29u, U8G2_DRAW_ALL);
-    Disp_SetFont(font_home_h6w4);
+    Disp_SetFont(UI_FONT);
     if (valid) {
         for (unsigned bearing = 0u; bearing < 360u; bearing += 30u) {
             unsigned angle = (bearing + 450u - heading) % 360u;
@@ -164,12 +165,12 @@ static void compass_dial(uint16_t heading, uint8_t valid) {
             dial_point(angle, bearing % 90u ? 24 : 22, &x2, &y2);
             Disp_DrawLine(x1, y1, x2, y2);
             if (bearing % 90u == 0u) {
-                dial_point(angle, 17, &x1, &y1);
-                Disp_DrawStr(x1 - 2u, y1 + 3u, cardinal[bearing / 90u]);
+                dial_point(angle, 15, &x1, &y1);
+                Disp_DrawStr(x1 - 3u, y1 + 4u, cardinal[bearing / 90u]);
             }
         }
     } else {
-        Disp_DrawStr(29u, 34u, "?");
+        Disp_DrawStr(28u, 35u, "?");
     }
     /* Fixed index at display right; the rose turns underneath. */
     Disp_DrawLine(61u, 28u, 55u, 31u);
@@ -220,13 +221,16 @@ void Compass_AppRun(ui_t *ui) {
     Disp_DrawStr(68u, 11u, MMC5603Algo_IsCalibrated() ? "Mag North" : "Uncalibr.");
     char text[16];
     if (valid) {
-        static const char *const directions[] = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
+        static const char *const directions[] = {
+            "North", "North East", "East", "South East", "South", "South West", "West", "North West"};
         mini_snprintf(text, sizeof(text), "%03u", (unsigned)heading);
         Disp_SetFont(font_radio_h24w12);
         Disp_DrawStr(72u, 36u, text);
         Disp_SetFont(UI_FONT);
         Disp_DrawStr(108u, 25u, "°");
-        Disp_DrawStr(85u, 49u, directions[((heading + 22u) / 45u) & 7u]);
+        const char *direction = I18N_Text(directions[((heading + 22u) / 45u) & 7u]);
+        uint16_t width = Disp_GetUTF8Width(direction);
+        Disp_DrawStr(64u + (width < 64u ? (64u - width) / 2u : 0u), 49u, direction);
     } else {
         Disp_DrawStr(82u, 31u, "---°");
         Disp_DrawStr(73u, 49u, "No fix");

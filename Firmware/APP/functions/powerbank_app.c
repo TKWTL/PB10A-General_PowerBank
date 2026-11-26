@@ -267,7 +267,7 @@ void Powerbank_AppDimKeys(uint8_t held, uint32_t now) {
     const uint8_t left = 1u << KeyIndex_LEFT;
     const uint8_t right = 1u << KeyIndex_RIGHT;
     uint8_t first = held & (uint8_t)~s_dim_held;
-    /* Track both physical presses even if their directions cancel.
+    /* Track both screen-relative presses even if their directions cancel.
      * Releasing LEFT while RIGHT stays held must never unlock RIGHT. */
     s_dim_held = held;
     if (held != left && held != right)

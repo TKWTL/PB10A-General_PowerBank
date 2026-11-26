@@ -39,9 +39,9 @@ const unsigned char img_altimeter[] = {
 #define ALT_TOP 3u
 #define ALT_BOTTOM 61u
 
-typedef enum { ALT_STD,
-               ALT_CAL,
+typedef enum { ALT_CAL,
                ALT_REL,
+               ALT_STD,
                ALT_MODE_COUNT } alt_mode_t;
 typedef enum { ALT_MEASURE,
                ALT_EDIT,
@@ -164,7 +164,7 @@ static void draw_height(int32_t value, uint8_t decimals) {
 
 static void draw_measurement(const bmp180_sample_t *sample, uint8_t sample_valid,
                              int32_t standard_dm, uint8_t standard_valid) {
-    static const char *const modes[] = {"Std Alt", "Cal Alt", "Rel Alt"};
+    static const char *const modes[] = {"Calib. Height", "Relative Height", "Standard Height"};
     char text[24], value[16];
     Disp_DrawStr(ALT_LEFT, 13u, I18N_Text(modes[s_mode]));
     mini_snprintf(text, sizeof(text), "%u/3", (unsigned)s_mode + 1u);
@@ -231,8 +231,8 @@ static void draw_sampling(void) {
 
 static void handle_action(UI_ACTION action, const bmp180_sample_t *sample, uint8_t sample_valid,
                           int32_t standard_dm, uint8_t standard_valid) {
-    /* On the Tools icon page LEFT/RIGHT send UP/DOWN, and physical UP/DOWN
-     * send MINUS/PLUS. Preserve the physical increment direction. */
+    /* On the Tools icon page LEFT/RIGHT send UP/DOWN, and screen UP/DOWN
+     * send MINUS/PLUS after screen-relative key mapping. */
     uint8_t vertical = action == UI_ACTION_MINUS || action == UI_ACTION_PLUS;
     if (s_view == ALT_MEASURE) {
         if (action == UI_ACTION_NONE || indevActionIsRepeat())
@@ -295,7 +295,7 @@ void Altimeter_AppRun(ui_t *ui) {
     if (!s_active) {
         s_active = 1u;
         s_zero_valid = 0u;
-        s_mode = ALT_STD;
+        s_mode = ALT_CAL;
         s_view = ALT_MEASURE;
         s_status = ALT_STATUS_NONE;
         s_reference_pa = reference_load();

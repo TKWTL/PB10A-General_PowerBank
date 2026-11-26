@@ -465,6 +465,9 @@ parity bits. No option bytes have been changed by this commit.
 The SSD1306 initializes in native `U8G2_R0`. Game sessions, Leveler and
 Accel Calibration select `U8G2_R0` before each application draw. Menu draws
 apply the current Auto Rotation setting from the first frame after exit.
+Directional events and Powerbank continuous dimming keys follow the
+applied display rotation. Held directions are suppressed until release
+when the display flips; CONF is independent of rotation.
 
 ### SC7A20 gravity rotation and STOP1 wake (2026-11-20)
 

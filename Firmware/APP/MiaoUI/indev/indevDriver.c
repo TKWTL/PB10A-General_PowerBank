@@ -3,6 +3,7 @@
  * Repeating directions are queued until MiaoUI can draw a new frame.
  */
 #include "indev/indevDriver.h"
+#include "display/dispDriver.h"
 #include "buttons.h"
 #include "pm_api.h"
 #include "beep_service.h"
@@ -11,7 +12,7 @@
 #define KEY_EVENT_ENTER ((uint8_t)KeyIndex_Max)
 #define KEY_EVENT_BACK ((uint8_t)(KeyIndex_Max+1u))
 static uint8_t queue[KEY_QUEUE_SIZE],head,tail;
-static uint8_t conf_valid, conf_long, suppressed, action_repeat, s_continuous_lr;
+static uint8_t conf_valid, conf_long, suppressed, action_repeat, s_continuous_lr, s_key_rotation;
 static void clear_events(void){head=0u;tail=0u;}
 void indevClearPending(void) {
     clear_events();
@@ -31,12 +32,35 @@ uint8_t indevHasPending(void) {
 void indevInit(void) {
     Key_Init();clear_events();
     conf_valid=0u;conf_long=0u;suppressed=0u;
+    s_key_rotation = Disp_GetRotation();
+}
+
+/* Logical directions follow the frame already drawn on the OLED.
+ * Game/app rotation locks use native R0; CONF never changes meaning. */
+static uint8_t screen_key(uint8_t key, uint8_t flipped) {
+    if (!flipped)
+        return key;
+    switch (key) {
+    case KeyIndex_UP:
+        return KeyIndex_DOWN;
+    case KeyIndex_DOWN:
+        return KeyIndex_UP;
+    case KeyIndex_LEFT:
+        return KeyIndex_RIGHT;
+    case KeyIndex_RIGHT:
+        return KeyIndex_LEFT;
+    default:
+        return key;
+    }
 }
 
 uint8_t indevService_10ms(uint8_t continuous_lr) {
     uint8_t i, blocked, held = 0u;
     uint8_t mode_changed = s_continuous_lr != continuous_lr;
     s_continuous_lr = continuous_lr;
+    uint8_t rotation = Disp_GetRotation();
+    uint8_t rotation_changed = s_key_rotation != rotation;
+    s_key_rotation = rotation;
     KeyEdge_t edge;
     Key_DebounceService_10ms();Key_Scand();
     blocked=(uint8_t)(pm_api_ui_should_block() || pm_api_is_unstable_wake());
@@ -49,6 +73,12 @@ uint8_t indevService_10ms(uint8_t continuous_lr) {
             suppressed&=(uint8_t)~bit;
         else if(blocked)suppressed|=bit;
 
+        /* A held direction must not turn into a new opposite command when
+         * the display rotates, especially during continuous WLED dimming. */
+        if (rotation_changed && i != KeyIndex_CONF && edge != KeyEdge_Rising &&
+            (state == KeyState_ShortPress || state == KeyState_LongPress))
+            suppressed |= bit;
+
         if (i == KeyIndex_LEFT || i == KeyIndex_RIGHT) {
             if (mode_changed && edge != KeyEdge_Rising &&
                 (state == KeyState_ShortPress || state == KeyState_LongPress))
@@ -56,7 +86,7 @@ uint8_t indevService_10ms(uint8_t continuous_lr) {
             if (continuous_lr) {
                 if (!blocked && !(suppressed & bit) &&
                     (state == KeyState_ShortPress || state == KeyState_LongPress))
-                    held |= bit;
+                    held |= (uint8_t)(1u << screen_key(i, rotation));
                 continue;
             }
         }
@@ -78,7 +108,7 @@ uint8_t indevService_10ms(uint8_t continuous_lr) {
         else {
             uint8_t click = KEY_GetDASClick((KeyIndex_t)i);
             if (click && !blocked && !(suppressed & bit)) {
-                queue_event((uint8_t)(i | (edge == KeyEdge_Rising ? 0u : KEY_EVENT_REPEAT)));
+                queue_event((uint8_t)(screen_key(i, rotation) | (edge == KeyEdge_Rising ? 0u : KEY_EVENT_REPEAT)));
                 pm_api_refresh_idle();
             }
         }

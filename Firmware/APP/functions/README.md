@@ -66,7 +66,8 @@ them.
   their PM lock on leave.
 
 - `compass_app.c/.h`: magnetic heading with gravity-based tilt compensation,
-  vector EMA, rotating compass rose, eight directions and magnetic strength.
+  vector EMA, rotating compass rose with Fusion N/E/S/W glyphs, eight full
+  direction names, and magnetic strength.
   The displayed right edge (native SC7A20 -X) is forward; actual R2
   display rotation adds 180 degrees. `COMPASS_MAG_*_AXIS` defaults to
   Y,-X,Z based on the user's inferred mounting; verify against real north.
@@ -75,20 +76,21 @@ them.
   target. Short or long CONF exits. Invalid/stale samples, rapid acceleration,
   near-vertical forward axis or weak horizontal field suppress heading.
 - `compass_cal_app.c/.h`: guided six-pose magnetic offset calibration.
-  With the screen facing up (native SC7A20 Y-), aim its right edge N/E/S/W
-  in order. Then rest on the large face (Z-), aim right north, and flip
-  around the screen-left/right axis (Z+) without changing heading. Each
-  short CONF captures 16 new magnetic samples at the 40 ms target, within
-  5 degrees of the expected gravity axis. Stale data or a 50 mG per-axis
-  span aborts that capture; LEFT redoes the previous pose; long CONF exits.
-  The last two poses reuse the Leveler horizon, with progress at the bottom.
-  The bias is (M5+M6-MN+MS)/2, with a nondegenerate N/S and E/W check;
-  three native-axis uint16_t offsets (32768 = zero mG), CRC16 and tag use
-  twelve bytes of .noinit. Statistics remains raw; reset retention requires
-  powered SRAM. Calibration locks R0; the leave hook restores sampling/PM.
+  First rest on the large face (Z-), then turn it upside down (Z+).
+  The remaining four poses use screen-up (Y-) north/east/south/west.
+  The arrow always points screen-right. Under R2 the requested heading
+  shifts by 180 degrees so the native edge retains its required heading.
+  Short CONF captures 16 new samples; LEFT redoes the previous pose.
+  Flat entry/hold tolerances are 8/10 degrees and 100 mG span, versus
+  5 degrees and 50 mG for the four screen-up poses. Short stale gaps
+  preserve progress, and three fresh bad flat poses abort the capture.
+  Any key exits after success. The six-face storage order and existing
+  bias formula are preserved. Offsets use twelve bytes of .noinit;
+  Statistics remains raw. The leave hook restores sampling/PM.
 - `altimeter_app.c/.h`: pressure, temperature and altitude from the raw
-  BMP180 sample. LEFT/RIGHT cycle Std Alt, Cal Alt and Rel Alt. UP/DOWN
-  open the known-elevation editor in Cal Alt or zero Rel Alt. In the editor,
+  BMP180 sample. LEFT/RIGHT cycle Calib. Height, Relative Height and
+  Standard Height, starting with calibrated height. UP/DOWN open the
+  known-elevation editor or zero relative height. In the editor,
   UP/DOWN adjust metres (1/10/100 m with repeat), RIGHT starts averaging
   16 fresh samples, and LEFT cancels. CONF exits the tool and discards
   edits or samples in progress. An inverse lookup and the pressure ratio
