@@ -10,6 +10,32 @@
 
 PB10A 的 Keil 工程选择整数，应用通过现有的 Protothread 任务访问驱动。驱动头文件默认保留浮点接口。FPU 由目标工程的编译选项配置。
 
+## 采样电阻和电流校准
+
+整数与浮点模式的校准参数独立，均在 `sw6306.h` 中编译期配置。
+电压与电流接口仍返回整数 mV、mA；浮点模式仅在换算时使用浮点。
+
+| 参数 | 整数模式 | 浮点模式 |
+| --- | --- | --- |
+| BAT 校准 | `BATT_CURRENT_NUM/DEN = 1/1` | `BATT_RSHUNT_NOMINAL / BATT_RSHUNT_ACTUAL = 5.0f/5.0f`（mΩ） |
+| BUS 校准 | `BUS_CURRENT_NUM/DEN = 497/446` | `BUS_CURRENT_GAIN = 4.97f/4.46f` |
+
+BAT 增益为标称采样电阻与实际采样电阻之比，两个电阻值必须为正。
+BUS 增益来自 4.97 A 参考仪表读数、4.46 A SW6306 未补偿读数的
+单点实测，约为 1.11435；它不是对实际电阻值的认定。
+
+| 路径 | 当前实现 |
+| --- | --- |
+| ADC 镜像 | IBAT = raw × 5 mA，IBUS = raw × 4 mA；不补偿 |
+| `ReadIBAT` / `ReadIBUS` | 在读镜像时乘对应增益，四舍五入并饱和至 65535 mA |
+| `ReadIBattLimit` | 对实时电池限流寄存器译码后的 mA 值乘 BAT 增益 |
+| Init 的 CHG_IBAT / DCHG_IBAT | 目标电流除以 BAT 增益，再按 100 mA/LSB 四舍五入、饱和至 255 |
+| 浮点库仑计能量 | 原始码 × 标称 mWh/LSB × BAT 增益；Rounded 接口最后取整 |
+| 整数库仑计能量 | 先四舍五入标称 mWh，再乘 NUM/DEN 并取整 |
+
+BUS 校准只修正电流读数；不修改 BUS 硬件限流、PD/PPS/UFCS 档位、
+外部电流注入 `IextSet` 或 ADC 原始镜像。BAT 默认 1/1，保持原限流设置。
+
 ## RTOS 移植
 
 阻塞模式的传输函数在调用任务内等待完成。定义 `SW6306_BLOCKING_PORT_HEADER` 为带引号的端口头文件名并提供以下接口。省略端口头文件时使用 PB10A 的 `I2C_RegRead`、`I2C_RegWrite` 和 `Millis_Delay`。

@@ -256,15 +256,13 @@ priority. Real 100W needs a compatible 20V/5A source, rated cable
 and verified battery/thermal margins; setting PISET alone cannot
 guarantee it.
 
-The old runtime floating-point battery SHUNT configuration
-(`SetBattRShunt(float)` / `GetBattRShunt()`) was removed from
-PB10A. Current scale uses four compile-time integers in
-`BSP/SW6306/sw6306.h`: BAT numerator/denominator **1/1** and
-BUS readout numerator/denominator **1/1**. The previous temporary
-2/1 BUS compensation has been removed. Internal SW6306 BUS current
-limits are unaffected. The
-separate energy calculation still uses float for fractional mWh,
-not for a mutable SHUNT coefficient. See the
+Runtime floating-point SHUNT setters remain removed. The integer build
+uses BAT 1/1 and BUS 497/446; the float build uses compile-time BAT
+nominal/actual shunt values (5.0/5.0 mΩ) and BUS gain 4.97/4.46.
+The BUS gain is from the user's single 4.97 A / 4.46 A calibration
+point, applied only to current readback. Internal SW6306 BUS current
+limits are unaffected. See the SW6306 BSP README for both numeric paths.
+Earlier measurements are in the
 [SW6306 debug note](../../Docs/Debug/2026-11-19_sw6306_monitor.md).
 
 ### Fault history and non-modal notices
