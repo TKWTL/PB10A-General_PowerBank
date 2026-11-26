@@ -112,6 +112,9 @@ owner scans every 5 ms while Aux-A is active and cuts output on any
 valid VOUT reading at or below 2 V. Current below 50 mA for 60 continuous
 seconds also cuts output. Use `PowerAlgo_AuxA_SetAutoOffCurrent()` to
 adjust the threshold. Display readings below 10 mA show as zero.
+AUX voltage/current use measured ADC data in all output states, including
+OFF. The first measurement replaces `--`; subsequent display updates retain
+the last reading until a new valid ADC result is available.
 
 Active and pending external loads pause automatic sleep. Forced STOP1
 turns both outputs off and resolves the shared meter path before ADC
@@ -148,8 +151,9 @@ level 32, 100 ms dots and 300 ms dashes, 1.5 s on-time in a 2.7 s
 transmission. WLED_SOS_PEAK_MW
 (15000) and WLED_SOS_AVG_MW (2500) yield a 9 s cycle.
 Lower allowed average power extends cooldown; thermal pause keeps
-the external-load reservation and drives PWM low. Meter interruptions
-and re-entry preserve the current group's cooling interval.
+the external-load reservation and drives PWM low. Meter handovers do
+not interrupt an active SOS sequence; re-entry preserves the current
+group's cooling interval.
 The user verified a hotspot below 80 °C with the previous SOS timing.
 
 UP cycles actual BUS output paths: none -> request A1; A1 -> remove A1
@@ -158,7 +162,9 @@ for both). C1 input/charging is not interrupted by source-only port events.
 The owner confirms removal before requesting another port. Manual OFF
 keeps WLED/AUX demand, allowing automatic A2 provisioning; attached but
 manually removed real ports remain ignored until they disconnect, reopen,
-or are selected again. During handover loads wait for a valid meter path.
+or are selected again. Only new load requests wait for a valid meter path;
+active outputs remain on during handover, provided common protection data
+remain valid and no cutoff condition is present.
 
 The SW6306 owner reuses a live C1/A1 path, activates a detected but idle
 real port (C1 before A1), or requests a shared synthetic A2 insertion

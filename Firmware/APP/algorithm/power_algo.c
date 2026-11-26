@@ -795,9 +795,11 @@ void PowerAlgo_ExtLoadRelease(uint8_t load) {
 
 ext_load_state_t PowerAlgo_ExtLoadState(uint8_t load, uint32_t now) {
     uint8_t inhibit = ext_inhibit(now);
-    if ((inhibit & ~EXT_INHIBIT_DATA) ||
-        ((s_ext_active & load) && (inhibit || !meter_ports_fresh(now))))
+    if (inhibit & ~EXT_INHIBIT_DATA)
         return EXT_LOAD_BLOCKED;
+    /* An active output needs valid protection data, not an uninterrupted meter path. */
+    if (s_ext_active & load)
+        return inhibit ? EXT_LOAD_BLOCKED : EXT_LOAD_READY;
     return !inhibit && meter_ready(now) ? EXT_LOAD_READY : EXT_LOAD_WAIT;
 }
 
@@ -1118,16 +1120,16 @@ static uint32_t s_aux_edge_at, s_aux_sample_at, s_aux_low_since, s_aux_wait_at;
 static uint8_t s_aux_low_current;
 static unsigned s_aux_auto_off_ma = 50u;
 
-static void aux_publish(uint8_t valid, uint16_t mv, uint16_t ma) {
+static void aux_publish(uint16_t mv, uint16_t ma) {
     if (ma < AUX_CURRENT_ZERO_MA)
         ma = 0u;
-    s_monitor.aux_valid = valid;
+    s_monitor.aux_valid = 1u;
     s_monitor.aux_mv = mv;
     s_monitor.aux_ma = ma;
     s_power_values[POWER_AUX_VOLTAGE] = (int)((mv + 5u) / 10u);
     s_power_values[POWER_AUX_CURRENT] = (int)((ma + 5u) / 10u);
-    s_power_data[POWER_AUX_VOLTAGE].ptr = valid ? &s_power_values[POWER_AUX_VOLTAGE] : NULL;
-    s_power_data[POWER_AUX_CURRENT].ptr = valid ? &s_power_values[POWER_AUX_CURRENT] : NULL;
+    s_power_data[POWER_AUX_VOLTAGE].ptr = &s_power_values[POWER_AUX_VOLTAGE];
+    s_power_data[POWER_AUX_CURRENT].ptr = &s_power_values[POWER_AUX_CURRENT];
 }
 
 static void aux_output_off(void) {
@@ -1140,7 +1142,6 @@ static void aux_output_off(void) {
 static void aux_disable(void) {
     aux_output_off();
     s_aux_state = AUX_STATE_OFF;
-    aux_publish(1u, 0u, 0u);
     PowerAlgo_ExtLoadRelease(EXT_LOAD_AUX);
 }
 
@@ -1157,7 +1158,6 @@ static void aux_enable(void) {
         return;
     s_aux_state = AUX_STATE_WAIT_METER;
     s_aux_wait_at = Millis();
-    aux_publish(0u, 0u, 0u);
 }
 
 static void aux_start(void) {
@@ -1167,7 +1167,6 @@ static void aux_start(void) {
     s_aux_sample_at = now + AUX_STARTUP_MS;
     s_aux_state = AUX_STATE_STARTUP;
     s_monitor.aux_enabled = 1u;
-    aux_publish(0u, 0u, 0u);
     /* Discard samples taken with the previous output state. */
     adc_batch_begin(now);
 }
@@ -1243,14 +1242,6 @@ static void aux_service(uint32_t now) {
             aux_disable();
             PowerAlgo_ExtLoadTimeout();
         }
-    } else if (state == EXT_LOAD_WAIT) {
-        /* Preserve demand through a real/fake port handover; never release
-         * and reacquire the shared meter reservation just to pause AUX. */
-        aux_output_off();
-        s_aux_state = AUX_STATE_WAIT_METER;
-        s_aux_wait_at = now;
-        aux_publish(0u, 0u, 0u);
-        PowerAlgo_ExtLoadSetActive(EXT_LOAD_AUX, 0u);
     }
 }
 
@@ -1341,15 +1332,10 @@ static uint8_t aux_measure(const uint16_t *raw, uint32_t vdda, uint16_t *mv, uin
     return 1u;
 }
 
-static void aux_invalid_sample(void) {
-    s_aux_low_current = 0u;
-    aux_publish(0u, 0u, 0u);
-}
-
 static void aux_protect(uint32_t now, uint32_t vdda) {
     uint16_t mv, ma;
     if (!aux_measure(s_dma, vdda, &mv, &ma)) {
-        aux_invalid_sample();
+        s_aux_low_current = 0u;
         return;
     }
     if (mv <= AUX_SHORT_VOLTAGE_MV) {
@@ -1378,13 +1364,9 @@ static void adc_accumulate_display(void) {
         avg[i] = (uint16_t)((s_adc_accumulator[i] + ADC_AVERAGE_SAMPLES / 2u) / ADC_AVERAGE_SAMPLES);
 
     uint32_t vdda = adc_vdda(avg);
-    if (s_aux_state == AUX_STATE_ON) {
-        uint16_t mv, ma;
-        if (vdda && aux_measure(avg, vdda, &mv, &ma))
-            aux_publish(1u, mv, ma);
-        else
-            aux_publish(0u, 0u, 0u);
-    }
+    uint16_t mv, ma;
+    if (vdda && aux_measure(avg, vdda, &mv, &ma))
+        aux_publish(mv, ma);
 
     /* Retain tenths of a degree using the factory TS_CAL1/TS_CAL2 values. */
     int32_t cal_span = (int32_t)*TEMPSENSOR_CAL2_ADDR - (int32_t)*TEMPSENSOR_CAL1_ADDR;
@@ -1402,7 +1384,7 @@ static void adc_accumulate_display(void) {
 
 static void adc_scan_failed(void) {
     if (s_scan_for_protection)
-        aux_invalid_sample();
+        s_aux_low_current = 0u;
     if (s_scan_for_display) {
         s_adc_sample_count = ADC_AVERAGE_SAMPLES; /* abandon this batch */
         s_system_adc_valid = 0u;
@@ -1456,7 +1438,7 @@ void PowerAlgo_AddStatisticsItems(ui_page_t *page) {
     static const char *const names[POWER_ITEM_COUNT] = {" BUS Voltage V", " BUS Current A", " Aux-A Volt V", " Aux-A Curr A", " Chip Temp°C"};
     for (unsigned i = 0; i < POWER_ITEM_COUNT; ++i) {
         s_power_data[i].name = names[i];
-        s_power_data[i].ptr = (i == POWER_AUX_VOLTAGE || i == POWER_AUX_CURRENT) ? &s_power_values[i] : NULL;
+        s_power_data[i].ptr = s_monitor.aux_valid && (i == POWER_AUX_VOLTAGE || i == POWER_AUX_CURRENT) ? &s_power_values[i] : NULL;
         s_power_data[i].dataType = UI_DATA_FLOAT;
         s_power_data[i].actionType = UI_DATA_ACTION_RO;
         s_power_data[i].decimals = i == POWER_CHIP_TEMP ? 1u : 2u;
