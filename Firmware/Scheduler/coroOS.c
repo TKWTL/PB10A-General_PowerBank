@@ -1,6 +1,6 @@
 #include "coroOS.h"
 #if COROOS_USE_WATCHDOG
-#include "fault_record.h"
+#include "wdt.h"
 #endif
 
 #if COROOS_USE_IDLE_SLEEP

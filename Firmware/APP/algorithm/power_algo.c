@@ -24,6 +24,7 @@
 enum {
     BATTERY_CHARGE,
     BATTERY_VOLTAGE,
+    BATTERY_CURRENT,
     BATTERY_MAX_ENERGY,
     BATTERY_REMAIN_ENERGY,
     BATTERY_TEMP,
@@ -1458,7 +1459,7 @@ static void battery_publish_lifetime(void) {
 
 void PowerAlgo_AddBatteryItems(ui_page_t *page) {
     static const char *const names[BATTERY_ITEM_COUNT] = {
-        " Charge %", " Voltage V", " Full Wh", " Remaining Wh", " Batt Temp°C",
+        " Charge %", " Voltage V", " Current A", " Full Wh", " Remaining Wh", " Batt Temp°C",
         " State of Health %", " Equivalent Full Cycles", " Cap. Learning"};
     for (unsigned i = 0; i < BATTERY_ITEM_COUNT; ++i) {
         s_battery_data[i].name = names[i];
@@ -1470,6 +1471,7 @@ void PowerAlgo_AddBatteryItems(ui_page_t *page) {
         AddItem(names[i], UI_ITEM_DATA, 0, &s_battery_items[i], page, 0, 0);
     }
     s_battery_data[BATTERY_VOLTAGE].decimals = 2u;
+    s_battery_data[BATTERY_CURRENT].decimals = 2u;
     s_battery_data[BATTERY_TEMP].decimals = 1u;
     s_battery_data[BATTERY_SOH].decimals = 1u;
     battery_publish_lifetime();
@@ -1484,6 +1486,7 @@ static void sw6306_cache_adc(void) {
     s_power_data[POWER_BUS_CURRENT].ptr = valid ? &s_power_values[POWER_BUS_CURRENT] : NULL;
     s_power_data[POWER_CHIP_TEMP].ptr = valid ? &s_power_values[POWER_CHIP_TEMP] : NULL;
     s_battery_data[BATTERY_VOLTAGE].ptr = valid ? &s_battery_values[BATTERY_VOLTAGE] : NULL;
+    s_battery_data[BATTERY_CURRENT].ptr = valid ? &s_battery_values[BATTERY_CURRENT] : NULL;
     if (!valid) {
         sw6306_bus_read_failed();
         s_monitor.ntc_valid = 0u;
@@ -1505,6 +1508,7 @@ static void sw6306_cache_adc(void) {
     s_power_values[POWER_BUS_VOLTAGE] = (s_monitor.vbus_mv + 5u) / 10u;
     s_power_values[POWER_BUS_CURRENT] = (s_monitor.ibus_ma + 5u) / 10u;
     s_battery_values[BATTERY_VOLTAGE] = (s_monitor.vbat_mv + 5u) / 10u;
+    s_battery_values[BATTERY_CURRENT] = (s_monitor.ibat_ma + 5u) / 10u;
 }
 
 static void sw6306_cache_ntc(void) {

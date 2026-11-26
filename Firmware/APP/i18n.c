@@ -8,7 +8,7 @@ static i18n_language_t s_language = I18N_LANG_ZH_CN;
 static const struct {
     const char *en, *zh;
 } s_catalog[] = {
-    {"  PB10A Power Bank\n    PD/PPS/UFCS\nhttps://github.com/TKWTL/PB10A-General_PowerBank", " PB10A移动电源\n   PD/PPS/UFCS\nhttps://github.com/TKWTL/PB10A-General_PowerBank"},
+    {"  PB10A Power Bank\n    PD/PPS/UFCS\nGithub: https://github.com/TKWTL/PB10A-General_PowerBank", " 多口移动电源PB10A\n   支持PD/PPS/UFCS\nGithub: https://github.com/TKWTL/PB10A-General_PowerBank"},
     {" A1 Fast Out", " A1快充输出"},
     {" AFC Input", " AFC输入"},
     {" AFC Output", " AFC输出"},
@@ -36,6 +36,7 @@ static const struct {
     {" Click Beep", " 按键音"},
     {" Contrast", " 对比度"},
     {" Count: %u", " 次数:%u"},
+    {" Current A", " 电流A"},
     {" Date", " 日"},
     {" Dismiss", " 解除"},
     {" Duration", " 时长"},

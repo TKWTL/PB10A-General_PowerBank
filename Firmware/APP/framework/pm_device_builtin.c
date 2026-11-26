@@ -10,7 +10,7 @@
 #include "pm_api.h"
 #include "rtc.h"
 #include "coroOS.h"
-#include "fault_record.h"
+#include "wdt.h"
 #define OLED_PM_TIMEOUT_MS 500u
 /* Production Radio battery inspection period: 30 minutes from 1Hz ck_spre. */
 #define RADIO_WUT_SECONDS 1800u

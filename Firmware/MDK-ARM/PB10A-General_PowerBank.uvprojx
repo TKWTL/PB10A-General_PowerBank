@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_FULL_LL_DRIVER,USE_HAL_DRIVER,STM32G070xx,SC7A20_USE_FLOAT_API=0,BMP180_USE_FLOAT_API=0,SW6306_USE_FLOAT_API=0,COROOS_USE_IDLE_SLEEP=1,COROOS_USE_WATCHDOG=1</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G0xx/Include;../Drivers/CMSIS/Include;../APP;../Scheduler;../Scheduler/pt1.4;../APP/framework;../APP/algorithm;../APP/functions;../APP/MiaoUI;../BSP/Display;../BSP/Time;../BSP/u8g2;../BSP/SW6306;../BSP/SC7A20;../BSP/RDA5807;../BSP/BMP180;../BSP/MMC5603;../BSP/Buttons;../LIB</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc;../Drivers/STM32G0xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G0xx/Include;../Drivers/CMSIS/Include;../APP;../Scheduler;../Scheduler/pt1.4;../APP/framework;../APP/algorithm;../APP/functions;../APP/MiaoUI;../BSP/Display;../BSP/Time;../BSP/WDT;../BSP/u8g2;../BSP/SW6306;../BSP/SC7A20;../BSP/RDA5807;../BSP/BMP180;../BSP/MMC5603;../BSP/Buttons;../LIB</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -1193,6 +1193,11 @@
               <FileName>millis.c</FileName>
               <FileType>1</FileType>
               <FilePath>../BSP/Time/millis.c</FilePath>
+            </File>
+            <File>
+              <FileName>wdt.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../BSP/WDT/wdt.c</FilePath>
             </File>
             <File>
               <FileName>bmp180.c</FileName>

@@ -24,13 +24,13 @@ remain ASCII; no 24px Chinese glyphs are needed.
 ## Shared 12px Chinese subset
 
 `font_fusion_pixel_p12_zhcn` remains the only Chinese-capable font.
-The 262 Han glyphs are from the supplied
+The 264 Han glyphs are from the supplied
 `fusion-pixel-12px-proportional-zh_hans.bdf` (FONT_VERSION 2026.09.25).
 The 96 Latin/degree glyphs are restored from PB10A's earlier
-MiaoUI-based font, byte-for-byte. The Han glyph records and Unicode
-index are unchanged. The 358-glyph array occupies 8,130 bytes
-(previously 7,954); the ASCII/degree advance is 6px and Han advance
-is 12px. Layout still measures actual text width.
+MiaoUI-based font, byte-for-byte. Existing Han glyph records are
+unchanged; the Unicode index was rebuilt for the About text. The
+360-glyph array occupies 8,175 bytes; the ASCII/degree advance is 6px
+and Han advance is 12px. Layout still measures actual text width.
 
 `font_home_h6w4` remains byte-for-byte identical. SOS and magnetic
 calibration no longer use it; powerbank, I2C scanner, game interiors

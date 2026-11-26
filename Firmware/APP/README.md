@@ -54,8 +54,8 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
   English with h6w4. SOS and magnetic calibration use the shared 12px font.
   ENUM values are at most 30px in the shared 12px font.
   Shared prompts use canonical English keys; numeric editors reuse menu
-  labels without their leading indent. The catalog has 232 unique entries
-  and the 12px subset contains precisely the 262 Han it uses.
+  labels without their leading indent. The catalog has 233 unique entries
+  and the 12px subset contains precisely the 264 Han it uses.
 - `BSP/BMP180` ports Collar-Radio compensation code with Cortex-M0+ safe endian calibration; `BSP/MMC5603` supports register I/O, product ID and low-power configuration
 - `Core/Src/i2c.c` USER CODE owns the LL I2C1 master state machine and IRQ completion, including new `ASYNC_I2C_Transmit/Receive`, asynchronous scanner probe and bounded abort handling. Old `BSP/I2C/bsp_i2c.c/.h` were removed and Keil references updated. The sensor and radio application paths use IRQ-completed register transactions; legacy synchronous compatibility functions remain in the BSP drivers. **SW6306 now enables `SW6306_USE_PROTOTHREAD`** and uses the IRQ-backed asynchronous transfer API from its own exclusive service coroutine. Other modules must not directly run another SW6306 protothread concurrently.
 - In the I2C transaction layer, synchronous `I2C_TransactionBegin/End` brackets non-yielding legacy transactions. Asynchronous operations use an independent single-in-flight admission check and persistent completion flags; on timeout, a stalled abort requests foreground bus recovery. Do not use stack buffers for asynchronous transfers
@@ -232,9 +232,9 @@ SW6306 ADC values are cached once in physical units and used by the
 dashboard, common protection, ETA and Statistics conversion. Each
 protection sample retains its independent freshness tracking.
 
-Statistics → Battery shows charge percentage, pack voltage in volts,
-full and remaining energy in Wh, and Batt Temp°C from the SW6306 NTC to one
-decimal place. The SW6306 service supplies the readings from its ADC, status
+Statistics → Battery shows charge percentage, pack voltage in volts and
+pack current in amperes (both to two decimal places), full and remaining
+energy in Wh, and Batt Temp°C from the SW6306 NTC to one decimal place. The SW6306 service supplies the readings from its ADC, status
 and capacity caches. Unavailable readings display as `--`.
 State of Health %, Equivalent Full Cycles and Cap. Learning are appended to this page.
 
@@ -465,8 +465,8 @@ Radio page is not visible.
   1 s; no automatic MCU reset or replay of the failed command. NACK alone
   is not a recovery trigger. Inspect `g_i2c_recovery_attempts` and
   `g_i2c_recovery_failures` in the debugger.
-- `COROOS_USE_WATCHDOG=1` enables WWDG in PB10A. It starts before
-  application initialization, after the CubeMX clock/peripheral setup.
+- `COROOS_USE_WATCHDOG=1` enables WWDG in PB10A via `BSP/WDT/wdt.c/h`.
+  It starts before application initialization, after the CubeMX clock/peripheral setup.
   At 64 MHz PCLK, prescaler 128, counter/window 0x7F gives nominal
   524.288 ms. Feed only after a complete scheduler round with an advancing
   Millis tick, before ordinary Sleep; refresh once immediately before

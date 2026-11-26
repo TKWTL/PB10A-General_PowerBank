@@ -1,7 +1,7 @@
 /* PB10A task table: MiaoUI, OLED DMA, PM and shared services. */
 #include "app_task.h"
 #include "coroOS.h"
-#include "fault_record.h"
+#include "wdt.h"
 #include "miaoui.h"
 #include "ssd1306_display.h"
 #include "pm_api.h"

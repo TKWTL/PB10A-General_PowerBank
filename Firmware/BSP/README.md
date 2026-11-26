@@ -7,6 +7,7 @@
 - `oled.c/.h`：显示屏驱动与几何绘制（具体控制器时序由本层驱动封装）
 - `key.c/.h`：按键扫描、消抖、长按/组合键事件
 - `APP/framework/beep_service.c/.h`：TIM3 PWM 蜂鸣器与提示音队列（不再保留独立 `beep_hw` 文件）
+- `WDT/wdt.c/.h`：WWDG 调度看门狗、休眠边界喂狗与 NOINIT 调度现场
 - `console.c/.h`：调试串口、命令解析（CLI）
 
 规则：
