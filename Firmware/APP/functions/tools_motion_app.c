@@ -263,7 +263,7 @@ void Motion_LevelerRun(ui_t *ui) {
         uint8_t white=1u;
         Disp_SetDrawColor(&white);
         Disp_SetFont(UI_FONT);
-        Disp_DrawStr(17u,34u,"SC7A20 waiting");
+        Disp_DrawStr(17u, 34u, I18N_Text("SC7A20 waiting"));
         Disp_SendBuffer();
         return;
     }

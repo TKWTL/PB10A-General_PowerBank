@@ -27,6 +27,7 @@
 #include "widget/text.h"
 #include "core/ui.h"
 #include "display/dispDriver.h"
+#include "i18n.h"
 #include "string.h"
 
 /* UTF-8-safe paragraph wrapping based on actual glyph advance widths.
@@ -40,7 +41,7 @@ void Text_Widget(ui_t *ui) {
     const int left = 4, right = UI_HOR_RES - 5;
     int font_height;
     if(!ui || !ui->nowItem || !ui->nowItem->element || !ui->nowItem->element->text) return;
-    ptr=(ui->nowItem->element->text->ptr);
+    ptr = I18N_Text(ui->nowItem->element->text->ptr);
     font=UI_FONT;
     font_height=ui->nowItem->element->text->fontHight;
     Disp_SetFont(font);

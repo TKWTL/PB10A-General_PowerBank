@@ -12,6 +12,7 @@
 #include "time_service.h"
 #include "millis.h"
 #include "mini_format.h"
+#include "i18n.h"
 
 #define RADIO_MENU_COUNT 5u
 static uint8_t s_menu_open,s_menu_index,s_view_entered;
@@ -189,11 +190,12 @@ static void radio_draw_menu(ui_t *ui) {
     uint8_t i,fg,xor_color=2u;
     uint16_t width_target;
     const char *selected_label=0;
-    char option[36];
-    const char *mode=s_snapshot.mode==RADIO_MODE_SEARCH?"Search":
-    s_snapshot.mode==RADIO_MODE_FREQ?"Frequency":"Preset";
-    const char *power=s_snapshot.power_mode==RADIO_POWER_ON?"ON":
-    s_snapshot.power_mode==RADIO_POWER_OFF?"OFF":"AUTO";
+    const char *mode = I18N_Text(s_snapshot.mode == RADIO_MODE_SEARCH ? "Search" : s_snapshot.mode == RADIO_MODE_FREQ ? "Frequency"
+                                                                                                                      : "Preset");
+    const char *power = I18N_Text(s_snapshot.power_mode == RADIO_POWER_ON ? "ON" : s_snapshot.power_mode == RADIO_POWER_OFF ? "OFF"
+                                                                                                                            : "AUTO");
+    const char *option = I18N_Text(s_snapshot.mode == RADIO_MODE_PRESET ? "-All Clear and Seek-" : radio_has_station_view(s_snapshot.frequency) ? "-Remove from List-"
+                                                                                                                                                : "-Add to station List-");
     if(!ui)return;
     Disp_SetMaxClipWindow();
     Disp_SetDrawColor(&ui->bgColor);
@@ -202,24 +204,18 @@ static void radio_draw_menu(ui_t *ui) {
     Disp_SetDrawColor(&fg);
     Disp_SetFont(font_fusion_pixel_p12_zhcn);
     Disp_DrawLine(0u,6u,127u,6u);
-    Disp_DrawStr(19u,10u,"-Radio Setting:-");
+    Disp_DrawStr(19u, 10u, I18N_Text("-Radio Setting:-"));
 
     for(i=0u;i<RADIO_MENU_COUNT;i++) {
         const uint8_t y=(uint8_t)(20u+i*10u);
-        if(i!=3u)Disp_DrawStr(2u,y,fixed_labels[i]);
-        if(i==1u)Disp_DrawStr(74u,y,power);
-        else if(i==2u)Disp_DrawStr(74u,y,mode);
-        else if(i==3u) {
-            if(s_snapshot.mode==RADIO_MODE_PRESET)
-                (void)mini_snprintf(option,sizeof(option),"-All Clear and Seek-");
-            else
-                (void)mini_snprintf(option,sizeof(option),"%s",
-                radio_has_station_view(s_snapshot.frequency)?
-                "-Remove from List-":"-Add to station List-");
-            Disp_DrawStr(1u,y,option);
-        }
-        if(i==s_menu_index)
-            selected_label=i==3u?option:fixed_labels[i];
+        const char *label = i == 3u ? option : I18N_Text(fixed_labels[i]);
+        Disp_DrawStr(i == 3u ? 1u : 2u, y, label);
+        if (i == 1u)
+            Disp_DrawStr(74u, y, power);
+        else if (i == 2u)
+            Disp_DrawStr(74u, y, mode);
+        if (i == s_menu_index)
+            selected_label = label;
     }
     width_target=(uint16_t)(selected_label?
         Disp_GetUTF8Width(selected_label)+2u:2u);

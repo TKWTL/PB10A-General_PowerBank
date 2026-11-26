@@ -14,6 +14,7 @@
 #include "battery_algo.h"
 #include <string.h>
 #include "mini_format.h"
+#include "i18n.h"
 
 #define POWER_SW_SLEEP_BLOCK 0x08u /* separate from scanner (0x02) and radio (0x04) */
 #define SW_REINIT_DELAY_MS 5000u
@@ -702,13 +703,13 @@ void PowerAlgo_UpdateFaultItems(ui_t *ui) {
     power_fault_view_t view;
     PowerAlgo_GetFaultView(&view);
     if (!view.code)
-        (void)mini_snprintf(s_fault_labels[0], sizeof(s_fault_labels[0]), " NO FAULT");
+        (void)mini_snprintf(s_fault_labels[0], sizeof(s_fault_labels[0]), "%s", I18N_Text(" NO FAULT"));
     else
         (void)mini_snprintf(s_fault_labels[0], sizeof(s_fault_labels[0]), " E%02u %s", (unsigned)view.code,
-                            !view.valid ? "UNKNOWN" : view.active ? "ACTIVE"
-                                                                  : "HISTORY");
-    (void)mini_snprintf(s_fault_labels[1], sizeof(s_fault_labels[1]), " %s", view.code ? PowerAlgo_NoticeText(view.code) : "--");
-    (void)mini_snprintf(s_fault_labels[2], sizeof(s_fault_labels[2]), " Count: %u", (unsigned)view.count);
+                            I18N_Text(!view.valid ? "UNKNOWN" : view.active ? "ACTIVE"
+                                                                            : "HISTORY"));
+    (void)mini_snprintf(s_fault_labels[1], sizeof(s_fault_labels[1]), " %s", view.code ? I18N_Text(PowerAlgo_NoticeText(view.code)) : "--");
+    (void)mini_snprintf(s_fault_labels[2], sizeof(s_fault_labels[2]), I18N_Text(" Count: %u"), (unsigned)view.count);
 }
 
 void PowerAlgo_AddFaultItems(ui_page_t *page) {

@@ -44,7 +44,14 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 - `Scheduler/coroOS.*` now wraps the actual Protothreads 1.4 (`Scheduler/pt1.4/pt.h`, `pt-sem.h`, `lc-switch.h`), as in Handheld-Fan; ten separate cooperative tasks are registered (not FreeRTOS, no priorities)
 - `APP/framework/beep_service.c` consolidates the former beep hardware PWM and nonblocking melody sequencer; `APP/framework/time_service.c` consolidates RTC calendar/uptime calculations with the MiaoUI time editor. Remaining device logic, fault recorder and system algorithms reside in `APP/algorithm/`
 - `APP/functions/` hosts independent user-facing MiaoUI applications. Powerbank displays cached SW6306 voltage, current, percentage and protocol; Radio is forced low-power at boot and starts only when its WORD page is entered (or kept running in explicit background ON mode)
-- `APP/i18n.c/h` defines a shared localization interface and placeholder English-only catalog
+- `APP/i18n.c/h` defines the shared localization interface (still English
+  passthrough). Text/icon menu labels, parameter/enum/string values, About,
+  fault history and toast headings/reasons, radio settings and standalone
+  tool prompts resolve through `I18N_Text()` at presentation time.
+  Game interiors, I2C scanner and the powerbank/radio dashboards remain
+  English. Menu widths and scrolling measure the resolved strings.
+  Compact ASCII-only fonts and translated layout/glyph coverage must be
+  reviewed when the Chinese catalog is added.
 - `BSP/BMP180` ports Collar-Radio compensation code with Cortex-M0+ safe endian calibration; `BSP/MMC5603` supports register I/O, product ID and low-power configuration
 - `Core/Src/i2c.c` USER CODE owns the LL I2C1 master state machine and IRQ completion, including new `ASYNC_I2C_Transmit/Receive`, asynchronous scanner probe and bounded abort handling. Old `BSP/I2C/bsp_i2c.c/.h` were removed and Keil references updated. The sensor and radio application paths use IRQ-completed register transactions; legacy synchronous compatibility functions remain in the BSP drivers. **SW6306 now enables `SW6306_USE_PROTOTHREAD`** and uses the IRQ-backed asynchronous transfer API from its own exclusive service coroutine. Other modules must not directly run another SW6306 protothread concurrently.
 - In the I2C transaction layer, synchronous `I2C_TransactionBegin/End` brackets non-yielding legacy transactions. Asynchronous operations use an independent single-in-flight admission check and persistent completion flags; on timeout, a stalled abort poisons the HAL adapter until reset. Do not use stack buffers for asynchronous transfers
@@ -484,6 +491,9 @@ parity bits. No option bytes have been changed by this commit.
 
 ### Display flip orientation
 
+Contrast is adjustable from level 1 to 15 (raw 3 to 255); level 0 is
+excluded because the SSD1315 panel blanks at zero contrast.
+
 The SSD1306 initializes in native `U8G2_R0`. Tetris selects `U8G2_R1`
 (64x128, same physical 90-degree CCW viewing orientation as Pac-Man).
 Other games, Leveler and Accel Calibration select `U8G2_R0`. Menu draws
@@ -580,9 +590,9 @@ thresholds must still be verified on real hardware.
   waits 100 ms to allow a concurrent debounced headphone event to win.
   A higher-priority target can replace a temporary lower-priority
   application without losing the original bookmark. No nested stack.
-- `Settings > System`: `Headphone Nav`, `USB Port Nav` and
-  `Aux-A Nav` are three independent, default-OFF, RAM-only
-  switches. They control page changes,
+- `Settings > Display`: `Headphone Nav`, `USB Port Nav` and
+  `Aux-A Nav` are three independent, default-ON, RAM-only switches
+  immediately before `!Burn-in Test`. They control page changes,
   not the Radio power policy or SW6306 output mode. Radio's MiaoUI leave
   hook resets its view state; `ON` keeps running in the background,
   while `OFF` remains off when merely opening the page.

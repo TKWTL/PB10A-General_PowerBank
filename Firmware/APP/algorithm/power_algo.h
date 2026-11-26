@@ -55,7 +55,7 @@ typedef struct {
 void PowerAlgo_GetFaultView(power_fault_view_t *out);
 uint8_t PowerAlgo_NoticePending(void);
 uint8_t PowerAlgo_TakeNotice(power_notice_t *out);
-const char *PowerAlgo_NoticeText(uint8_t code);
+const char *PowerAlgo_NoticeText(uint8_t code); /* English I18N key */
 void PowerAlgo_AddFaultItems(ui_page_t *page);
 void PowerAlgo_UpdateFaultItems(ui_t *ui);
 void PowerAlgo_ExtLoadReportBlocked(void);

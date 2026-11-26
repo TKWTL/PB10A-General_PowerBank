@@ -136,7 +136,7 @@ static void capture_update(const sc7a20_sample_t *a, uint8_t accel_valid,
 }
 
 static void center_text(uint16_t y, const char *text) {
-    Disp_DrawCentered(y, text, 0u);
+    Disp_DrawCentered(y, I18N_Text(text), 0u);
 }
 
 static void draw_cal(uint8_t data_valid, uint8_t pose_valid) {
@@ -189,9 +189,9 @@ static void draw_cal(uint8_t data_valid, uint8_t pose_valid) {
         Disp_SetDrawColor(&white);
         Disp_DrawLine(0u, 52u, UI_HOR_RES - 1u, 52u);
         Disp_SetFont(font_home_h6w4);
-        mini_snprintf(text, sizeof(text), "CAL %u/6 %u/16", (unsigned)(s_step + 1u), (unsigned)s_capture.count);
+        mini_snprintf(text, sizeof(text), I18N_Text("CAL %u/6 %u/16"), (unsigned)(s_step + 1u), (unsigned)s_capture.count);
         Disp_DrawStr(2u, 62u, text);
-        Disp_DrawStr(76u, 62u, !s_sampling && data_valid && pose_valid ? "L:Prev CONF" : "L:Prev");
+        Disp_DrawStr(76u, 62u, I18N_Text(!s_sampling && data_valid && pose_valid ? "L:Prev CONF" : "L:Prev"));
         Disp_SetFont(UI_FONT);
     }
     Disp_SendBuffer();

@@ -7,14 +7,15 @@
 #include "core/ui_toast.h"
 #include "ssd1306_display.h"
 #include "sc7a20_algo.h"
+#include "system_algo.h"
 
 u8g2_t u8g2;
-/* SSD1306 contrast levels are mapped to 0..255. */
+/* SSD1315: level 0 blanks the panel; levels 1..15 map to raw 3..255. */
 int Contrast = 5;
 
 static uint8_t disp_contrast_raw(int level) {
-    if(level < 0)
-        level = 0;
+    if (level < 1)
+        level = 1;
     else if(level > 15)
         level = 15;
 
@@ -63,7 +64,7 @@ void Create_Disp_Parameters(ui_t *ui) {
     contrast_data.dataType = UI_DATA_INT;
     contrast_data.actionType = UI_DATA_ACTION_RW;
     contrast_data.max = 15;
-    contrast_data.min = 0;
+    contrast_data.min = 1;
     contrast_data.step = 1;
     contrast_data.decimals = 0;
     contrast_element.data = &contrast_data;
@@ -90,6 +91,7 @@ void Add_Disp_Items(ui_page_t *parent_page) {
     AddItem(" Contrast", UI_ITEM_DATA, 0, &s_contrast_item, parent_page, 0, 0);
     AddItem(" Auto Rotation", UI_ITEM_DATA, 0, &s_rotation_item, parent_page, 0, 0);
     AddItem(" Background", UI_ITEM_DATA, 0, &s_background_item, parent_page, 0, 0);
+    System_AddNavItems(parent_page);
     AddItem("!Burn-in Test", UI_ITEM_WORD, 0, &s_burnin_item, parent_page, 0, Disp_BurninPage);
 }
 
@@ -124,7 +126,9 @@ void Disp_SetContrast(ui_t *ui) {
 }
 
 void Disp_SetContrast2(uint8_t contrast) {
-    if(contrast > 15u)
+    if (contrast < 1u)
+        contrast = 1u;
+    else if (contrast > 15u)
         contrast = 15u;
     Contrast = (int)contrast;
     SSD1306_Display_RequestContrast(disp_contrast_raw(Contrast));

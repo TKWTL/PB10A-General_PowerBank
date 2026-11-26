@@ -4,6 +4,7 @@
 #include "core/ui.h"
 #include "display/dispDriver.h"
 #include "fonts/fonts.h"
+#include "i18n.h"
 
 /* Original PB10A SOS tool icon, 30 x 30 XBM. */
 // clang-format off
@@ -25,7 +26,7 @@ const unsigned char img_sos[] = {
 static uint8_t s_warning_shown, s_started;
 
 static void center_text(uint16_t y, const char *text) {
-    Disp_DrawCentered(y, text, 0u);
+    Disp_DrawCentered(y, I18N_Text(text), 0u);
 }
 
 void SOS_AppOnLeave(ui_t *ui) {

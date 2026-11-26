@@ -3,9 +3,10 @@
 #include "ui_conf.h"
 void System_Reset(void);
 void System_AddSettingsItems(ui_page_t *page);
+void System_AddNavItems(ui_page_t *page);
 void System_AddStatisticsItems(ui_page_t *page);
 void System_Poll(void);
-/* RAM-only automatic page navigation switches; default disabled. */
+/* RAM-only automatic page navigation switches; default enabled. */
 uint8_t System_AutoRadioNavigationEnabled(void);
 uint8_t System_AutoPowerbankNavigationEnabled(void);
 uint8_t System_AutoAuxANavigationEnabled(void);

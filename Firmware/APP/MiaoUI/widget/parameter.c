@@ -28,6 +28,7 @@
 #include "mini_format.h"
 #include "core/ui.h"
 #include "display/dispDriver.h"
+#include "i18n.h"
 
 void ParameterSetting_Widget(ui_t *ui) {
     uint8_t color;
@@ -60,16 +61,17 @@ void ParameterSetting_Widget(ui_t *ui) {
 
         if(ui->nowItem->element->data->name == NULL) ui->nowItem->element->data->name = "Null!!";
 
+        const char *name = I18N_Text(ui->nowItem->element->data->name);
         switch (ui->nowItem->element->data->dataType) {
         case UI_DATA_ENUM: {
             const ui_data_t *data = ui->nowItem->element->data;
             int index = *(const int *)data->ptr;
             if (data->options && index >= data->min && index <= data->max)
-                mini_snprintf(value, sizeof(value), "%s:%s", data->name, data->options[index - data->min]);
+                mini_snprintf(value, sizeof(value), "%s:%s", name, I18N_Text(data->options[index - data->min]));
             break;
         }
         case UI_DATA_INT:
-            mini_snprintf(value, sizeof(value), "%s:%d ", (ui->nowItem->element->data->name), *(int *)(ui->nowItem->element->data->ptr));
+            mini_snprintf(value, sizeof(value), "%s:%d ", name, *(int *)(ui->nowItem->element->data->ptr));
             break;
         case UI_DATA_FLOAT:
             {
@@ -77,7 +79,7 @@ void ParameterSetting_Widget(ui_t *ui) {
                 char num[16];
                 UI_FmtScaled(num, sizeof(num), *(int *)(ui->nowItem->element->data->ptr),
                     ui->nowItem->element->data->decimals);
-                mini_snprintf(value, sizeof(value), "%s:%s ", (ui->nowItem->element->data->name), num);
+                mini_snprintf(value, sizeof(value), "%s:%s ", name, num);
                 break;
             }
     default:

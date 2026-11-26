@@ -33,6 +33,7 @@
 #include "widget/text.h"
 #include "pm_api.h"
 #include "mini_format.h"
+#include "i18n.h"
 #include "stdlib.h"
 #include "string.h"
 
@@ -380,7 +381,7 @@ uint8_t Notifications(ui_t *ui, int16_t x,int16_t y,int16_t targrtW,int16_t targ
     if ((ui->dialog.nowWide == targrtW) && (ui->dialog.nowHigh == targrtH)) {
         ui->dialog.times = 0;
         char value[20] = {0};
-        mini_snprintf(value, sizeof(value), "%s OK!", (ui->nowItem->itemName));
+        mini_snprintf(value, sizeof(value), I18N_Text("%s OK!"), I18N_Text(ui->nowItem->itemName));
         Disp_DrawStr(x + 5, y + targrtH/2, value);
         Change_UIState(ui, UI_ITEM_RUNING);
         return true;
@@ -710,7 +711,8 @@ static uint16_t UI_TextCursorWidth(const ui_page_t *page, const char *english) {
     const uint16_t available = (uint16_t)
     ((page->wideText ? UI_HOR_RES - 10u : UI_TITLE_X1) - UI_TITLE_X0);
     const uint32_t width = (uint32_t)
-    Disp_GetUTF8Width((english)) + 2u * UI_TEXT_CURSOR_SIDE_MARGIN;
+                               Disp_GetUTF8Width(I18N_Text(english)) +
+                           2u * UI_TEXT_CURSOR_SIDE_MARGIN;
     return (uint16_t)((width > available) ? available : width);
 }
 
@@ -770,9 +772,11 @@ static void Draw_TextPage(ui_t *ui, ui_page_t *Page, ui_item_t *now_Item, ui_ite
         }
 
         if (temp_item->animationY >= -UI_FX(UI_FONT_HIGHT) && temp_item->animationY <= UI_FX(UI_VER_RES + UI_FONT_HIGHT)) {
+            const char *label = I18N_Text(temp_item->itemName);
             if (temp_item->itemType == UI_ITEM_DATA && temp_item->element != NULL) {
                 const ui_data_t *data = temp_item->element->data;
                 char Data[12] = {0};
+                const char *display_data = Data;
                 Disp_SetClipWindow(UI_DATA_X0, UI_DATA_Y0, UI_DATA_X1, UI_DATA_Y1);
 
                 switch (data->dataType) {
@@ -797,35 +801,34 @@ static void Draw_TextPage(ui_t *ui, ui_page_t *Page, ui_item_t *now_Item, ui_ite
                     if (data->ptr && data->options) {
                         int index = *(const int *)data->ptr;
                         if (index >= data->min && index <= data->max)
-                            (void)mini_snprintf(Data, sizeof(Data), "%s", data->options[index - data->min]);
+                            display_data = I18N_Text(data->options[index - data->min]);
                     }
                     break;
 
                 case UI_DATA_STRING:
-                    if (temp_item->element->data->ptr != NULL) {
-                        strncpy(Data, (char *)(temp_item->element->data->ptr), sizeof(Data) - 1);
-                        Data[sizeof(Data) - 1] = '\0';
-                    }
+                    if (data->ptr)
+                        display_data = I18N_Text((const char *)data->ptr);
                     break;
 
             default:
                     break;
             }
 
-                if (temp_item->element->data->dataType != UI_DATA_SWITCH) Disp_DrawStr(UI_DATA_X0, (uint16_t)UI_FXI(temp_item->animationY), Data);
+            if (temp_item->element->data->dataType != UI_DATA_SWITCH)
+                Disp_DrawStr(UI_DATA_X0, (uint16_t)UI_FXI(temp_item->animationY), display_data);
             }
             Disp_SetClipWindow(UI_TITLE_X0, UI_TITLE_Y0, text_right, UI_TITLE_Y1);
 
 #if ( UI_TITLE_ROLL == 1 )
             switch (temp_item->rollState) {
             case UI_ITEM_ROLL_STOP:
-                if (Disp_GetUTF8Width((temp_item->itemName)) > (text_right - UI_TITLE_X0))
+                if (Disp_GetUTF8Width(label) > (text_right - UI_TITLE_X0))
                     temp_item->rollState = UI_ITEM_ROLL_FORWARD;
                 break;
 
             case UI_ITEM_ROLL_FORWARD:
                 temp_item->x--;
-                if ((Disp_GetUTF8Width((temp_item->itemName)) + temp_item->x) < (text_right - UI_TITLE_X0))
+                if ((Disp_GetUTF8Width(label) + temp_item->x) < (text_right - UI_TITLE_X0))
                     temp_item->rollState = UI_ITEM_ROLL_BACKWARD;
                 break;
 
@@ -839,7 +842,7 @@ static void Draw_TextPage(ui_t *ui, ui_page_t *Page, ui_item_t *now_Item, ui_ite
                 break;
             }
 #endif
-            Disp_DrawStr((uint16_t)(temp_item->x + UI_TEXT_CURSOR_SIDE_MARGIN), (uint16_t)UI_FXI(temp_item->animationY), (temp_item->itemName));
+            Disp_DrawStr((uint16_t)(temp_item->x + UI_TEXT_CURSOR_SIDE_MARGIN), (uint16_t)UI_FXI(temp_item->animationY), label);
         }
 
         temp_item = temp_item->nextItem;
@@ -850,9 +853,7 @@ static void Draw_TextPage(ui_t *ui, ui_page_t *Page, ui_item_t *now_Item, ui_ite
      * ASCII: preserve the existing top and extend bottom by 1px.
      * Both selection rectangles remain 13px tall; the row animation
      * tracks the chosen locale while horizontal padding stays unchanged. */
-    cursor_target_row = (int16_t)(UI_FXI(selected_anim_y) - UI_FONT_HIGHT
-        + UI_TEXT_CURSOR_Y_OFFSET - UI_TEXT_CURSOR_TOP_PADDING
-        - (0 ? 1 : 0));
+    cursor_target_row = (int16_t)(UI_FXI(selected_anim_y) - UI_FONT_HIGHT + UI_TEXT_CURSOR_Y_OFFSET - UI_TEXT_CURSOR_TOP_PADDING - (I18N_GetLanguage() == I18N_LANG_ZH_CN ? 1 : 0));
 
     Disp_SetClipWindow(UI_TITLE_X0, UI_TITLE_Y0, text_right, UI_TITLE_Y1);
     color = 2;
@@ -896,19 +897,20 @@ static void Draw_ImagePage(ui_t *ui, ui_page_t *Page, ui_item_t *nowItem, ui_ite
         temp_item = temp_item->nextItem;
     }
 
+    const char *label = I18N_Text(next_item->itemName);
 #if ( UI_TITLE_ROLL == 1 )
     // 根据temp_item的滚动状态选择不同的操作
     switch (next_item->rollState) {
     case UI_ITEM_ROLL_STOP: // 如果项目处于静止状态
         // 检查项目名称是否需要开始滚动
-        if(Disp_GetUTF8Width((next_item->itemName)) > UI_HOR_RES)
+        if (Disp_GetUTF8Width(label) > UI_HOR_RES)
             next_item->rollState = UI_ITEM_ROLL_FORWARD; // 如果名称宽度大于项目区域宽度，改变状态为向前滚动
         else tital_x = 0;
         break;
     case UI_ITEM_ROLL_FORWARD: // 如果项目处于向前滚动状态
         tital_x --; // 向左移动项目
         // 检查是否需要改变滚动方向
-        if((Disp_GetUTF8Width((next_item->itemName)) + tital_x) < UI_HOR_RES)
+        if ((Disp_GetUTF8Width(label) + tital_x) < UI_HOR_RES)
             next_item->rollState = UI_ITEM_ROLL_BACKWARD; // 如果项目移出左边界，改变状态为向后滚动
         break;
     case UI_ITEM_ROLL_BACKWARD: // 如果项目处于向后滚动状态
@@ -924,7 +926,7 @@ static void Draw_ImagePage(ui_t *ui, ui_page_t *Page, ui_item_t *nowItem, ui_ite
 
     color = ui->bgColor^0x01;;
     Disp_SetDrawColor(&color); // 设置特定的颜色，通常用于高亮显示
-    Disp_DrawStr(tital_x, UI_VER_RES - 2, (next_item->itemName));
+    Disp_DrawStr(tital_x, UI_VER_RES - 2, label);
     // 根据目标位置和当前位置，以及PID算法计算并更新当前选项的位置和宽度
     ui->cursor.nowColumn = UI_Animation(UI_FX(ui->cursor.targrtColumn), ui->cursor.nowColumn, &ui->animation.cursor_ani);
     // 绘制选中项的下划线

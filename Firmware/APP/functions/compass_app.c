@@ -166,7 +166,8 @@ static void compass_dial(uint16_t heading, uint8_t valid) {
             Disp_DrawLine(x1, y1, x2, y2);
             if (bearing % 90u == 0u) {
                 dial_point(angle, 15, &x1, &y1);
-                Disp_DrawStr(x1 - 3u, y1 + 4u, cardinal[bearing / 90u]);
+                const char *label = I18N_Text(cardinal[bearing / 90u]);
+                Disp_DrawStr(x1 - Disp_GetUTF8Width(label) / 2u, y1 + 4u, label);
             }
         }
     } else {
@@ -218,7 +219,7 @@ void Compass_AppRun(ui_t *ui) {
     Disp_SetDrawColor(&fg);
     compass_dial(heading, valid);
     Disp_SetFont(UI_FONT);
-    Disp_DrawStr(68u, 11u, MMC5603Algo_IsCalibrated() ? "Mag North" : "Uncalibr.");
+    Disp_DrawStr(68u, 11u, I18N_Text(MMC5603Algo_IsCalibrated() ? "Mag North" : "Uncalibr."));
     char text[16];
     if (valid) {
         static const char *const directions[] = {
@@ -233,7 +234,7 @@ void Compass_AppRun(ui_t *ui) {
         Disp_DrawStr(64u + (width < 64u ? (64u - width) / 2u : 0u), 49u, direction);
     } else {
         Disp_DrawStr(82u, 31u, "---°");
-        Disp_DrawStr(73u, 49u, "No fix");
+        Disp_DrawStr(73u, 49u, I18N_Text("No fix"));
     }
     if (magnetic_valid)
         mini_snprintf(text, sizeof(text), "B:%u mG", (unsigned)compass_strength(b));

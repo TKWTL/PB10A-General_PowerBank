@@ -14,6 +14,7 @@
 #include "powerbank_app.h"
 #include "core/ui_toast.h"
 #include "mini_format.h"
+#include "i18n.h"
 static ui_t s_ui;
 static coro_scheduler_t s_scheduler;
 static coro_pt_t s_states[10];
@@ -35,13 +36,13 @@ static void ui_take_power_notice(void) {
     char title[18];
     if (!PowerAlgo_TakeNotice(&notice))
         return;
-    const char *level = notice.severity == POWER_NOTICE_FAULT ? "FAULT" : notice.severity == POWER_NOTICE_WARNING ? "WARNING"
-                                                                                                                  : "INFO";
+    const char *level = I18N_Text(notice.severity == POWER_NOTICE_FAULT ? "FAULT" : notice.severity == POWER_NOTICE_WARNING ? "WARNING"
+                                                                                                                            : "INFO");
     if (notice.code < 100u)
         (void)mini_snprintf(title, sizeof(title), "E%02u %s", (unsigned)notice.code, level);
     else
         (void)mini_snprintf(title, sizeof(title), "N%02u %s", (unsigned)(notice.code - 99u), level);
-    UI_ToastShow(title, PowerAlgo_NoticeText(notice.code),
+    UI_ToastShow(title, I18N_Text(PowerAlgo_NoticeText(notice.code)),
                  notice.severity == POWER_NOTICE_FAULT ? 4000u : 2500u, notice.severity);
 }
 
