@@ -203,11 +203,16 @@ static void radio_draw_menu(ui_t *ui) {
     fg=(uint8_t)(ui->bgColor^1u);
     Disp_SetDrawColor(&fg);
     Disp_SetFont(font_fusion_pixel_p12_zhcn);
-    Disp_DrawLine(0u,6u,127u,6u);
-    Disp_DrawStr(19u, 10u, I18N_Text("-Radio Setting:-"));
+    uint8_t localized = I18N_GetLanguage() == I18N_LANG_ZH_CN;
+    const unsigned first = localized ? 12u : 20u;
+    const unsigned space = localized ? 12u : 10u;
+    if (!localized) {
+        Disp_DrawLine(0u, 6u, 127u, 6u);
+        Disp_DrawStr(19u, 10u, "-Radio Setting:-");
+    }
 
     for(i=0u;i<RADIO_MENU_COUNT;i++) {
-        const uint8_t y=(uint8_t)(20u+i*10u);
+        const uint8_t y = (uint8_t)(first + i * space);
         const char *label = i == 3u ? option : I18N_Text(fixed_labels[i]);
         Disp_DrawStr(i == 3u ? 1u : 2u, y, label);
         if (i == 1u)
@@ -225,11 +230,11 @@ static void radio_draw_menu(ui_t *ui) {
      * actual MiaoUI PID coefficients copied at menu entry. */
     s_cursor_w_q=UI_Animation(UI_FX(width_target),
         s_cursor_w_q,&s_cursor_w_pid);
-    s_cursor_y_q=UI_Animation(UI_FX((int32_t)(10u+s_menu_index*10u)),
-        s_cursor_y_q,&s_cursor_y_pid);
+    s_cursor_y_q = UI_Animation(UI_FX((int32_t)(first - space + s_menu_index * space)),
+                                s_cursor_y_q, &s_cursor_y_pid);
     Disp_SetDrawColor(&xor_color);
-    Disp_DrawRBox(0u,(uint16_t)(UI_FXI(s_cursor_y_q)+1),
-        (uint16_t)UI_FXI(s_cursor_w_q),10u,0u);
+    Disp_DrawRBox(0u, (uint16_t)(UI_FXI(s_cursor_y_q) + 1),
+                  (uint16_t)UI_FXI(s_cursor_w_q), space, 0u);
     Disp_SetDrawColor(&fg);
     Disp_SendBuffer();
 }

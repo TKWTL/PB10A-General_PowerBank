@@ -3,13 +3,15 @@
 #include "display/dispDriver.h"
 #include "ssd1306_display.h"
 #include "millis.h"
+#include "mini_format.h"
+#include "i18n.h"
 #include <string.h>
 
 #define TOAST_WIDTH 114u
 #define TOAST_HEIGHT 32u
 #define TOAST_PORTRAIT_HEIGHT 48u
 
-static char s_title[18], s_message[24];
+static char s_code[4], s_message[24];
 static uint32_t s_duration, s_started;
 static uint8_t s_severity, s_started_valid, s_allowed, s_dirty, s_on_screen;
 /* Save only the affected physical page bytes, not a second framebuffer.
@@ -21,14 +23,14 @@ static uint8_t toast_expired(void) {
     return s_started_valid && (uint32_t)(Millis() - s_started) >= s_duration;
 }
 
-void UI_ToastShow(const char *title, const char *message, uint32_t duration_ms, uint8_t severity) {
+void UI_ToastShow(const char *code, const char *message, uint32_t duration_ms, uint8_t severity) {
     if (s_severity && !toast_expired() && severity < s_severity)
         return;
-    size_t len = strlen(title);
-    if (len >= sizeof(s_title))
-        len = sizeof(s_title) - 1u;
-    memcpy(s_title, title, len);
-    s_title[len] = '\0';
+    size_t len = strlen(code);
+    if (len >= sizeof(s_code))
+        len = sizeof(s_code) - 1u;
+    memcpy(s_code, code, len);
+    s_code[len] = '\0';
     len = strlen(message);
     if (len >= sizeof(s_message))
         len = sizeof(s_message) - 1u;
@@ -110,10 +112,16 @@ void UI_ToastDraw(void) {
     u8g2_SetFontDirection(&draw, 0u);
     u8g2_SetFontPosBaseline(&draw);
     u8g2_SetDrawColor(&draw, s_severity >= 2u ? 0u : 1u);
-    toast_center(&draw, x, y + (portrait ? 11u : 13u), w, s_title);
+    /* Keep ASCII source keys in RAM so rotation never strands a
+     * translated string in the h6w4 font. */
+    char title[18];
+    const char *level = s_severity == 3u ? "FAULT" : s_severity == 2u ? "WARNING"
+                                                                      : "INFO";
+    mini_snprintf(title, sizeof(title), "%s %s", s_code, portrait ? level : I18N_Text(level));
+    toast_center(&draw, x, y + (portrait ? 11u : 13u), w, title);
     u8g2_SetDrawColor(&draw, 1u);
     if (!portrait) {
-        toast_center(&draw, x, y + 27u, w, s_message);
+        toast_center(&draw, x, y + 27u, w, I18N_Text(s_message));
     } else {
         /* Portrait: use the existing 4px font and wrap at a space. */
         char line[24];

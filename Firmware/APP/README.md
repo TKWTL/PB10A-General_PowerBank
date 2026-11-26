@@ -44,14 +44,14 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 - `Scheduler/coroOS.*` now wraps the actual Protothreads 1.4 (`Scheduler/pt1.4/pt.h`, `pt-sem.h`, `lc-switch.h`), as in Handheld-Fan; ten separate cooperative tasks are registered (not FreeRTOS, no priorities)
 - `APP/framework/beep_service.c` consolidates the former beep hardware PWM and nonblocking melody sequencer; `APP/framework/time_service.c` consolidates RTC calendar/uptime calculations with the MiaoUI time editor. Remaining device logic, fault recorder and system algorithms reside in `APP/algorithm/`
 - `APP/functions/` hosts independent user-facing MiaoUI applications. Powerbank displays cached SW6306 voltage, current, percentage and protocol; Radio is forced low-power at boot and starts only when its WORD page is entered (or kept running in explicit background ON mode)
-- `APP/i18n.c/h` defines the shared localization interface (still English
-  passthrough). Text/icon menu labels, parameter/enum/string values, About,
-  fault history and toast headings/reasons, radio settings and standalone
-  tool prompts resolve through `I18N_Text()` at presentation time.
-  Game interiors, I2C scanner and the powerbank/radio dashboards remain
-  English. Menu widths and scrolling measure the resolved strings.
-  Compact ASCII-only fonts and translated layout/glyph coverage must be
-  reviewed when the Chinese catalog is added.
+- `APP/i18n.c/h` contains the English/Simplified Chinese catalog.
+  `Settings > Display > Language` selects EN (default) or 中文, in RAM.
+  Menu labels (including games), parameters, About, fault history,
+  radio settings and standalone tools resolve through `I18N_Text()`.
+  Game interiors, I2C scanner and powerbank/radio dashboards stay English.
+  Landscape toast translates on draw; portrait toast always uses original
+  English with h6w4. SOS and magnetic calibration use the shared 12px font.
+  ENUM values are at most 30px (five ASCII cells or equivalent Han width).
 - `BSP/BMP180` ports Collar-Radio compensation code with Cortex-M0+ safe endian calibration; `BSP/MMC5603` supports register I/O, product ID and low-power configuration
 - `Core/Src/i2c.c` USER CODE owns the LL I2C1 master state machine and IRQ completion, including new `ASYNC_I2C_Transmit/Receive`, asynchronous scanner probe and bounded abort handling. Old `BSP/I2C/bsp_i2c.c/.h` were removed and Keil references updated. The sensor and radio application paths use IRQ-completed register transactions; legacy synchronous compatibility functions remain in the BSP drivers. **SW6306 now enables `SW6306_USE_PROTOTHREAD`** and uses the IRQ-backed asynchronous transfer API from its own exclusive service coroutine. Other modules must not directly run another SW6306 protothread concurrently.
 - In the I2C transaction layer, synchronous `I2C_TransactionBegin/End` brackets non-yielding legacy transactions. Asynchronous operations use an independent single-in-flight admission check and persistent completion flags; on timeout, a stalled abort poisons the HAL adapter until reset. Do not use stack buffers for asynchronous transfers
@@ -288,7 +288,7 @@ there is no low-current-mode operation UI. Protection policy is unchanged.
 
 The priority mailbox overlays INFO/WARNING for 2.5 s or FAULT for 4 s.
 Only FAULT requests audio at notice creation, independently of OLED/Toast:
-a 610 ms high-low-high cue, coalesced while playing. Beep Service priority
+a 610 ms three-high-note cue (2400 Hz, 150 ms each, two 80 ms gaps), coalesced while playing. Beep Service priority
 is FAULT > Alarm > normal FIFO/playback > idle-only key click. FAULT
 preempts and restarts an active alarm at the beginning of its melody.
 All audio follows volume 0–5; no alarm or fault mute exemption.
@@ -803,8 +803,8 @@ RUN wake rather than the silent Radio background patrol.
   enables [21:20], reserved [23:22] and format tag 0xA1 [31:24].
   Settings survive MCU reset while the backup domain remains powered.
   Boot and clock edits schedule afresh; stale boot events are discarded.
-- Shared Effect selects Tone 1/2/3, 1min/5min/Forever (default 5min),
-  Press/Sequence (default Press). Test and RTC alarms use the same
+- Shared Effect selects Tone1/2/3, 1min/5min/Never (default 5min),
+  Press/Seq (default Press). Test and RTC alarms use the same
   full-screen page, with current time and source. Test does not change
   alarm enables; simultaneous events merge. Any key or UUDDLRLR
   dismisses according to the selected mode; held repeats and BACK

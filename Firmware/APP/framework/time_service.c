@@ -574,9 +574,9 @@ static void alarm_select_config(ui_t *ui) {
 void Add_Alarm_Items(ui_page_t *parent) {
     static const char *const labels[] = {" Enable", " Hour", " Minute", " Sun", " Mon", " Tue", " Wed", " Thu", " Fri", " Sat"};
     static const char *const effect_labels[] = {" Melody", " Duration", " Dismiss"};
-    static const char *const melodies[] = {"Tone 1", "Tone 2", "Tone 3"};
-    static const char *const durations[] = {"1min", "5min", "Forever"};
-    static const char *const dismiss[] = {"Press", "Sequence"};
+    static const char *const melodies[] = {"Tone1", "Tone2", "Tone3"};
+    static const char *const durations[] = {"1min", "5min", "Never"};
+    static const char *const dismiss[] = {"Press", "Seq"};
     static const char *const *const options[] = {melodies, durations, dismiss};
     static const uint8_t maxima[] = {BEEP_ALARM_MELODY_COUNT - 1u, ALARM_FOREVER, ALARM_SEQUENCE};
     AddItem("-Alarm 1", UI_ITEM_PARENTS, 0, &s_alarm_select[0], parent, &s_alarm_config_page, alarm_select_config);

@@ -18,7 +18,7 @@
 | **Protothreads 1.4** | Adam Dunkels / Swedish Institute of Computer Science（SICS），<https://dunkels.com/adam/pt/> | [`Scheduler/pt1.4/`](Scheduler/pt1.4/) | **BSD 3-Clause 风格许可**；完整版权、条件及免责声明保留于 [`Scheduler/pt1.4/pt.h`](Scheduler/pt1.4/pt.h) 等上游头文件中。 |
 | **STM32CubeG0 HAL/LL、CMSIS** | STMicroelectronics、Arm 及相应贡献者 | [`Core/`](Core/)、[`Drivers/`](Drivers/) | 各厂商组件的许可证以仓库内相应文件头及分发包声明为准，勿将其误认为项目原创源码。 |
 
-**混合中文字库说明：** `font_fusion_pixel_p12_zhcn.c` 不是 Fusion Pixel 原始整套字体。其 ASCII 区源于 MiaoUI 字形；中文字形包含 Fusion Pixel 与 Ark Pixel 来源，并经筛选、合并、重新编码为 u8g2 RLE 子集。引用两套字体的署名及 OFL 条款均需保留。字体的再分发、修改和名称使用应符合 SIL OFL 1.1；本说明不赋予超出原许可证的权利。
+**混合中文字库说明：** `font_fusion_pixel_p12_zhcn.c` 不是 Fusion Pixel 原始整套字体。其 ASCII 区源于 MiaoUI 字形；中文字形包含 Fusion Pixel 与 Ark Pixel 来源，并经筛选、合并、重新编码为 u8g2 RLE 子集。2026.11.10 版 Fusion Pixel 12px Mono zh_hans BDF 补充了中文目录所需的 185 个字形；其上游组件 Cubic 11、Galmuri 的原始许可附在同一 `LICENSE-OFL-FUSION` 文件中。引用字体的署名及原始许可条款均需保留。字体的再分发、修改和名称使用应符合 SIL OFL 1.1；本说明不赋予超出原许可证的权利。
 
 **Protothreads 与 coroOS 的区别：** `Scheduler/pt1.4/` 为第三方的栈less Protothreads 实现；`Scheduler/coroOS.c/.h` 为本项目基于 Protothreads 的协程调度封装，不应将两者混同或抹去上游版权。
 

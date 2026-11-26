@@ -58,12 +58,10 @@ void SOS_AppRun(ui_t *ui) {
     if (!s_started) {
         center_text(11u, "WARNING");
         Disp_DrawLine(0u, 14u, UI_HOR_RES - 1u, 14u);
-        center_text(27u, "High intensity light");
-        center_text(40u, "Do not look at LED");
-        Disp_SetFont(font_home_h6w4);
-        center_text(52u, "CONF: Start");
-        center_text(62u, "Other keys: Exit");
-        Disp_SetFont(UI_FONT);
+        center_text(25u, "High intensity light");
+        center_text(37u, "Do not look at LED");
+        center_text(49u, "CONF: Start");
+        center_text(61u, "Other keys: Exit");
         Disp_SendBuffer();
         s_warning_shown = 1u;
         UI_RequestNextFrame(ui, 200u);
@@ -77,12 +75,10 @@ void SOS_AppRun(ui_t *ui) {
     static const char *const states[] = {
         "STOPPED", "WAIT DATA", "TRANSMITTING", "COOLING", "PROTECTED"};
     center_text(30u, states[state]);
-    Disp_SetFont(font_home_h6w4);
     center_text(46u, "Any key: Exit");
     Disp_DrawFrame(7u, 55u, 114u, 7u);
     if (progress)
         Disp_DrawBox(9u, 57u, 110u * progress / 100u, 3u);
-    Disp_SetFont(UI_FONT);
     Disp_SendBuffer();
     UI_RequestNextFrame(ui, 50u);
 }

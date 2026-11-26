@@ -3,9 +3,10 @@
 
 #include <stdint.h>
 
-/* Non-modal overlay; title/message are copied, and severity is 1..3.
+/* Non-modal overlay; ASCII fault code and untranslated message are copied.
+ * Severity is 1..3; language is resolved only when drawing.
  * BeginFrame/Draw/EndFrame are called only by the framebuffer owner. */
-void UI_ToastShow(const char *title, const char *message, uint32_t duration_ms, uint8_t severity);
+void UI_ToastShow(const char *code, const char *message, uint32_t duration_ms, uint8_t severity);
 uint8_t UI_ToastNeedsFrame(void);
 void UI_ToastBeginFrame(uint8_t allowed);
 void UI_ToastSetAllowed(uint8_t allowed);

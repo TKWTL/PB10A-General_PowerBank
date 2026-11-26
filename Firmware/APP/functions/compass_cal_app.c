@@ -188,11 +188,10 @@ static void draw_cal(uint8_t data_valid, uint8_t pose_valid) {
         Disp_DrawBox(0u, 52u, UI_HOR_RES, 12u);
         Disp_SetDrawColor(&white);
         Disp_DrawLine(0u, 52u, UI_HOR_RES - 1u, 52u);
-        Disp_SetFont(font_home_h6w4);
-        mini_snprintf(text, sizeof(text), I18N_Text("CAL %u/6 %u/16"), (unsigned)(s_step + 1u), (unsigned)s_capture.count);
-        Disp_DrawStr(2u, 62u, text);
-        Disp_DrawStr(76u, 62u, I18N_Text(!s_sampling && data_valid && pose_valid ? "L:Prev CONF" : "L:Prev"));
-        Disp_SetFont(UI_FONT);
+        mini_snprintf(text, sizeof(text), "%u/6 %u/16", (unsigned)(s_step + 1u), (unsigned)s_capture.count);
+        Disp_DrawStr(2u, 63u, text);
+        const char *back = I18N_Text("L:Prev");
+        Disp_DrawStr(UI_HOR_RES - 3u - Disp_GetUTF8Width(back), 63u, back);
     }
     Disp_SendBuffer();
 }

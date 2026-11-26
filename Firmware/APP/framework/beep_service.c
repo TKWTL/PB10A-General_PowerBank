@@ -61,7 +61,7 @@ static void beep_hw_set_frequency(uint16_t frequency_hz) {
 
 static const uint16_t s_key_sound[] = {2700u, 100u, BEEP_END};
 static const uint16_t s_fault_sound[] = {
-    2400u, 150u, BEEP_REST, 80u, 1600u, 150u, BEEP_REST, 80u, 2400u, 150u, BEEP_END};
+    2400u, 150u, BEEP_REST, 80u, 2400u, 150u, BEEP_REST, 80u, 2400u, 150u, BEEP_END};
 static const uint16_t s_alarm_tone1[] = {
     2000u, 180u, BEEP_REST, 100u, 2000u, 180u, BEEP_REST, 540u, BEEP_REPEAT};
 static const uint16_t s_alarm_tone2[] = {
