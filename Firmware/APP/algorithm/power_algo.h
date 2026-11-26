@@ -85,6 +85,7 @@ void PowerAlgo_AuxA_SetAutoOffCurrent(unsigned threshold_ma);
 void PowerAlgo_AuxA_OnEvents(uint8_t events);
 uint8_t PowerAlgo_AuxA_TakeInserted(void);
 void PowerAlgo_AddPowerLimitItems(ui_page_t *page);
+void PowerAlgo_AddResetItem(ui_page_t *page);
 void PowerAlgo_AddPortItems(ui_page_t *page);
 void PowerAlgo_AddProtocolItems(ui_page_t *page, uint8_t group);
 void PowerAlgo_AddStatisticsItems(ui_page_t *page);

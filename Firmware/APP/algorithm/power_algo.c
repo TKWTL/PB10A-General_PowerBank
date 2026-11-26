@@ -15,6 +15,7 @@
 #include <string.h>
 #include "mini_format.h"
 #include "i18n.h"
+#include "beep_service.h"
 
 #define POWER_SW_SLEEP_BLOCK 0x08u /* separate from scanner (0x02) and radio (0x04) */
 #define SW_REINIT_DELAY_MS 5000u
@@ -274,6 +275,9 @@ static void config_reset_selected(ui_t *ui) {
 
 void PowerAlgo_AddPowerLimitItems(ui_page_t *page) {
     add_settings(page, CFG_OUTPUT, CFG_C1_INPUT);
+}
+
+void PowerAlgo_AddResetItem(ui_page_t *page) {
     AddItem("!SW6306 Reset", UI_ITEM_ONCE_FUNCTION, 0, &s_config_reset_item, page, 0, config_reset_selected);
 }
 
@@ -410,6 +414,8 @@ static uint8_t fault_severity(uint8_t code) {
 }
 
 static void fault_offer_notice(uint8_t code, uint8_t severity) {
+    if (severity == POWER_NOTICE_FAULT)
+        beep_fault();
     if (!s_notice_pending || severity >= s_notice.severity) {
         s_notice.code = code;
         s_notice.severity = severity;

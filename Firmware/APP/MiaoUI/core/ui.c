@@ -1163,6 +1163,9 @@ static void Process_UI_Run(ui_t *ui, UI_ACTION Action) {
 
                 // 如果存在跳转页面且不为空，则绘制跳转页面并更新当前项
                 if(ui->nowItem->page.jumpPage != NULL && ui->nowItem->page.jumpPage->item.head != NULL) {
+                    /* Optional parent entry callback binds shared parameter pages. */
+                    if (ui->nowItem->itemFunction)
+                        ui->nowItem->itemFunction(ui);
                     Optionbar_Init(ui);
                     Draw_UI(ui, ui->nowItem->page.jumpPage, ui->nowItem, ui->nowItem->page.jumpPage->item.head);
                     ui->nowItem->page.location->item.lastJumpItem = ui->nowItem;

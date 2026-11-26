@@ -41,7 +41,7 @@ static const char *const s_sleep_labels[] = {
 static const int s_sleep_seconds[] = {0, 15, 30, 60, 120, 300, 600, 900, 1800};
 static ui_text_t s_about_text;
 static ui_element_t s_about_el;
-/* Only one pending target; Radio (1) outranks Powerbank (2). */
+/* One pending target: Alarm (1) > Radio (2) > Powerbank (3). */
 static uint8_t s_nav_pending,s_nav_active;
 static uint32_t s_power_nav_requested_at;
 static uint8_t s_mic_candidate, s_mic_latched;
@@ -129,6 +129,7 @@ void Create_MenuTree(ui_t *ui) {
         UI_SetLeaveHook(&s_sos,SOS_AppOnLeave);
         AddPage("[Alarm]",&s_alarm,UI_PAGE_TEXT,&s_tools);
             add_return(&s_alarm,&s_tools,&s_alarm_back,0);
+            Add_Alarm_Items(&s_alarm);
 
     AddPage("[Settings]",&s_settings,UI_PAGE_TEXT,&s_home);
         add_return(&s_settings,&s_home,&s_settings_back,0);
@@ -145,6 +146,7 @@ void Create_MenuTree(ui_t *ui) {
             AddItem("-Protocol#1",UI_ITEM_PARENTS,0,&s_protocol1_item,&s_power_settings,&s_protocol1,0);
             AddItem("-Protocol#2",UI_ITEM_PARENTS,0,&s_protocol2_item,&s_power_settings,&s_protocol2,0);
             AddItem("-Power Limits",UI_ITEM_PARENTS,0,&s_power_limit_item,&s_power_settings,&s_power_limit,0);
+            PowerAlgo_AddResetItem(&s_power_settings);
 
             AddPage("[Ports]",&s_ports,UI_PAGE_TEXT,&s_power_settings);
                 add_return(&s_ports,&s_power_settings,&s_ports_back,0);
@@ -226,36 +228,47 @@ ui_rotation_policy_t MiaoUi_ItemRotationPolicy(const ui_item_t *item) {
 }
 
 /* Called from foreground services, never modifies any ui_t directly.
- * Radio supersedes Powerbank if both connections arrive close together. */
+ * Alarm supersedes Radio, which supersedes Powerbank. */
 void MiaoUi_RequestNavigate(ui_target_t target) {
-    uint8_t request=target==UI_TARGET_RADIO?1u:
-        target==UI_TARGET_POWERBANK?2u:0u;
-    if(request && (!s_nav_pending || request<s_nav_pending)) {
-        if(request==2u)s_power_nav_requested_at=Millis();
-        s_nav_pending=request;
+    uint8_t request = (uint8_t)target + 1u;
+    if (target != UI_TARGET_ALARM && Alarm_IsRinging())
+        return;
+    if (request <= UI_TARGET_POWERBANK + 1u && (!s_nav_pending || request < s_nav_pending)) {
+        if (target == UI_TARGET_POWERBANK)
+            s_power_nav_requested_at = Millis();
+        s_nav_pending = request;
     }
 }
 
 uint8_t MiaoUi_NavigationReady(void) {
     /* Powerbank yields 100 ms to a possible higher-priority Radio request. */
-    return (uint8_t)(s_nav_pending==1u ||
-        (s_nav_pending==2u &&
-         (uint32_t)(Millis()-s_power_nav_requested_at)>=100u));
+    return s_nav_pending && (s_nav_pending != UI_TARGET_POWERBANK + 1u ||
+                             (uint32_t)(Millis() - s_power_nav_requested_at) >= 100u);
 }
 
 void MiaoUi_ProcessNavigate(ui_t *ui) {
-    ui_item_t *item;
-    uint8_t request;
-    if(!ui || !MiaoUi_NavigationReady())return;
-    request=s_nav_pending;
-    s_nav_pending=0u;
-    if(!ui->navBookmark.valid)s_nav_active=0u;
-    /* One bookmark: lower/equal priority never interrupts a temporary app. */
-    if(ui->navBookmark.valid && s_nav_active && request>=s_nav_active)
+    if (!ui || !MiaoUi_NavigationReady())
         return;
-    item=request==1u?&s_radio:&s_powerbank;
-    if(UI_NavigateTo(ui,item,UI_NAV_PUSH))
-        s_nav_active=request;
+    uint8_t request = s_nav_pending;
+    s_nav_pending = 0u;
+    if (!ui->navBookmark.valid)
+        s_nav_active = 0u;
+    if (request == UI_TARGET_ALARM + 1u) {
+        if (!Alarm_IsRinging())
+            return;
+    } else if (Alarm_IsRinging()) {
+        return;
+    }
+    /* One bookmark: lower/equal priority never interrupts a temporary app. */
+    if (ui->navBookmark.valid && s_nav_active && request >= s_nav_active)
+        return;
+    ui_item_t *item = &s_powerbank;
+    if (request == UI_TARGET_ALARM + 1u)
+        item = Alarm_RingItem();
+    else if (request == UI_TARGET_RADIO + 1u)
+        item = &s_radio;
+    if (UI_NavigateTo(ui, item, UI_NAV_PUSH))
+        s_nav_active = request;
 }
 
 /* Only a confirmed new PB0 falling edge opens Radio, once per insertion.

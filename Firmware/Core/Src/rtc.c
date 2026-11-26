@@ -131,13 +131,20 @@ void MX_RTC_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN RTC_Init 2 */
+  /* CubeMX's default 2000-01-01 is Saturday, not Monday. */
+  sDate.WeekDay = RTC_WEEKDAY_SATURDAY;
+  if (HAL_RTC_SetDate(&hrtc, &sDate, RTC_FORMAT_BIN) != HAL_OK)
+  {
+    Error_Handler();
+  }
   RTC_ConfigureEvents:
   HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR0, 0xB10Au);
-  /* Reserve both calendar alarms for future BEEP scheduling: CubeMX's
-   * placeholder 00:00 alarms must not generate unsolicited interrupts.
-   * Actual alarm scheduling will re-arm them through HAL_RTC_SetAlarm_IT. */
+  /* Keep ALRMAR/ALRMBR time fields across reset. Alarm_Init restores
+   * user enable/day settings and arms the next strictly future match. */
   (void)HAL_RTC_DeactivateAlarm(&hrtc, RTC_ALARM_A);
   (void)HAL_RTC_DeactivateAlarm(&hrtc, RTC_ALARM_B);
+  __HAL_RTC_ALARM_CLEAR_FLAG(&hrtc, RTC_FLAG_ALRAF);
+  __HAL_RTC_ALARM_CLEAR_FLAG(&hrtc, RTC_FLAG_ALRBF);
   /* The 30-minute WUT is armed by PM only for inserted-headset FM.
    * Never leave CubeMX's startup WUT enabled while the UI is in RUN. */
   (void)HAL_RTCEx_DeactivateWakeUpTimer(&hrtc);

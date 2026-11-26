@@ -64,16 +64,18 @@ Game order: Tetris, Pac-Man, Bomber, Invaders, Arkanoid. Leaving a game
 retains its current state in static RAM; re-entry resumes without
 catch-up time. Pac-Man/Bomber/Invaders release the shared asset cache on
 leave and rebuild it on re-entry; MCU reset discards saved games.
-Tools order: Alarm (placeholder), Leveler, Compass, Altimeter, SOS Blink.
-Alarm uses its own icon and a text submenu containing only Back until the
-alarm service is implemented.
+Tools order: Alarm, Leveler, Compass, Altimeter, SOS Blink.
+Alarm uses its own icon and a text submenu: Back, Alarm 1, Alarm 2,
+Effect, !Alarm Test. Both alarms share one configuration page, with
+Enable, Hour, Minute and Sun through Sat switches.
 
 Settings order: Powerbank, Display, Sleep & Wake, Time & Date, Sensors,
 System. Sensors contains !Accel Calibration, !Mag Calibration and
 !I2C Scanner; the original icons remain archived in source.
 
-Settings > Powerbank groups Ports, Protocol#1, Protocol#2 and Power Limits.
-They expose 32 RAM-only settings and actions derived from PB02B plus `!SW6306 Reset`.
+Settings > Powerbank groups Ports, Protocol#1, Protocol#2, Power Limits and
+`!SW6306 Reset` (the last item, not inside Power Limits).
+They expose 32 RAM-only settings and actions derived from PB02B plus chip reset.
 
 - Power Limits: input 5–100 W, output 5–105 W, both in 5 W steps; defaults 100 W / 105 W. Higher output requests were rejected in hardware testing.
 - Ports: C1 input/output and A1 output fast-charge switches,
@@ -285,6 +287,11 @@ are reserved: AUX invalid samples currently do not trigger a cutoff, and
 there is no low-current-mode operation UI. Protection policy is unchanged.
 
 The priority mailbox overlays INFO/WARNING for 2.5 s or FAULT for 4 s.
+Only FAULT requests audio at notice creation, independently of OLED/Toast:
+a 610 ms high-low-high cue, coalesced while playing. Beep Service priority
+is FAULT > Alarm > normal FIFO/playback > idle-only key click. FAULT
+preempts and restarts an active alarm at the beginning of its melody.
+All audio follows volume 0–5; no alarm or fault mute exemption.
 ASCII notices reuse the existing fonts; the portrait layout uses the
 smaller font. Toast saves at most 456 bytes of affected framebuffer area,
 restoring them only after SPI DMA completion, so cached pages and partial
@@ -588,15 +595,16 @@ thresholds must still be verified on real hardware.
   and Exit restore that original menu instead of its normal parent.
   External navigation from parameter editing calls its exit/commit hook
   before leaving. Applications may register `UI_SetLeaveHook()`.
-- The PB10A request layer in `MiaoUI/ui_conf.c` owns the static `s_radio`
-  and `s_powerbank` items and exposes `MiaoUi_RequestNavigate(target)`.
+- The PB10A request layer in `MiaoUI/ui_conf.c` selects Alarm, Radio or
+  Powerbank and exposes `MiaoUi_RequestNavigate(target)`.
   That function records only a target ID; it never changes MiaoUI state.
   `MiaoUi_ProcessNavigate()` is called only by `MiaoUiThread`, when
   the OLED is ready, frame DMA idle and PM allows UI. The navigation
   core drops pre-navigation button actions so they cannot select items
   in the new page.
-- Single-slot arbitration: Radio has priority over Powerbank; the latter
+- Single-slot arbitration: Alarm > Radio > Powerbank. Powerbank
   waits 100 ms to allow a concurrent debounced headphone event to win.
+  Lower-priority navigation is suppressed while an alarm rings.
   A higher-priority target can replace a temporary lower-priority
   application without losing the original bookmark. No nested stack.
 - `Settings > Display`: `Headphone Nav`, `USB Port Nav` and
@@ -697,8 +705,8 @@ armed only while a powered receiver is about to enter STOP1 with mode
 `ON` or with mode `AUTO` and MIC_INDET currently asserted low.
 No WUT is armed for an unpowered Radio or explicitly `OFF`.
 The RTC ISR only latches an event; it never performs I2C, UI
-navigation or screen drawing. RTC Alarm A/B remain separately reserved
-for future BEEP alarms and the backup calendar survives MCU reset.
+navigation or screen drawing. RTC Alarm A/B schedule the two independent
+calendar alarms; the backup calendar survives MCU reset.
 
 Radio mode logic (evaluated in the dedicated RadioServiceThread):
 - `OFF`: Receiver off, no battery patrol WUT and no Radio sleep block.
@@ -780,13 +788,31 @@ The PM ISR callbacks now record **separate** alarm event bits
 `PM_RTC_ALARM_A` / `PM_RTC_ALARM_B` and the WUT boolean
 `s_rtc_wakeup_event`, independently of external GPIO
 `s_irq_events`. The foreground may consume alarm reason bits via
-`pm_api_take_rtc_alarm_events()`. Alarm A/B are not actually
-scheduled yet; their default placeholder alarms remain disabled.
-When an Alarm and WUT arrive simultaneously, **Alarm takes
-precedence** and follows normal RUN wake rather than the silent
-Radio background patrol. The alarm cause remains available to a
-future alarm/BEEP task; simply recording an event does not play
-the buzzer yet.
+`pm_api_take_rtc_alarm_events()` in SystemServiceThread. When an Alarm and
+WUT arrive simultaneously, **Alarm takes precedence** and follows normal
+RUN wake rather than the silent Radio background patrol.
+
+### RTC calendar alarms
+
+- Both alarms default OFF. RTC Alarm A/B retain hour/minute. Enabled
+  alarms match the nearest strictly future selected weekday at second 0.
+  No selected weekday means a one-shot at the next occurrence, then OFF.
+  A same-second weekly rearm is deferred by one second to avoid retrigger.
+- Backup DR0 retains the calendar marker. DR1 stores weekday masks
+  [6:0] and [13:7], melody [16:14], duration [18:17], dismiss [19],
+  enables [21:20], reserved [23:22] and format tag 0xA1 [31:24].
+  Settings survive MCU reset while the backup domain remains powered.
+  Boot and clock edits schedule afresh; stale boot events are discarded.
+- Shared Effect selects Tone 1/2/3, 1min/5min/Forever (default 5min),
+  Press/Sequence (default Press). Test and RTC alarms use the same
+  full-screen page, with current time and source. Test does not change
+  alarm enables; simultaneous events merge. Any key or UUDDLRLR
+  dismisses according to the selected mode; held repeats and BACK
+  cannot bypass Sequence. Key directions follow screen rotation.
+- A ringing session holds a PM sleep block and suppresses forced sleep.
+  Dismissal or timeout releases it and returns to the original menu
+  bookmark. Enabled alarms alone do not prevent sleep. No extra coroutine,
+  timer, font or source file; RTC WUT remains independent.
 
 The RTC calendar uses the correct LSE prescaler product
 `(127+1)*(255+1)=32768`. For the measured +10 s over 41 hours

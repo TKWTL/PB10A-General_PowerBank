@@ -7,6 +7,7 @@
 #include "buttons.h"
 #include "pm_api.h"
 #include "beep_service.h"
+#include "time_service.h"
 #define KEY_QUEUE_SIZE 16u
 #define KEY_EVENT_REPEAT 0x80u
 #define KEY_EVENT_ENTER ((uint8_t)KeyIndex_Max)
@@ -145,6 +146,13 @@ UI_ACTION indevScan(const ui_t *ui) {
     ev=queue[tail];tail=(uint8_t)((tail+1u)%KEY_QUEUE_SIZE);
     action_repeat = (uint8_t)((ev & KEY_EVENT_REPEAT) != 0u);
     result = translate((uint8_t)(ev & ~KEY_EVENT_REPEAT), ui);
+    /* The ringing WORD page owns all actions, including long CONF/BACK.
+     * Its explicit exit after dismissal is not subject to this filter. */
+    if (ui && ui->nowItem == Alarm_RingItem() &&
+        (ui->menuState == UI_ITEM_DRAWING || ui->menuState == UI_ITEM_RUNING)) {
+        Alarm_HandleAction(result, action_repeat);
+        return UI_ACTION_NONE;
+    }
     if(result!=UI_ACTION_NONE)beep_key_click();
     return result;
 }

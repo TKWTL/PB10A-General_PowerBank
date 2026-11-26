@@ -9,6 +9,7 @@
 #include "main.h"
 #include "power_algo.h"
 #include "radio_algo.h"
+#include "beep_service.h"
 #define PM_DEFAULT_TIMEOUT_MS 60000u
 static pm_controller_t s_ctrl;
 static uint8_t s_ready,s_block_mask,s_paused,s_forced;
@@ -65,6 +66,15 @@ uint8_t pm_api_take_rtc_alarm_events(void) {
     return events;
 }
 
+/* Reprogramming one calendar alarm discards only its old event. */
+void pm_api_clear_rtc_alarm_events(uint8_t mask) {
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    s_rtc_alarm_events &= (uint8_t)~mask;
+    s_app_rtc_alarm_events &= (uint8_t)~mask;
+    __set_PRIMASK(primask);
+}
+
 void pm_api_on_exti_event(uint8_t source) {
     uint32_t primask=__get_PRIMASK();
     /* The same flag can also be set by foreground pre-STOP level checks. */
@@ -84,6 +94,8 @@ uint8_t pm_api_take_events(void) {
 void pm_api_wake_from_key(void){pm_api_on_exti_event(PM_WAKE_KEY);}
 void pm_api_on_key_irq(void){pm_api_on_exti_event(PM_WAKE_KEY);}
 void pm_api_force_sleep(void) {
+    if (s_block_mask & PM_SLEEP_BLOCK_ALARM)
+        return;
     pm_api_init();
     s_refresh_request=0u;s_forced=1u;
     pm_sleep_timer_force_expire();
@@ -190,8 +202,7 @@ void pm_api_poll(void) {
         }
     }
     if(events || rtc_alarms) {
-        /* Physical EXTI and calendar alarms are explicit RUN wake sources.
-         * A future BEEP task can choose a different alarm UI policy. */
+        /* Physical EXTI and calendar alarms are explicit RUN wake sources. */
         uint8_t waking=pm_controller_is_ui_blocked(&s_ctrl)?1u:0u;
         pm_sleep_timer_clear_force();
         s_forced=0u;
@@ -209,6 +220,10 @@ void pm_api_poll(void) {
     else if(s_paused) {
         pm_controller_resume_idle(&s_ctrl);s_paused=0u;
     }
+    /* Finish the finite fault cue before entering a low-power state,
+     * without requiring OLED availability or manufacturing a key wake. */
+    if (beep_fault_active() && !s_ctrl.wake_latched && !s_ctrl.resuming)
+        return;
     if(pm_sleep_timer_expired())pm_controller_mark_ui_active(&s_ctrl,0u);
     previous=s_ctrl.state;
     next=pm_controller_step(&s_ctrl);

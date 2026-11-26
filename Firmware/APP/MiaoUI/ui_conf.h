@@ -411,7 +411,9 @@ typedef enum {
 } ui_rotation_policy_t;
 ui_rotation_policy_t MiaoUi_ItemRotationPolicy(const ui_item_t *item);
 /* Request layer owns the static MiaoUI item IDs; no ISR calls ui_loop(). */
-typedef enum { UI_TARGET_RADIO=0, UI_TARGET_POWERBANK=1 } ui_target_t;
+typedef enum { UI_TARGET_ALARM = 0,
+               UI_TARGET_RADIO = 1,
+               UI_TARGET_POWERBANK = 2 } ui_target_t;
 void MiaoUi_RequestNavigate(ui_target_t target);
 void MiaoUi_ProcessNavigate(ui_t *ui);
 uint8_t MiaoUi_NavigationReady(void); /* Pending request past arbitration. */

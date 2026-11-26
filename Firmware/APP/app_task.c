@@ -94,9 +94,10 @@ THRD_DECLARE(SystemServiceThread) {
     THRD_BEGIN;
     for(;;) {
         const uint32_t now=Millis();
+        Alarm_Poll(now);
         if((uint32_t)(now-s_last_key_tick)>=10u) {
             s_last_key_tick=now;
-            uint8_t dim = Powerbank_AppIsRunning(&s_ui);
+            uint8_t dim = !Alarm_IsRinging() && Powerbank_AppIsRunning(&s_ui);
             uint8_t held = indevService_10ms(dim);
             Powerbank_AppDimKeys(held, now);
             WLED_AlgoService(now);
@@ -199,6 +200,7 @@ void APP_TaskInit(void) {
     indevInit();
     s_last_key_tick=Millis();
     Time_Init(); /* keep the underlying RTC uptime API, without a UI item */
+    Alarm_Init();
     /* Sensors initialize through their own nonblocking service actors. */
     PowerAlgo_Init();  /* SW6306 monitor, sleep gating, auxiliary A ADC. */
     SC7A20Algo_Init();

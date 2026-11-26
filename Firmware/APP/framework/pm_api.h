@@ -12,16 +12,16 @@ extern "C" {
 #define PM_WAKE_SUB_INDET  0x08u
 void pm_api_on_exti_event(uint8_t source);
 /* RTC events use distinct software latches, not PM_WAKE_* GPIO bits.
- * WUT requests a silent background inspection; A/B are future calendar
+ * WUT requests a silent background inspection; A/B are calendar
  * alarm sources. RTC_TAMP_IRQHandler dispatches both HAL IRQ handlers. */
 #define PM_RTC_ALARM_A 0x01u
 #define PM_RTC_ALARM_B 0x02u
 void pm_api_on_rtc_wakeup_irq(void);
 uint8_t pm_api_rtc_wakeup_pending(void);
 uint8_t pm_api_rtc_alarm_pending(void);
-/* One-shot foreground alarm events (bitmask of PM_RTC_ALARM_A/B).
- * Future BEEP/alarm task can consume these without handling RTC IRQs. */
+/* One-shot foreground alarm events (bitmask of PM_RTC_ALARM_A/B). */
 uint8_t pm_api_take_rtc_alarm_events(void);
+void pm_api_clear_rtc_alarm_events(uint8_t mask);
 uint8_t pm_api_external_wake_pending(void);
 /* Application consumer receives a separate copy of each PM-dispatched source. */
 uint8_t pm_api_take_events(void);
@@ -32,6 +32,7 @@ void pm_api_wake_from_key(void);
 void pm_api_on_key_irq(void);
 void pm_api_force_sleep(void);
 void pm_api_set_sleep_timeout(int seconds);
+#define PM_SLEEP_BLOCK_ALARM 0x80u
 void pm_api_set_sleep_block(uint8_t mask,uint8_t enabled);
 uint8_t pm_api_get_block_mask(void);
 uint8_t pm_api_ui_should_block(void);

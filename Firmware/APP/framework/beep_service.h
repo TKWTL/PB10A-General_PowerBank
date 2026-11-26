@@ -17,6 +17,7 @@
 #define BEEP_QUEUE_CAPACITY 8u
 #define BEEP_SEQUENCE_MAX_STEPS 64u
 #define BEEP_VOLUME_MAX 5u
+#define BEEP_ALARM_MELODY_COUNT 3u
 
 /* Musical notes are frequencies in Hz (A4 = 440 Hz), not timer ARR. */
 #define BEEP_C4 262u
@@ -55,14 +56,17 @@ uint8_t beep_enqueue(const uint16_t *sequence); /* FIFO for system sounds. */
 void beep_play(const uint16_t *sequence);       /* Replace playback and queue. */
 void beep_tone(uint16_t frequency_hz, uint16_t duration_ms); /* 0 ms = sustain. */
 void beep_poll(uint32_t now_ms);
-void beep_stop(void);
+void beep_stop(void); /* Explicitly stop all audio (system reset). */
+void beep_fault(void); /* Finite high-priority cue, coalesced while active. */
+uint8_t beep_fault_active(void);
+void beep_alarm(uint8_t enabled, unsigned melody); /* melody 0..BEEP_ALARM_MELODY_COUNT-1 */
 uint8_t beep_busy(void);
 uint8_t beep_queue_count(void);
 uint8_t beep_note_index(void); /* Zero-based index within the current sequence. */
 
 void beep_set_key_enabled(uint8_t enabled);
 uint8_t beep_get_key_enabled(void);
-/* PWM volume level 0..5 (default maximum). Level zero cancels playback.
+/* PWM volume level 0..5 (default maximum). Level zero silences all audio.
  * Levels 1..5 use approximate 6 dB steps of ideal fundamental power. */
 void beep_set_volume(uint8_t volume);
 uint8_t beep_get_volume(void);
