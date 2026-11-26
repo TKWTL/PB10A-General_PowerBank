@@ -140,6 +140,10 @@ void Disp_DrawPixel(uint16_t x, uint16_t y) { u8g2_DrawPixel(&u8g2, x, y); }
 void Disp_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2) { u8g2_DrawLine(&u8g2, x1, y1, x2, y2); }
 uint16_t Disp_Putchar(uint16_t x, uint16_t y, uint16_t encoding) { return u8g2_DrawGlyph(&u8g2, x, y, encoding); }
 uint16_t Disp_DrawStr(uint16_t x, uint16_t y, const char *str) { return u8g2_DrawUTF8(&u8g2, x, y, str); }
+__attribute__((noinline)) void Disp_DrawCentered(uint16_t y, const char *str, uint16_t margin) {
+    uint16_t width = Disp_GetUTF8Width(str);
+    Disp_DrawStr(width <= UI_HOR_RES - 2u * margin ? (UI_HOR_RES - width) / 2u : margin, y, str);
+}
 void Disp_SetDrawColor(void *color) { u8g2_SetDrawColor(&u8g2, *(uint8_t *)color); }
 void Disp_SetBitmapMode(uint8_t is_transparent) { u8g2_SetBitmapMode(&u8g2, is_transparent); }
 void Disp_DrawFrame(uint16_t x, uint16_t y, uint16_t w, uint16_t h) { u8g2_DrawFrame(&u8g2, x, y, w, h); }

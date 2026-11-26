@@ -576,33 +576,16 @@ static const char * const sw6306_quickcharge_str[] = {
     "UFCS",
     "UNK"
 };
-const char *SW6306_ReadProtocol(void)//当前协议读取（返回字符串地址）
-{
-    /* 依赖：先 SW6306_PowerLoad() 更新 qcstat 镜像 */
-    uint8_t qc = (uint8_t)(SW6306_Status.qcstat & 0x0FU);
+uint8_t SW6306_ReadProtocolCode(void) {
+    /* PowerLoad refreshes qcstat; ignore residual protocol bits when PQC is off. */
+    if (!(SW6306_Status.qcstat & SW6306_QCSTAT_PQC))
+        return SW6306_QCSTAT_NONE;
+    uint8_t code = SW6306_Status.qcstat & 0x0fu;
+    return code ? code : SW6306_QCSTAT_UNKNOWN;
+}
 
-    /* 没处于快充协议就直接 NONE（避免残留值误判） */
-    if(!(SW6306_Status.qcstat & SW6306_QCSTAT_PQC))
-        return sw6306_quickcharge_str[0];
-
-    switch(qc) {
-    case SW6306_QCSTAT_QC2:    return sw6306_quickcharge_str[1];
-    case SW6306_QCSTAT_QC3:    return sw6306_quickcharge_str[2];
-    case SW6306_QCSTAT_QC3P:   return sw6306_quickcharge_str[3];
-    case SW6306_QCSTAT_FCP:    return sw6306_quickcharge_str[4];
-    case SW6306_QCSTAT_SCP:    return sw6306_quickcharge_str[5];
-    case SW6306_QCSTAT_PDFIX:  return sw6306_quickcharge_str[6];
-    case SW6306_QCSTAT_PDPPS:  return sw6306_quickcharge_str[7];
-    case SW6306_QCSTAT_PE11:   return sw6306_quickcharge_str[8];
-    case SW6306_QCSTAT_PE20:   return sw6306_quickcharge_str[9];
-    case SW6306_QCSTAT_VOOC1:  return sw6306_quickcharge_str[10];
-    case SW6306_QCSTAT_VOOC4:  return sw6306_quickcharge_str[11];
-    case SW6306_QCSTAT_SVOOC:  return sw6306_quickcharge_str[12];
-    case SW6306_QCSTAT_SFCP:   return sw6306_quickcharge_str[13];
-    case SW6306_QCSTAT_AFC:    return sw6306_quickcharge_str[14];
-    case SW6306_QCSTAT_UFCS:   return sw6306_quickcharge_str[15];
-    default:                   return sw6306_quickcharge_str[16];
-    }
+const char *SW6306_ReadProtocol(void) {
+    return sw6306_quickcharge_str[SW6306_ReadProtocolCode()];
 }
 
 SW6306_NOINLINE SW6306_RET SW6306_StatusLoad(SW6306_NOARG) {
@@ -1023,80 +1006,49 @@ SW6306_RET SW6306_PortFastChargeSet(SW6306_ARGS(sw6306_port_t port, sw6306_port_
  * QC/FCP/AFC/SCP/PE/SFCP/VOOC/SVOOC/UFCS 用 0x12A/0x12B/0x12C（手册 V0.3.0）。
  * 极性注意：绝大多数协议 0=使能/1=禁止（active low）；VOOC 系列相反（active HIGH，1=使能/0=禁止）。
  * 手册无独立开关的方向（QC sink、FCP sink、PE sink、SFCP sink、SVOOC sink）不操作直接返回。 */
+typedef struct {
+    uint16_t reg;
+    uint8_t mask, on;
+} sw6306_protocol_rule_t;
+
+#define SW6306_PROTO_LOW(reg, mask) {reg, mask, 0u}
+#define SW6306_PROTO_HIGH(reg, mask) {reg, mask, mask}
+/* Source/sink order matches sw6306_proto_dir_t. A zero mask marks a direction
+ * without an independent hardware switch. */
+static const sw6306_protocol_rule_t s_protocol_rules[][2] = {
+    [SW6306_PROTO_PD] = {SW6306_PROTO_LOW(SW6306_CTRG_PD0, SW6306_PD0_NOPDSRC), SW6306_PROTO_LOW(SW6306_CTRG_PD4, SW6306_PD4_NOPDSNK)},
+    [SW6306_PROTO_PPS] = {SW6306_PROTO_LOW(SW6306_CTRG_PD1, SW6306_PD1_NOPPS1 | SW6306_PD1_NOPPS3)},
+    [SW6306_PROTO_QC] = {SW6306_PROTO_LOW(SW6306_CTRG_P_DPDM3, SW6306_P_DPDM3_NOQC2 | SW6306_P_DPDM3_NOQC3 | SW6306_P_DPDM3_NOQC3P)},
+    [SW6306_PROTO_FCP] = {SW6306_PROTO_LOW(SW6306_CTRG_P_DPDM3, SW6306_P_DPDM3_NOFCP)},
+    [SW6306_PROTO_AFC] = {SW6306_PROTO_LOW(SW6306_CTRG_P_DPDM3, SW6306_P_DPDM3_NOAFC), SW6306_PROTO_LOW(SW6306_CTRG_P_DPDM5, SW6306_P_DPDM5_NOAFC)},
+    [SW6306_PROTO_SCP] = {{0}, SW6306_PROTO_LOW(SW6306_CTRG_P_DPDM5, SW6306_P_DPDM5_NOSCP)},
+    [SW6306_PROTO_PE] = {SW6306_PROTO_LOW(SW6306_CTRG_P_DPDM4, SW6306_P_DPDM4_NOPE)},
+    [SW6306_PROTO_SFCP] = {SW6306_PROTO_LOW(SW6306_CTRG_P_DPDM4, SW6306_P_DPDM4_NOSFCP)},
+    [SW6306_PROTO_VOOC] = {SW6306_PROTO_HIGH(SW6306_CTRG_P_DPDM4, SW6306_P_DPDM4_VOOC1 | SW6306_P_DPDM4_VOOC4), SW6306_PROTO_HIGH(SW6306_CTRG_P_DPDM5, SW6306_P_DPDM5_VOOC)},
+    [SW6306_PROTO_SVOOC] = {SW6306_PROTO_HIGH(SW6306_CTRG_P_DPDM4, SW6306_P_DPDM4_SVOOC)},
+    [SW6306_PROTO_UFCS] = {SW6306_PROTO_LOW(SW6306_CTRG_P_DPDM4, SW6306_P_DPDM4_NOUFCS), SW6306_PROTO_LOW(SW6306_CTRG_P_DPDM5, SW6306_P_DPDM5_NOUFCS)},
+};
+#undef SW6306_PROTO_LOW
+#undef SW6306_PROTO_HIGH
+
 SW6306_RET SW6306_ProtocolEnable(SW6306_ARGS(sw6306_proto_t proto, sw6306_proto_dir_t dir, uint8_t enable)) {
-    static uint16_t reg;
-    static uint8_t mask,active_high;
+#if SW6306_USE_PROTOTHREAD
+    static const sw6306_protocol_rule_t *rule;
+#else
+    const sw6306_protocol_rule_t *rule;
+#endif
     SW6306_FUNC_BEGIN;
-    reg=0u;mask=0u;active_high=0u;
-
-    switch(proto) {
-    case SW6306_PROTO_PD:
-        if(dir == SW6306_PROTO_DIR_SOURCE) { reg = SW6306_CTRG_PD0; mask = SW6306_PD0_NOPDSRC; }
-        else { reg = SW6306_CTRG_PD4; mask = SW6306_PD4_NOPDSNK; }
-        break;
-    case SW6306_PROTO_PPS:
-        if(dir != SW6306_PROTO_DIR_SOURCE) { SW6306_FUNC_ABORT; } /* PPS 仅 source */
-        /* 保持 Init 配置：PPS1/PPS3 使能（4 个 PPS 最多响应 2 个） */
-        reg  = SW6306_CTRG_PD1;
-        mask = SW6306_PD1_NOPPS1 | SW6306_PD1_NOPPS3;
-        break;
-    case SW6306_PROTO_QC:
-        if(dir != SW6306_PROTO_DIR_SOURCE) { SW6306_FUNC_ABORT; } /* 0x12C 无 QC sink 位 */
-        reg = SW6306_CTRG_P_DPDM3;
-        mask = SW6306_P_DPDM3_NOQC2 | SW6306_P_DPDM3_NOQC3 | SW6306_P_DPDM3_NOQC3P;
-        break;
-    case SW6306_PROTO_FCP:
-        if(dir != SW6306_PROTO_DIR_SOURCE) { SW6306_FUNC_ABORT; } /* 手册无 FCP sink 位 */
-        reg = SW6306_CTRG_P_DPDM3; mask = SW6306_P_DPDM3_NOFCP;
-        break;
-    case SW6306_PROTO_AFC:
-        if(dir == SW6306_PROTO_DIR_SOURCE) { reg = SW6306_CTRG_P_DPDM3; mask = SW6306_P_DPDM3_NOAFC; }
-        else { reg = SW6306_CTRG_P_DPDM5; mask = SW6306_P_DPDM5_NOAFC; }
-        break;
-    case SW6306_PROTO_SCP:
-        if(dir != SW6306_PROTO_DIR_SINK) { SW6306_FUNC_ABORT; }
-        reg = SW6306_CTRG_P_DPDM5; mask = SW6306_P_DPDM5_NOSCP;
-        break;
-    case SW6306_PROTO_PE:
-        if(dir != SW6306_PROTO_DIR_SOURCE) { SW6306_FUNC_ABORT; } /* 手册无 PE sink 位 */
-        reg = SW6306_CTRG_P_DPDM4; mask = SW6306_P_DPDM4_NOPE;
-        break;
-    case SW6306_PROTO_SFCP:
-        if(dir != SW6306_PROTO_DIR_SOURCE) { SW6306_FUNC_ABORT; } /* 手册无 SFCP sink 位 */
-        reg = SW6306_CTRG_P_DPDM4; mask = SW6306_P_DPDM4_NOSFCP;
-        break;
-    case SW6306_PROTO_VOOC:
-        /* VOOC 系列 active HIGH */
-        if(dir == SW6306_PROTO_DIR_SOURCE) { reg = SW6306_CTRG_P_DPDM4; mask = SW6306_P_DPDM4_VOOC1 | SW6306_P_DPDM4_VOOC4; }
-        else { reg = SW6306_CTRG_P_DPDM5; mask = SW6306_P_DPDM5_VOOC; }
-        active_high = 1;
-        break;
-    case SW6306_PROTO_SVOOC:
-        if(dir != SW6306_PROTO_DIR_SOURCE) { SW6306_FUNC_ABORT; } /* 手册无 SVOOC sink 位 */
-        reg = SW6306_CTRG_P_DPDM4; mask = SW6306_P_DPDM4_SVOOC;
-        active_high = 1;
-        break;
-    case SW6306_PROTO_UFCS:
-        if(dir == SW6306_PROTO_DIR_SOURCE) { reg = SW6306_CTRG_P_DPDM4; mask = SW6306_P_DPDM4_NOUFCS; }
-        else { reg = SW6306_CTRG_P_DPDM5; mask = SW6306_P_DPDM5_NOUFCS; }
-        break;
-default:
+    if ((unsigned)proto >= sizeof(s_protocol_rules) / sizeof(s_protocol_rules[0]) ||
+        (unsigned)dir > SW6306_PROTO_DIR_SINK)
         SW6306_FUNC_ABORT;
-    }
-
+    rule = &s_protocol_rules[proto][dir];
+    if (!rule->mask)
+        SW6306_FUNC_ABORT;
     SW6306_MUTEX_TAKE;
     if (!s_io_failed)
-        SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, reg);
-    if(active_high) {
-        /* VOOC 系列 active HIGH：enable=1 使能 → 置位(1)；enable=0 禁止 → 清位(0) */
-        if (!s_io_failed)
-            SW6306_SPAWN_ARGS(SW6306_ByteModify, reg, mask, enable ? mask : 0x00);
-    }
-    else {
-        /* 常规协议 active low（0=使能/1=禁止）：enable=1 使能 → 清位；enable=0 禁止 → 置位 */
-        if (!s_io_failed)
-            SW6306_SPAWN_ARGS(SW6306_ByteModify, reg, mask, enable ? 0x00 : mask);
-    }
+        SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, rule->reg);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteModify, rule->reg, rule->mask, enable ? rule->on : rule->mask ^ rule->on);
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
@@ -1462,69 +1414,108 @@ SW6306_RET SW6306_IbusForceCtrlSet(SW6306_ARGS(uint8_t status))//设置是否强
 }
 
 /********************************初始化区**************************************/
-/* 依据 POSET (W) 与档位最高电压 (mV) 计算输出电流上限。
- * 整数计算避免浮点，并向下对齐到协议规定步进；使用 uint32_t
- * 防止 W * 1000000 发生 16 位溢出。
- * 105W设置：20V Fix = 5000mA，21V PPS/UFCS = 5000mA。
- * 实际对外能力仍应由芯片依据线缆 E-marker 与端口状态限制。 */
-static uint16_t sw6306_power_current_ma(uint8_t watt, uint16_t voltage_mv, uint16_t max_ma, uint16_t step_ma) {
-    uint32_t current_ma = (uint32_t)watt * 1000000UL / voltage_mv;
+/* These register operations run within the caller's existing ownership
+ * and page selection. Zero mask is a full byte write, otherwise RMW. */
+typedef struct {
+    uint16_t reg;
+    uint8_t mask, value;
+} sw6306_reg_op_t;
 
-    if (current_ma > max_ma) {
-        current_ma = max_ma;
+#define SW6306_REG_WRITE(reg, value) {reg, 0u, value}
+#define SW6306_REG_MODIFY(reg, mask, value) {reg, mask, value}
+
+static SW6306_NOINLINE SW6306_RET sw6306_apply_regs(SW6306_ARGS(const sw6306_reg_op_t *ops, unsigned count)) {
+#if SW6306_USE_PROTOTHREAD
+    static unsigned i;
+#else
+    unsigned i;
+#endif
+    SW6306_FUNC_BEGIN;
+    for (i = 0u; i < count && !s_io_failed; ++i) {
+        if (ops[i].mask)
+            SW6306_SPAWN_ARGS(SW6306_ByteModify, ops[i].reg, ops[i].mask, ops[i].value);
+        else
+            SW6306_SPAWN_ARGS(SW6306_ByteWrite, ops[i].reg, ops[i].value);
     }
+    SW6306_FUNC_END;
+}
 
-    current_ma = (current_ma / step_ma) * step_ma;
-    if (current_ma < step_ma) {
-        current_ma = step_ma;
+/* Direct fixed/programmable current register codes. All selected voltages
+ * are integer volts: cancelling 1000 leaves a 16-bit divisor and gives
+ * exactly floor(watt * 1e6 / (voltage_mV * step_mA)). */
+typedef struct {
+    uint16_t divisor, max_code;
+} sw6306_current_limit_t;
+
+#define SW6306_CURRENT_LIMIT(volts, step, max_ma) {(volts) * (step), (max_ma) / (step)}
+static const sw6306_current_limit_t s_pd_limits[] = {
+    SW6306_CURRENT_LIMIT(5u, 10u, SW6306_PD_5V_FIX_CURR),
+    SW6306_CURRENT_LIMIT(9u, 10u, SW6306_PD_9V_FIX_CURR),
+    SW6306_CURRENT_LIMIT(12u, 10u, SW6306_PD_12V_FIX_CURR),
+    SW6306_CURRENT_LIMIT(15u, 10u, SW6306_PD_15V_FIX_CURR),
+    SW6306_CURRENT_LIMIT(20u, 10u, SW6306_PD_20V_FIX_CURR),
+    SW6306_CURRENT_LIMIT(6u, 50u, SW6306_PD_PPS0_CURR),
+    SW6306_CURRENT_LIMIT(11u, 50u, SW6306_PD_PPS1_CURR),
+    SW6306_CURRENT_LIMIT(16u, 50u, SW6306_PD_PPS2_CURR),
+    SW6306_CURRENT_LIMIT(21u, 50u, SW6306_PD_PPS3_CURR),
+};
+static const sw6306_current_limit_t s_ufcs_limits[] = {
+    SW6306_CURRENT_LIMIT(5u, 50u, SW6306_UFCS_5V_MAX_MA),
+    SW6306_CURRENT_LIMIT(10u, 50u, SW6306_UFCS_10V_MAX_MA),
+    SW6306_CURRENT_LIMIT(21u, 50u, SW6306_UFCS_20V_MAX_MA),
+};
+#undef SW6306_CURRENT_LIMIT
+
+static uint16_t sw6306_current_code(uint8_t watt, const sw6306_current_limit_t *limit) {
+    uint32_t code = (uint32_t)watt * 1000u / limit->divisor;
+    if (code > limit->max_code)
+        code = limit->max_code;
+    return code ? (uint16_t)code : 1u;
+}
+
+/* Write current registers one byte at a time, not a hardware burst.
+ * PD11 preserves its reserved bits and enables the same PPS CP flags. */
+static SW6306_NOINLINE SW6306_RET sw6306_write_current(SW6306_ARGS(uint16_t start, const uint8_t *data, unsigned count)) {
+#if SW6306_USE_PROTOTHREAD
+    static unsigned i;
+#else
+    unsigned i;
+#endif
+    SW6306_FUNC_BEGIN;
+    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, start);
+    for (i = 0u; i < count && !s_io_failed; ++i) {
+        if (start + i == SW6306_CTRG_PD11)
+            SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_PD11, SW6306_PD11_MSK | 0x03u, data[i]);
+        else
+            SW6306_SPAWN_ARGS(SW6306_ByteWrite, start + i, data[i]);
     }
-
-    return (uint16_t)current_ma;
+    SW6306_FUNC_END;
 }
 
 static SW6306_NOINLINE SW6306_RET SW6306_PDCurrentSet(SW6306_ARGS(uint8_t watt)) {
-    uint16_t i5 = sw6306_power_current_ma(watt, 5000U, SW6306_PD_5V_FIX_CURR, 10U);
-    uint16_t i9 = sw6306_power_current_ma(watt, 9000U, SW6306_PD_9V_FIX_CURR, 10U);
-    uint16_t i12 = sw6306_power_current_ma(watt, 12000U, SW6306_PD_12V_FIX_CURR, 10U);
-    uint16_t i15 = sw6306_power_current_ma(watt, 15000U, SW6306_PD_15V_FIX_CURR, 10U);
-    uint16_t i20 = sw6306_power_current_ma(watt, 20000U, SW6306_PD_20V_FIX_CURR, 10U);
-    uint16_t pps0 = sw6306_power_current_ma(watt, 6000U, SW6306_PD_PPS0_CURR, 50U);
-    uint16_t pps1 = sw6306_power_current_ma(watt, 11000U, SW6306_PD_PPS1_CURR, 50U);
-    uint16_t pps2 = sw6306_power_current_ma(watt, 16000U, SW6306_PD_PPS2_CURR, 50U);
-    uint16_t pps3 = sw6306_power_current_ma(watt, 21000U, SW6306_PD_PPS3_CURR, 50U);
+#if SW6306_USE_PROTOTHREAD
+    static uint8_t data[11];
+#else
+    uint8_t data[11];
+#endif
     SW6306_FUNC_BEGIN;
-
+    /* Compute only on first entry. All bytes crossing wait points persist. */
+    {
+        uint16_t code[5];
+        for (unsigned i = 0u; i < 5u; ++i)
+            code[i] = sw6306_current_code(watt, &s_pd_limits[i]);
+        for (unsigned i = 0u; i < 4u; ++i)
+            data[i] = (uint8_t)code[i];
+        data[4] = (uint8_t)(((code[0] >> 2) & 0xC0u) | ((code[1] >> 4) & 0x30u) |
+                            ((code[2] >> 6) & 0x0Cu) | (code[3] >> 8));
+        data[5] = (uint8_t)code[4];
+        data[6] = (uint8_t)(SW6306_PD11_CP_PPS0 | SW6306_PD11_CP_PPS1 |
+                            SW6306_PD11_CP_PPS2 | SW6306_PD11_CP_PPS3 | (code[4] >> 8));
+        for (unsigned i = 0u; i < 4u; ++i)
+            data[7u + i] = (uint8_t)(SW6306_PPS0_ENCP | sw6306_current_code(watt, &s_pd_limits[5u + i]));
+    }
     if (!s_io_failed)
-        SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PD5);
-    if (!s_io_failed)
-        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD5, (i5 / 10U) & 0xFFU);
-    if (!s_io_failed)
-        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD6, (i9 / 10U) & 0xFFU);
-    if (!s_io_failed)
-        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD7, (i12 / 10U) & 0xFFU);
-    if (!s_io_failed)
-        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD8, (i15 / 10U) & 0xFFU);
-    if (!s_io_failed)
-        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD9,
-                          (((i5 / 5U) >> 3) & 0xC0U) |
-                              (((i9 / 5U) >> 5) & 0x30U) |
-                              (((i12 / 5U) >> 7) & 0x0CU) |
-                              ((i15 / 5U) >> 9));
-    if (!s_io_failed)
-        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD10, (i20 / 10U) & 0xFFU);
-    if (!s_io_failed)
-        SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_PD11, SW6306_PD11_MSK | 0x03U,
-                          SW6306_PD11_CP_PPS0 | SW6306_PD11_CP_PPS1 |
-                              SW6306_PD11_CP_PPS2 | SW6306_PD11_CP_PPS3 |
-                              ((i20 / 5U) >> 9));
-    if (!s_io_failed)
-        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PPS0, SW6306_PPS0_ENCP | (pps0 / 50U));
-    if (!s_io_failed)
-        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PPS1, SW6306_PPS1_ENCP | (pps1 / 50U));
-    if (!s_io_failed)
-        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PPS2, SW6306_PPS2_ENCP | (pps2 / 50U));
-    if (!s_io_failed)
-        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PPS3, SW6306_PPS3_ENCP | (pps3 / 50U));
+        SW6306_SPAWN_ARGS(sw6306_write_current, SW6306_CTRG_PD5, data, sizeof(data));
     if (!s_io_failed)
         SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PD_CMD);
     if (!s_io_failed)
@@ -1532,36 +1523,38 @@ static SW6306_NOINLINE SW6306_RET SW6306_PDCurrentSet(SW6306_ARGS(uint8_t watt))
     SW6306_FUNC_END;
 }
 
+static const sw6306_reg_op_t s_pd_init_regs[] = {
+    SW6306_REG_MODIFY(SW6306_CTRG_PD0, SW6306_PD0_MSK, 0x00),
+    SW6306_REG_MODIFY(SW6306_CTRG_PD1, SW6306_PD1_MSK,
+                      SW6306_PD1_NOPPS0 | SW6306_PD1_NOPPS2),
+    SW6306_REG_WRITE(SW6306_CTRG_PD2,
+                     SW6306_PD2_PPS3V3 | SW6306_PD2_FIXREGSET |
+                         SW6306_PD2_PPSREGSET | SW6306_PD2_REJECT),
+    SW6306_REG_MODIFY(SW6306_CTRG_PD3, SW6306_PD3_MSK,
+                      SW6306_PD3_ENDRSWAP | SW6306_PD3_ENVCONNSWAP),
+    SW6306_REG_MODIFY(SW6306_CTRG_PD4, SW6306_PD4_MSK, 0x00),
+};
+
 static SW6306_NOINLINE SW6306_RET SW6306_PDSet(SW6306_NOARG) {
     SW6306_FUNC_BEGIN;
     SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PD0);
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_PD0, SW6306_PD0_MSK, 0x00);
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_PD1, SW6306_PD1_MSK,
-        SW6306_PD1_NOPPS0 | SW6306_PD1_NOPPS2);
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PD2,
-        SW6306_PD2_PPS3V3 | SW6306_PD2_FIXREGSET |
-        SW6306_PD2_PPSREGSET | SW6306_PD2_REJECT);
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_PD3, SW6306_PD3_MSK,
-        SW6306_PD3_ENDRSWAP | SW6306_PD3_ENVCONNSWAP);
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_PD4, SW6306_PD4_MSK, 0x00);
-    SW6306_SPAWN_ARGS(SW6306_PDCurrentSet, s_pomax_target);
+    SW6306_SPAWN_ARGS(sw6306_apply_regs, s_pd_init_regs, sizeof(s_pd_init_regs) / sizeof(s_pd_init_regs[0]));
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_PDCurrentSet, s_pomax_target);
     SW6306_FUNC_END;
 }
 
 static SW6306_NOINLINE SW6306_RET SW6306_UFCSCurrentSet(SW6306_ARGS(uint8_t watt)) {
-    uint16_t i5 = sw6306_power_current_ma(watt, 5000U, SW6306_UFCS_5V_MAX_MA, 50U);
-    uint16_t i10 = sw6306_power_current_ma(watt, 10000U, SW6306_UFCS_10V_MAX_MA, 50U);
-    uint16_t i21 = sw6306_power_current_ma(watt, 21000U, SW6306_UFCS_20V_MAX_MA, 50U);
+#if SW6306_USE_PROTOTHREAD
+    static uint8_t data[3];
+#else
+    uint8_t data[3];
+#endif
     SW6306_FUNC_BEGIN;
-
+    for (unsigned i = 0u; i < sizeof(data); ++i)
+        data[i] = (uint8_t)(sw6306_current_code(watt, &s_ufcs_limits[i]) & SW6306_UFCS_CURR_CODE_MSK);
     if (!s_io_failed)
-        SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_C_UFCS0);
-    if (!s_io_failed)
-        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_C_UFCS0, (i5 * 2U / 100U) & SW6306_UFCS_CURR_CODE_MSK);
-    if (!s_io_failed)
-        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_C_UFCS1, (i10 * 2U / 100U) & SW6306_UFCS_CURR_CODE_MSK);
-    if (!s_io_failed)
-        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_C_UFCS2, (i21 * 2U / 100U) & SW6306_UFCS_CURR_CODE_MSK);
+        SW6306_SPAWN_ARGS(sw6306_write_current, SW6306_CTRG_C_UFCS0, data, sizeof(data));
     if (!s_io_failed)
         SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_UFCS_CMD);
     if (!s_io_failed)
@@ -1572,112 +1565,130 @@ static SW6306_NOINLINE SW6306_RET SW6306_UFCSCurrentSet(SW6306_ARGS(uint8_t watt
 static SW6306_NOINLINE SW6306_RET SW6306_UFCSSet(SW6306_NOARG) {
     SW6306_FUNC_BEGIN;
     SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_P_UFCS);
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_P_UFCS,
-        SW6306_P_UFCS_CURRSET_MAN, SW6306_P_UFCS_CURRSET_MAN);
-    SW6306_SPAWN_ARGS(SW6306_UFCSCurrentSet, s_pomax_target);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_P_UFCS,
+                          SW6306_P_UFCS_CURRSET_MAN, SW6306_P_UFCS_CURRSET_MAN);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_UFCSCurrentSet, s_pomax_target);
     SW6306_FUNC_END;
 }
+
+static const sw6306_reg_op_t s_init_high_regs[] = {
+    //禁止放电恒温环
+    SW6306_REG_WRITE(SW6306_CTRG_DCHG0, SW6306_DCHG0_NOCT),
+    //放电UVLO 2.8V，0.3V迟滞
+    SW6306_REG_MODIFY(SW6306_CTRG_DCHG4, SW6306_DCHG4_MSK, SW6306_DCHG4_UVLOHYS_V3 | SW6306_DCHG4_UVLO_2V8),
+    //4.2V电池，5S
+    SW6306_REG_WRITE(SW6306_CTRG_CHG1, SW6306_CHG1_BTYPE_REGSET | SW6306_CHG1_BTYPE_4V2 | SW6306_CHG1_SERIES_REGSET | SW6306_CHG1_5S),
+    //涓流充电400mA，电压迟滞0.2V，48H超时
+    SW6306_REG_WRITE(SW6306_CTRG_CHG6, SW6306_CHG6_TCHG_400M | SW6306_CHG6_TCHGHYS_0V1 | SW6306_CHG6_TCHG_48H),
+    //充电截止电流200mA，C口5V充电电流3.3A
+    SW6306_REG_MODIFY(SW6306_CTRG_CHG7, SW6306_CHG7_MSK, SW6306_CHG7_CHGEND_200M | SW6306_CHG7_C_3A3),
+    //B口5V充电电流2.3A，NTC-10°C低温保护，60°C高温保护
+    SW6306_REG_WRITE(SW6306_CTRG_CHG8, SW6306_CHG8_B_2A3 | SW6306_CHG8_NTCUTP_M10C | SW6306_CHG8_NTCOTP_60C),
+    //触发62368高低温保护时减小功率为原来的1/2，高温范围10°C（60~50°C）
+    SW6306_REG_WRITE(SW6306_CTRG_CHG9, SW6306_CHG9_UT_4DIV8 | SW6306_CHG9_OT_2DIV4 | SW6306_CHG9_TR_10C),
+    //62368充电常温范围45°C
+    SW6306_REG_WRITE(SW6306_CTRG_CHG10, SW6306_CHG10_TN_45C),
+    //62368放电常温范围60~-10°C
+    SW6306_REG_WRITE(SW6306_CTRG_CHG11, SW6306_CHG11_TR_NTC),
+    //禁止充电恒温环，阈值100°C
+    SW6306_REG_MODIFY(SW6306_CTRG_CHG12, SW6306_CHG12_MSK, SW6306_CHG12_NOCT | SW6306_CHG12_CT_100C),
+    //300kHz，峰值限流18A（充放电共用），芯片120°C过温保护
+    SW6306_REG_MODIFY(SW6306_CTRG_DCDC0, SW6306_DCDC0_MSK, SW6306_DCDC0_F300K | SW6306_DCDC0_18A | SW6306_DCDC0_120C),
+    /* RUH30J51M 实测应选 10mΩ 档；设成 5/2.5mΩ 会使高压 Boost 提前掉压限功。
+     * 若 20V 重载输出异常，优先核对 BUS 下管 Rds(on) 配置。 */
+    SW6306_REG_MODIFY(SW6306_CTRG_DCDC1, SW6306_DCDC1_MSK, SW6306_DCDC1_7R5),
+    //启用NTC保护(0x116[4]=0)，保留温度阈值/62368/恒温环寄存器控制
+    SW6306_REG_MODIFY(SW6306_CTRG_DCDC2, SW6306_DCDC2_MSK, SW6306_DCDC2_TEMP_REGSET | SW6306_DCDC2_62368_REGSET | SW6306_DCDC2_CT_REGSET),
+    //禁止A口插入检测
+    SW6306_REG_MODIFY(SW6306_CTRG_INDET0, SW6306_INDET0_MSK, SW6306_INDET0_NOA1VBUS | SW6306_INDET0_NOA2VBUS),
+    //A1启用硬件空载检测；C1保留原策略；A2专用于外部负载计量，禁止空载关断
+    SW6306_REG_MODIFY(SW6306_CTRG_INDET1, SW6306_INDET1_MSK, SW6306_INDET1_NOC1NL | SW6306_INDET1_NOC2NL | SW6306_INDET1_NOA2NL),
+    //高压时拔出检测电流减半
+    SW6306_REG_MODIFY(SW6306_CTRG_INDET2, SW6306_INDET2_HVHALFNL | SW6306_INDET2_SPNL_MSK, SW6306_INDET2_HVHALFNL | SW6306_INDET2_SPNL_32S),
+    //A1空载检测20mA，A2阈值保持60mA（A2空载关断已禁用）
+    SW6306_REG_WRITE(SW6306_CTRG_INDET3, SW6306_INDET3_A1_20 | SW6306_INDET3_A2_60),
+    //端口快充全部使能
+    SW6306_REG_MODIFY(SW6306_CTRG_PORTQC, SW6306_PORTQC_MSK, 0x00),
+    /* PISET=100W is not sufficient if VCHG caps sink requests at 15V.
+     * Enable 20V request for capable PD chargers (20V/5A needs a
+     * certified 5A e-marked cable). Keep battery-voltage priority. */
+    SW6306_REG_MODIFY(SW6306_CTRG_VCHG,
+                      SW6306_VCHG_MSK, SW6306_VCHG_BATT_VRSQ | SW6306_VCHG_MVRSQ_20V),
+    //高压快充协议功率跟随系统设置
+    SW6306_REG_MODIFY(SW6306_CTRG_P_DPDM0, SW6306_P_DPDM0_MSK, SW6306_P_DPDM0_PSYS),
+    //QC3+协议最大功率45W,QC2协议最大电压20V
+    SW6306_REG_WRITE(SW6306_CTRG_P_DPDM1, SW6306_DPDM1_QC3P_45W | SW6306_DPDM1_QC2_20V),
+    //SFCP协议最大电压12V,PE协议最大电压12V
+    SW6306_REG_MODIFY(SW6306_CTRG_P_DPDM2, SW6306_DPDM2_MSK, SW6306_DPDM2_SFCP_12V | SW6306_DPDM2_PE_12V),
+    //Default all supported ordinary source protocols to enabled.
+    SW6306_REG_MODIFY(SW6306_CTRG_P_DPDM3, SW6306_P_DPDM3_MSK, 0u),
+    //VOOC协议使能
+    SW6306_REG_MODIFY(SW6306_CTRG_P_DPDM4, SW6306_P_DPDM4_MSK, SW6306_P_DPDM4_VOOC1 | SW6306_P_DPDM4_VOOC4 | SW6306_P_DPDM4_SVOOC),
+    //VOOC协议使能
+    SW6306_REG_MODIFY(SW6306_CTRG_P_DPDM5, SW6306_P_DPDM5_MSK, SW6306_P_DPDM5_VOOC | SW6306_P_DPDM5_SDP2A),
+    //数码管驱动电流5mA,轻载5s后关闭输出
+    SW6306_REG_MODIFY(SW6306_CTRG_DISPLAY, SW6306_CTRG_DISPLAY_MSK, SW6306_CTRG_DISPLAY_2_5M),
+    // Rdc计算 + 容量学习默认开启；只置LEARNEN，不在Init清LEARN_END。
+    SW6306_REG_MODIFY(SW6306_CTRG_GAUGE0, SW6306_GAUGE0_MSK,
+                      SW6306_GAUGE0_RDCEN | SW6306_GAUGE0_LEARNEN),
+    //物理KEY未接出；软件不用CLICK做端口控制，避免隐式激活A1或C1
+    SW6306_REG_MODIFY(SW6306_CTRG_KEY0, SW6306_KEY0_MSK, SW6306_KEY0_REGSET),
+    SW6306_REG_MODIFY(SW6306_CTRG_KEY1, SW6306_KEY1_MSK, SW6306_KEY1_DISPLAY | SW6306_KEY1_LPOFF | SW6306_KEY1_DCFF),
+};
+
+static const sw6306_reg_op_t s_init_low_regs[] = {
+    //使能UVLO、充放电异常与场景变化中断（插拔/唤醒事件可经IRQ脚发脉冲唤醒MCU）
+    //注意：硬件KEY引脚未引出，无需使能按键事件中断（SW6306_KEY_INT_EN）
+    SW6306_REG_WRITE(SW6306_CTRG_INT_EN, SW6306_UVLO_INT_EN | SW6306_CHGERR_INT_EN | SW6306_DISCHGERR_INT_EN | SW6306_SCENE_INT_EN),
+    //IRQ脚拉低10ms
+    SW6306_REG_WRITE(SW6306_CTRG_IOCTL, SW6306_IRQ1),
+    //强制控制输入输出功率和电池电流
+    SW6306_REG_WRITE(SW6306_CTRG_FORCECTL, SW6306_FORCECTL_POUT | SW6306_FORCECTL_PIN | SW6306_FORCECTL_IBAT),
+};
 
 SW6306_NOINLINE SW6306_RET SW6306_Init(SW6306_NOARG) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
-    SW6306_Status.initialized=0u;
-    s_io_failed=0u;
+    SW6306_Status.initialized = 0u;
+    s_io_failed = 0u;
     //唤醒并解锁寄存器写入；初始化不能模拟短按而在空口开启A1
     SW6306_SPAWN_NOARG(SW6306_Unlock_Nolock);
-    if(!SW6306_Status.unlocked || s_io_failed) {
-        SW6306_Status.initialized=0u;
+    if (!SW6306_Status.unlocked || s_io_failed) {
+        SW6306_Status.initialized = 0u;
         SW6306_MUTEX_GIVE;
         SW6306_FUNC_ABORT;
     }
-    //使能UVLO、充放电异常与场景变化中断（插拔/唤醒事件可经IRQ脚发脉冲唤醒MCU）
-    //注意：硬件KEY引脚未引出，无需使能按键事件中断（SW6306_KEY_INT_EN）
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_INT_EN, SW6306_UVLO_INT_EN|SW6306_CHGERR_INT_EN|SW6306_DISCHGERR_INT_EN|SW6306_SCENE_INT_EN);
-    //IRQ脚拉低10ms
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_IOCTL, SW6306_IRQ1);
-    //强制控制输入输出功率和电池电流
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_FORCECTL, SW6306_FORCECTL_POUT|SW6306_FORCECTL_PIN|SW6306_FORCECTL_IBAT);
+    SW6306_SPAWN_ARGS(sw6306_apply_regs, s_init_low_regs, sizeof(s_init_low_regs) / sizeof(s_init_low_regs[0]));
     //设置放电电池端限流值（按实际感测电阻缩放写入值）
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_DCHG_IBAT, sw6306_batt_limit_register(SW6306_BAT_DCHG_CURR_MAX));
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_DCHG_IBAT, sw6306_batt_limit_register(SW6306_BAT_DCHG_CURR_MAX));
     //输入功率设置
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PISET, s_pimax_target);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_PISET, s_pimax_target);
     //设置充电电池端限流值（按实际感测电阻缩放写入值）
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_CHG_IBAT, sw6306_batt_limit_register(SW6306_BAT_CHG_CURR_MAX));
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_CHG_IBAT, sw6306_batt_limit_register(SW6306_BAT_CHG_CURR_MAX));
     //输出功率设置（写入运行时目标，默认 SW6306_OUTPUT_POWER_MAX）
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_POSET, s_pomax_target);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_POSET, s_pomax_target);
     //LEARN_END 由算法在消费 DONE 后 re-arm 时清除；Init 不得破坏历史完成状态。
     //切换寄存器组
-    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_DCHG4);
-    //禁止放电恒温环
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_DCHG0, SW6306_DCHG0_NOCT);
-    //放电UVLO 2.8V，0.3V迟滞
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_DCHG4, SW6306_DCHG4_MSK, SW6306_DCHG4_UVLOHYS_V3|SW6306_DCHG4_UVLO_2V8);
-    //4.2V电池，5S
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_CHG1, SW6306_CHG1_BTYPE_REGSET|SW6306_CHG1_BTYPE_4V2|SW6306_CHG1_SERIES_REGSET|SW6306_CHG1_5S);
-    //涓流充电400mA，电压迟滞0.2V，48H超时
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_CHG6, SW6306_CHG6_TCHG_400M|SW6306_CHG6_TCHGHYS_0V1|SW6306_CHG6_TCHG_48H);
-    //充电截止电流200mA，C口5V充电电流3.3A
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_CHG7, SW6306_CHG7_MSK, SW6306_CHG7_CHGEND_200M|SW6306_CHG7_C_3A3);
-    //B口5V充电电流2.3A，NTC-10°C低温保护，60°C高温保护
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_CHG8, SW6306_CHG8_B_2A3|SW6306_CHG8_NTCUTP_M10C|SW6306_CHG8_NTCOTP_60C);
-    //触发62368高低温保护时减小功率为原来的1/2，高温范围10°C（60~50°C）
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_CHG9, SW6306_CHG9_UT_4DIV8|SW6306_CHG9_OT_2DIV4|SW6306_CHG9_TR_10C);
-    //62368充电常温范围45°C
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_CHG10, SW6306_CHG10_TN_45C);
-    //62368放电常温范围60~-10°C
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_CHG11, SW6306_CHG11_TR_NTC);
-    //禁止充电恒温环，阈值100°C
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_CHG12, SW6306_CHG12_MSK, SW6306_CHG12_NOCT|SW6306_CHG12_CT_100C);
-    //300kHz，峰值限流18A（充放电共用），芯片120°C过温保护
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_DCDC0, SW6306_DCDC0_MSK, SW6306_DCDC0_F300K|SW6306_DCDC0_18A|SW6306_DCDC0_120C);
-    /* RUH30J51M 实测应选 10mΩ 档；设成 5/2.5mΩ 会使高压 Boost 提前掉压限功。
-     * 若 20V 重载输出异常，优先核对 BUS 下管 Rds(on) 配置。 */
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_DCDC1, SW6306_DCDC1_MSK, SW6306_DCDC1_7R5);
-    //启用NTC保护(0x116[4]=0)，保留温度阈值/62368/恒温环寄存器控制
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_DCDC2, SW6306_DCDC2_MSK, SW6306_DCDC2_TEMP_REGSET|SW6306_DCDC2_62368_REGSET|SW6306_DCDC2_CT_REGSET);
-    //禁止A口插入检测
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_INDET0, SW6306_INDET0_MSK, SW6306_INDET0_NOA1VBUS|SW6306_INDET0_NOA2VBUS);
-    //A1启用硬件空载检测；C1保留原策略；A2专用于外部负载计量，禁止空载关断
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_INDET1, SW6306_INDET1_MSK, SW6306_INDET1_NOC1NL|SW6306_INDET1_NOC2NL|SW6306_INDET1_NOA2NL);
-    //高压时拔出检测电流减半
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_INDET2, SW6306_INDET2_HVHALFNL|SW6306_INDET2_SPNL_MSK, SW6306_INDET2_HVHALFNL|SW6306_INDET2_SPNL_32S);
-    //A1空载检测20mA，A2阈值保持60mA（A2空载关断已禁用）
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_INDET3, SW6306_INDET3_A1_20|SW6306_INDET3_A2_60);
-    //端口快充全部使能
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_PORTQC, SW6306_PORTQC_MSK, 0x00);
-    /* PISET=100W is not sufficient if VCHG caps sink requests at 15V.
-     * Enable 20V request for capable PD chargers (20V/5A needs a
-     * certified 5A e-marked cable). Keep battery-voltage priority. */
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_VCHG,
-        SW6306_VCHG_MSK, SW6306_VCHG_BATT_VRSQ|SW6306_VCHG_MVRSQ_20V);
-    //高压快充协议功率跟随系统设置
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_P_DPDM0, SW6306_P_DPDM0_MSK, SW6306_P_DPDM0_PSYS);
-    //QC3+协议最大功率45W,QC2协议最大电压20V
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_P_DPDM1, SW6306_DPDM1_QC3P_45W|SW6306_DPDM1_QC2_20V);
-    //SFCP协议最大电压12V,PE协议最大电压12V
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_P_DPDM2, SW6306_DPDM2_MSK, SW6306_DPDM2_SFCP_12V|SW6306_DPDM2_PE_12V);
-    //Default all supported ordinary source protocols to enabled.
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_P_DPDM3, SW6306_P_DPDM3_MSK, 0u);
-    //VOOC协议使能
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_P_DPDM4, SW6306_P_DPDM4_MSK, SW6306_P_DPDM4_VOOC1|SW6306_P_DPDM4_VOOC4|SW6306_P_DPDM4_SVOOC);
-    //VOOC协议使能
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_P_DPDM5, SW6306_P_DPDM5_MSK, SW6306_P_DPDM5_VOOC|SW6306_P_DPDM5_SDP2A);
-    //数码管驱动电流5mA,轻载5s后关闭输出
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_DISPLAY, SW6306_CTRG_DISPLAY_MSK, SW6306_CTRG_DISPLAY_2_5M);
-    // Rdc计算 + 容量学习默认开启；只置LEARNEN，不在Init清LEARN_END。
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_GAUGE0, SW6306_GAUGE0_MSK,
-        SW6306_GAUGE0_RDCEN | SW6306_GAUGE0_LEARNEN);
-    //物理KEY未接出；软件不用CLICK做端口控制，避免隐式激活A1或C1
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_KEY0, SW6306_KEY0_MSK, SW6306_KEY0_REGSET);
-    SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_KEY1, SW6306_KEY1_MSK, SW6306_KEY1_DISPLAY | SW6306_KEY1_LPOFF | SW6306_KEY1_DCFF);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_DCHG4);
+    SW6306_SPAWN_ARGS(sw6306_apply_regs, s_init_high_regs, sizeof(s_init_high_regs) / sizeof(s_init_high_regs[0]));
 
     //PD设置
-    SW6306_SPAWN_NOARG(SW6306_PDSet);
+    if (!s_io_failed)
+        SW6306_SPAWN_NOARG(SW6306_PDSet);
     //UFCS设置
-    SW6306_SPAWN_NOARG(SW6306_UFCSSet);
+    if (!s_io_failed)
+        SW6306_SPAWN_NOARG(SW6306_UFCSSet);
 
     //切换寄存器组
-    SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_STRG_FAULT0);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_STRG_FAULT0);
     /* 初始化不能清除故障事件：先由算法读取完整0x15/0x2A～0x2C快照，
      * 然后仅对已消费的0x15事件进行W1C确认。 */
     //不在初始化时模拟短按：空A1被开启会让随后插入的C口进入双口5V模式。

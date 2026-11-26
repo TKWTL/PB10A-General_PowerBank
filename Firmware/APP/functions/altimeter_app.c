@@ -1,5 +1,6 @@
 /* Standard, pressure-calibrated and relative altitude. */
 #include "altimeter_app.h"
+#include "mini_crc.h"
 #include "tools_motion_app.h"
 #include "bmp180_algo.h"
 #include "core/ui.h"
@@ -64,22 +65,11 @@ static alt_status_t s_status;
 static int32_t s_zero_dm, s_edit_m;
 static uint32_t s_reference_pa, s_last_seq, s_pressure_sum;
 
-static uint16_t reference_crc(uint32_t reference_pa) {
-    uint16_t crc = 0xffffu;
-    for (unsigned i = 0u; i < 4u; ++i) {
-        crc ^= (uint16_t)(reference_pa & 255u) << 8;
-        reference_pa >>= 8;
-        for (unsigned bit = 0u; bit < 8u; ++bit)
-            crc = (uint16_t)((crc & 0x8000u) ? (crc << 1) ^ 0x1021u : crc << 1);
-    }
-    return crc;
-}
-
 static uint32_t reference_load(void) {
     uint32_t pressure = s_cal_record.reference_pa;
     uint32_t tag_crc = s_cal_record.tag_crc;
     if (pressure < ALT_REFERENCE_MIN_PA || pressure > ALT_REFERENCE_MAX_PA ||
-        tag_crc != ((uint32_t)ALT_REFERENCE_TAG << 16 | reference_crc(pressure)))
+        tag_crc != ((uint32_t)ALT_REFERENCE_TAG << 16 | crc16_ccitt(&pressure, sizeof(pressure))))
         return 0u;
     return pressure;
 }
@@ -89,7 +79,7 @@ static void reference_save(uint32_t pressure) {
     __DMB();
     s_cal_record.reference_pa = pressure;
     __DMB();
-    s_cal_record.tag_crc = (uint32_t)ALT_REFERENCE_TAG << 16 | reference_crc(pressure);
+    s_cal_record.tag_crc = (uint32_t)ALT_REFERENCE_TAG << 16 | crc16_ccitt(&pressure, sizeof(pressure));
     __DSB();
     s_reference_pa = pressure;
 }
@@ -139,8 +129,7 @@ static void draw_right(uint16_t y, const char *text) {
 }
 
 static void draw_center(uint16_t y, const char *text) {
-    uint16_t width = Disp_GetUTF8Width(text);
-    Disp_DrawStr(width <= ALT_RIGHT - ALT_LEFT ? (UI_HOR_RES - width) / 2u : ALT_LEFT, y, text);
+    Disp_DrawCentered(y, text, ALT_LEFT);
 }
 
 static void draw_height(int32_t value, uint8_t decimals) {

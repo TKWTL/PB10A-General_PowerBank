@@ -102,3 +102,29 @@ uint8_t altitude_pressure_pa(int32_t dm, int32_t *out) {
            (delta_dm * 100 + drop_m / 2) / drop_m;
     return 1u;
 }
+
+/* Caller resets count on a rejected span. No per-sample buffer is needed. */
+__attribute__((noinline)) uint8_t axis_capture_add(axis_capture_t *capture, const int values[3], int32_t span) {
+    for (unsigned i = 0u; i < 3u; ++i) {
+        int32_t v = values[i];
+        if (!capture->count) {
+            capture->sum[i] = 0;
+            capture->min[i] = capture->max[i] = v;
+        } else {
+            if (v < capture->min[i])
+                capture->min[i] = v;
+            if (v > capture->max[i])
+                capture->max[i] = v;
+            if (capture->max[i] - capture->min[i] > span)
+                return 0u;
+        }
+        capture->sum[i] += v;
+    }
+    ++capture->count;
+    return 1u;
+}
+
+__attribute__((noinline)) void axis_capture_mean(const axis_capture_t *capture, int16_t mean[3]) {
+    for (unsigned i = 0u; i < 3u; ++i)
+        mean[i] = (int16_t)(capture->sum[i] / (int32_t)capture->count);
+}

@@ -1,6 +1,7 @@
 /* PB02B discharge-session accounting adapted to integer mWh and retained SRAM.
  * No independent task, I2C operation or floating-point arithmetic. */
 #include "battery_algo.h"
+#include "mini_crc.h"
 #include "main.h"
 
 #define BAT_FULL_MIN_MWH 500u
@@ -35,22 +36,10 @@ static uint8_t full_valid(uint32_t full) {
 }
 
 /* Same CRC16-CCITT (little-endian 3 words, initial 0xffff) as SC7A20. */
-static uint16_t record_crc(uint32_t seq, uint32_t full, uint32_t efc) {
-    const uint32_t words[3] = {seq, full, efc};
-    uint16_t crc = 0xffffu;
-    for (unsigned i = 0; i < 3u; ++i)
-        for (unsigned j = 0; j < 4u; ++j) {
-            crc ^= (uint16_t)((words[i] >> (j * 8u)) & 255u) << 8;
-            for (unsigned k = 0; k < 8u; ++k)
-                crc = (uint16_t)((crc & 0x8000u) ? (crc << 1) ^ 0x1021u : crc << 1);
-        }
-    return crc;
-}
-
 static uint8_t record_valid(const battery_noinit_t *r) {
     return (r->tag_crc >> 16) == BAT_RECORD_TAG &&
            full_valid(r->full_mwh) &&
-           (uint16_t)r->tag_crc == record_crc(r->sequence, r->full_mwh, r->efc_q10000);
+           (uint16_t)r->tag_crc == crc16_ccitt_words3(r->sequence, r->full_mwh, r->efc_q10000);
 }
 
 static void record_save(void) {
@@ -67,7 +56,7 @@ static void record_save(void) {
     s_record[next].efc_q10000 = s_efc;
     __DMB();
     s_record[next].tag_crc = ((uint32_t)BAT_RECORD_TAG << 16) |
-                             record_crc(seq, s_full_mwh, s_efc);
+                             crc16_ccitt_words3(seq, s_full_mwh, s_efc);
     __DSB();
     s_slot = next;
     s_sequence = seq;

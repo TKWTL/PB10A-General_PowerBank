@@ -106,8 +106,9 @@ It publishes the mean of 16 scans sampled about 25 ms apart in every
 `RTC_IsEditing()` protects pending time-editor changes.
 
 PA6/SUB_EN defaults LOW. Confirmed PA7 insertion requests Aux-A.
-In the dashboard, each new DOWN press toggles Aux-A. Once the shared meter
-path is ready, SUB_EN goes high. After a 10 ms startup delay, the ADC
+In the dashboard, each new DOWN press toggles Aux-A. Once battery protection
+data are valid and no cutoff is active, SUB_EN goes high independently of
+the background meter. After a 10 ms startup delay, the ADC
 owner scans every 5 ms while Aux-A is active and cuts output on any
 valid VOUT reading at or below 2 V. Current below 50 mA for 60 continuous
 seconds also cuts output. Use `PowerAlgo_AuxA_SetAutoOffCurrent()` to
@@ -133,8 +134,9 @@ PWM and 160 ms ramp; the display uses the actual limited level / 19.
 The physical level 32 is reserved for SOS.
 
 At 30 °C ambient, hardware measurements at levels 8/16/24 are
-1.346/3.208/7.023 W with 58/75/125 °C hotspots. Interpolate power
-by PWM compare and hotspot rise by power. Because MCU/NTC follow
+1.346/3.208/7.023 W with 58/75/125 °C hotspots. The manual level and
+rise limits use the original integer interpolation precomputed by
+`APP/algorithm/gen_wled_table.py`; SOS retains its continuous budget model. Because MCU/NTC follow
 ambient rather than the hotspot, the default continuous cap follows
 the estimated 70 °C steady-state envelope (level 14 at 30 °C), not
 a fabricated transient model. A calibrated hotspot input can instead
@@ -162,9 +164,11 @@ for both). C1 input/charging is not interrupted by source-only port events.
 The owner confirms removal before requesting another port. Manual OFF
 keeps WLED/AUX demand, allowing automatic A2 provisioning; attached but
 manually removed real ports remain ignored until they disconnect, reopen,
-or are selected again. Only new load requests wait for a valid meter path;
-active outputs remain on during handover, provided common protection data
-remain valid and no cutoff condition is present.
+or are selected again. Both new and active loads depend only on valid
+protection data, not meter readiness. New requests may wait up to 3 s for
+protection data; active outputs shut down if those data become invalid.
+A2 provisioning retries in the background; its failure alone never cuts
+the outputs. The battery/ETA algorithm still requires a valid meter path.
 
 The SW6306 owner reuses a live C1/A1 path, activates a detected but idle
 real port (C1 before A1), or requests a shared synthetic A2 insertion
@@ -196,6 +200,9 @@ Aux-A Curr A, each with two decimal places.
 BUS readings come from the shared SW6306 bus ADC. Chip Temp°C shows the SW6306 die temperature to one decimal place. Aux-A voltage comes from PA5
 via the 680 kΩ / 220 kΩ divider, and Aux-A current comes from PA0 at 0.5 V/A.
 Both Aux-A channels use the VDDA measured from VREFINT.
+SW6306 ADC values are cached once in physical units and used by the
+dashboard, common protection, ETA and Statistics conversion. Each
+protection sample retains its independent freshness tracking.
 
 Statistics → Battery shows charge percentage, pack voltage in volts,
 full and remaining energy in Wh, and Batt Temp°C from the SW6306 NTC to one
@@ -247,8 +254,10 @@ counting a persistent event again. Fault bits are acknowledged here;
 capacity learning and scene changes have separate consumers. N01
 (capacity learned) does not increment the fault count. Events coalesced by the chip cannot be counted separately.
 
-AUX undervoltage/short cutoff reports E20; WLED thermal-envelope cutoff reports E30; shared meter startup timeout
-reports E40; battery protection uses E01/E04/E41 or the corresponding
+AUX undervoltage/short cutoff reports E20; WLED thermal-envelope cutoff
+reports E30. Meter retries no longer produce E40. Startup protection data
+timeout reports DATA INVALID (or E50 if offline); battery protection uses
+E01/E04/E41 or the corresponding
 SW6306 battery fault code. E50 reports confirmed loss of SW6306 initialization
 or repeated initialization failure. Duplicate software notices from the
 same shared protection do not increment the fault count. E21 and N02

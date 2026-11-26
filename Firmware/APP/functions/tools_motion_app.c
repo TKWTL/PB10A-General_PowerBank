@@ -70,10 +70,8 @@ typedef enum { CAL_CLOSED,
                CAL_FAILED } cal_state_t;
 static cal_state_t s_cal_state;
 static uint8_t s_cal_done[CAL_FACE_COUNT], s_cal_candidate;
-static uint8_t s_cal_intervals, s_cal_samples;
 static int16_t s_cal_faces[CAL_FACE_COUNT][3];
-static int16_t s_cal_min[3],s_cal_max[3];
-static int32_t s_cal_sum[3];
+static axis_capture_t s_cal_capture;
 static uint32_t s_cal_seq,s_cal_sample_at,s_cal_complete_at;
 
 static int16_t cal_abs(int16_t x) {
@@ -342,60 +340,45 @@ static uint8_t cal_detect(const int16_t raw[3]) {
     return CAL_FACE_NONE;
 }
 static void cal_reset_candidate(void) {
-    s_cal_candidate=CAL_FACE_NONE;
-    s_cal_intervals=0u;
-    s_cal_samples=0u;
+    s_cal_candidate = CAL_FACE_NONE;
+    s_cal_capture.count = 0u;
 }
-static void cal_start(uint8_t face,const int16_t raw[3]) {
-    uint8_t i;
-    s_cal_candidate=face;
-    s_cal_intervals=0u;
-    s_cal_samples=1u;
-    for(i=0u;i<3u;i++) {
-        s_cal_min[i]=raw[i];
-        s_cal_max[i]=raw[i];
-        s_cal_sum[i]=raw[i];
-    }
+static void cal_start(uint8_t face, const int values[3]) {
+    s_cal_candidate = face;
+    s_cal_capture.count = 0u;
+    (void)axis_capture_add(&s_cal_capture, values, CAL_STABLE_RANGE);
 }
 static void cal_capture(uint8_t face) {
-    uint8_t i,all_done=1u;
-    for(i=0u;i<3u;i++)
-        s_cal_faces[face][i]=(int16_t)(s_cal_sum[i]/s_cal_samples);
-    s_cal_done[face]=1u;
+    uint8_t all_done = 1u;
+    axis_capture_mean(&s_cal_capture, s_cal_faces[face]);
+    s_cal_done[face] = 1u;
     cal_reset_candidate();
-    for(i=0u;i<CAL_FACE_COUNT;i++)
-        if(!s_cal_done[i])all_done=0u;
-    if(all_done) {
-        s_cal_state = SC7A20Algo_ApplySixFace(
-                          (const int16_t (*)[3])s_cal_faces)
-                          ? CAL_SAVED
-                          : CAL_FAILED;
-        s_cal_complete_at=Millis();
+    for (unsigned i = 0u; i < CAL_FACE_COUNT; ++i)
+        if (!s_cal_done[i])
+            all_done = 0u;
+    if (all_done) {
+        s_cal_state = SC7A20Algo_ApplySixFace((const int16_t (*)[3])s_cal_faces) ? CAL_SAVED : CAL_FAILED;
+        s_cal_complete_at = Millis();
     }
 }
 static void cal_process_sample(const sc7a20_sample_t *sample) {
-    uint8_t face,i;
     const int16_t *raw = sample->raw;
-    face=cal_detect(raw);
-    if(face==CAL_FACE_NONE ||
-       s_cal_done[face]) {cal_reset_candidate();return;}
-    if(face!=s_cal_candidate) {cal_start(face,raw);return;}
-    for(i=0u;i<3u;i++) {
-        if(raw[i]<s_cal_min[i])s_cal_min[i]=raw[i];
-        if(raw[i]>s_cal_max[i])s_cal_max[i]=raw[i];
-        if((int32_t)s_cal_max[i]-s_cal_min[i]>CAL_STABLE_RANGE) {
-            cal_start(face,raw);
-            return;
-        }
+    uint8_t face = cal_detect(raw);
+    if (face == CAL_FACE_NONE || s_cal_done[face]) {
+        cal_reset_candidate();
+        return;
     }
-    for(i=0u;i<3u;i++)s_cal_sum[i]+=raw[i];
-    ++s_cal_samples;
-    if(++s_cal_intervals>=CAL_HOLD_INTERVALS)cal_capture(face);
+    const int values[3] = {raw[0], raw[1], raw[2]};
+    if (face != s_cal_candidate || !axis_capture_add(&s_cal_capture, values, CAL_STABLE_RANGE)) {
+        cal_start(face, values);
+        return;
+    }
+    /* The first sample starts the original hold-interval counter at zero. */
+    if (s_cal_capture.count > CAL_HOLD_INTERVALS)
+        cal_capture(face);
 }
 static void cal_center(uint16_t y, const char *key) {
-    const char *text = I18N_Text(key);
-    uint16_t width = Disp_GetUTF8Width(text);
-    Disp_DrawStr(width <= 120u ? (UI_HOR_RES - width) / 2u : 4u, y, text);
+    Disp_DrawCentered(y, I18N_Text(key), 4u);
 }
 
 static void cal_check(uint16_t x, uint16_t y) {
@@ -479,8 +462,8 @@ static void cal_draw(void) {
         mini_snprintf(info, sizeof(info), "%u/6", count);
         Disp_DrawStr(124u - Disp_GetUTF8Width(info), 13u, info);
         Disp_DrawFrame(8u, 55u, 112u, 6u);
-        if (s_cal_intervals)
-            Disp_DrawBox(10u, 57u, 108u * s_cal_intervals / CAL_HOLD_INTERVALS, 2u);
+        if (s_cal_capture.count > 1u)
+            Disp_DrawBox(10u, 57u, 108u * (s_cal_capture.count - 1u) / CAL_HOLD_INTERVALS, 2u);
     }
     Disp_SetMaxClipWindow();
     Disp_SendBuffer();

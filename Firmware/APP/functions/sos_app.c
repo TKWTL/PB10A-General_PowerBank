@@ -25,8 +25,7 @@ const unsigned char img_sos[] = {
 static uint8_t s_warning_shown, s_started;
 
 static void center_text(uint16_t y, const char *text) {
-    uint16_t width = Disp_GetUTF8Width(text);
-    Disp_DrawStr(width < UI_HOR_RES ? (UI_HOR_RES - width) / 2u : 0u, y, text);
+    Disp_DrawCentered(y, text, 0u);
 }
 
 void SOS_AppOnLeave(ui_t *ui) {
@@ -75,7 +74,7 @@ void SOS_AppRun(ui_t *ui) {
     center_text(11u, "SOS Blink");
     Disp_DrawLine(0u, 14u, UI_HOR_RES - 1u, 14u);
     static const char *const states[] = {
-        "STOPPED", "WAIT METER", "TRANSMITTING", "COOLING", "PROTECTED"};
+        "STOPPED", "WAIT DATA", "TRANSMITTING", "COOLING", "PROTECTED"};
     center_text(30u, states[state]);
     Disp_SetFont(font_home_h6w4);
     center_text(46u, "Any key: Exit");

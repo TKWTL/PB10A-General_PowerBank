@@ -8,8 +8,8 @@
 #include "fonts/fonts.h"
 #include "pm_api.h"
 #include "millis.h"
-#include "mini_math.h"
 #include "mini_format.h"
+#include "mini_math.h"
 #include "i18n.h"
 
 /* Original PB10A calibration icon, 30x30 XBM. */
@@ -33,9 +33,6 @@ const unsigned char img_compass_cal[] = {
 #define CAL_FRESH_MS 200u
 #define CAL_STALE_ABORT_MS 500u
 #define CAL_SAMPLES 16u
-#define CAL_MAX_TILT_CDEG 500
-#define CAL_FLAT_ENTER_CDEG 800
-#define CAL_FLAT_HOLD_CDEG 1000
 #define CAL_MAG_SPAN_MG 50
 #define CAL_FLAT_SPAN_MG 100
 #define CAL_FLAT_BAD_SAMPLES 3u
@@ -43,11 +40,11 @@ const unsigned char img_compass_cal[] = {
 
 /* UI order is independent of the algorithm's N,E,S,W,flat,flipped order. */
 static const uint8_t s_face_order[CAL_STEPS] = {4u, 5u, 0u, 1u, 2u, 3u};
-static uint8_t s_active, s_step, s_count, s_sampling, s_result;
+static uint8_t s_active, s_step, s_sampling, s_result;
 static uint8_t s_waiting_data, s_accel_bad, s_retry;
 static uint32_t s_mag_seq, s_accel_seq, s_stale_since;
 static int16_t s_faces[CAL_STEPS][3];
-static int32_t s_sum[3], s_min[3], s_max[3];
+static axis_capture_t s_capture;
 
 static uint8_t pose_ok(const sc7a20_sample_t *a, uint8_t face, uint8_t holding) {
     /* Native SC7A20: Y- screen-up; Z- normally flat; Z+ flipped. */
@@ -57,16 +54,21 @@ static uint8_t pose_ok(const sc7a20_sample_t *a, uint8_t face, uint8_t holding) 
         return 0u;
     int32_t along = face < 4u ? -y : face == 4u ? -z
                                                 : z;
+    if (along <= 0)
+        return 0u;
     uint32_t transverse = g2 - (uint32_t)(along * along);
-    int32_t limit = CAL_MAX_TILT_CDEG;
-    if (face >= 4u)
-        limit = holding ? CAL_FLAT_HOLD_CDEG : CAL_FLAT_ENTER_CDEG;
-    return along > 0 && atan2_cdeg((int32_t)isqrt_u32(transverse), along) <= limit;
+    /* Exclusive Q15 ratio bounds for the original atan2_cdeg limits
+     * 5/8/10 degrees (including its interpolation rounding).
+     * Reproduce floor(isqrt(transverse)) without actually taking a root. */
+    uint32_t ratio = face < 4u ? 2868u : holding ? 5783u
+                                                 : 4611u;
+    uint32_t edge = ((ratio * (uint32_t)along - (uint32_t)along / 2u - 1u) >> 15) + 1u;
+    return transverse < edge * edge;
 }
 
 static void cancel_capture(void) {
     s_sampling = 0u;
-    s_count = 0u;
+    s_capture.count = 0u;
     s_waiting_data = 0u;
     s_accel_bad = 0u;
     s_retry = 0u;
@@ -82,28 +84,14 @@ static void capture(const mmc5603_sample_t *m, uint8_t face) {
         return;
     s_mag_seq = m->seq;
     int32_t span = face >= 4u ? CAL_FLAT_SPAN_MG : CAL_MAG_SPAN_MG;
-    for (unsigned i = 0u; i < 3u; ++i) {
-        int32_t v = m->mg[i];
-        if (!s_count) {
-            s_sum[i] = 0;
-            s_min[i] = s_max[i] = v;
-        } else {
-            if (v < s_min[i])
-                s_min[i] = v;
-            if (v > s_max[i])
-                s_max[i] = v;
-            /* Yaw changes cannot be detected by gravity alone. */
-            if (s_max[i] - s_min[i] > span) {
-                abort_capture();
-                return;
-            }
-        }
-        s_sum[i] += v;
-    }
-    if (++s_count != CAL_SAMPLES)
+    /* Yaw changes cannot be detected by gravity alone. */
+    if (!axis_capture_add(&s_capture, m->mg, span)) {
+        abort_capture();
         return;
-    for (unsigned i = 0u; i < 3u; ++i)
-        s_faces[face][i] = (int16_t)(s_sum[i] / (int32_t)CAL_SAMPLES);
+    }
+    if (s_capture.count != CAL_SAMPLES)
+        return;
+    axis_capture_mean(&s_capture, s_faces[face]);
     cancel_capture();
     if (++s_step == CAL_STEPS)
         s_result = MMC5603Algo_ApplySixFace(s_faces) ? 1u : 2u;
@@ -148,8 +136,7 @@ static void capture_update(const sc7a20_sample_t *a, uint8_t accel_valid,
 }
 
 static void center_text(uint16_t y, const char *text) {
-    uint16_t width = Disp_GetUTF8Width(text);
-    Disp_DrawStr(width < UI_HOR_RES ? (UI_HOR_RES - width) / 2u : 0u, y, text);
+    Disp_DrawCentered(y, text, 0u);
 }
 
 static void draw_cal(uint8_t data_valid, uint8_t pose_valid) {
@@ -202,7 +189,7 @@ static void draw_cal(uint8_t data_valid, uint8_t pose_valid) {
         Disp_SetDrawColor(&white);
         Disp_DrawLine(0u, 52u, UI_HOR_RES - 1u, 52u);
         Disp_SetFont(font_home_h6w4);
-        mini_snprintf(text, sizeof(text), "CAL %u/6 %u/16", (unsigned)(s_step + 1u), (unsigned)s_count);
+        mini_snprintf(text, sizeof(text), "CAL %u/6 %u/16", (unsigned)(s_step + 1u), (unsigned)s_capture.count);
         Disp_DrawStr(2u, 62u, text);
         Disp_DrawStr(76u, 62u, !s_sampling && data_valid && pose_valid ? "L:Prev CONF" : "L:Prev");
         Disp_SetFont(UI_FONT);

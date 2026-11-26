@@ -17,7 +17,7 @@ typedef struct {
     uint8_t aux_enabled, aux_valid, ntc_valid, eta_valid;
     uint8_t initialized,valid,charging,discharging;
     uint8_t c1_on,a1_on,port_busy;
-    const char *protocol; /* static SW6306 driver string, read only */
+    uint8_t protocol; /* SW6306 QCSTAT protocol code */
     uint32_t sample_ms;
     uint32_t eta_seconds;
 } power_monitor_t;
@@ -58,9 +58,8 @@ uint8_t PowerAlgo_TakeNotice(power_notice_t *out);
 const char *PowerAlgo_NoticeText(uint8_t code);
 void PowerAlgo_AddFaultItems(ui_page_t *page);
 void PowerAlgo_UpdateFaultItems(ui_t *ui);
-void PowerAlgo_ExtLoadTimeout(void);
 void PowerAlgo_ExtLoadReportBlocked(void);
-/* External consumers share one SW6306 meter path. Foreground callers only. */
+/* External consumers share a background SW6306 meter path. Foreground callers only. */
 enum { EXT_LOAD_WLED = 0x01u,
        EXT_LOAD_AUX = 0x02u };
 typedef enum { EXT_LOAD_BLOCKED,
@@ -68,7 +67,7 @@ typedef enum { EXT_LOAD_BLOCKED,
                EXT_LOAD_READY } ext_load_state_t;
 #define EXT_LOAD_WAIT_MS 3000u
 uint8_t PowerAlgo_ExtLoadRequest(uint8_t load);
-void PowerAlgo_ExtLoadSetActive(uint8_t load, uint8_t active);
+void PowerAlgo_ExtLoadSetActive(uint8_t load);
 void PowerAlgo_ExtLoadRelease(uint8_t load);
 ext_load_state_t PowerAlgo_ExtLoadState(uint8_t load, uint32_t now);
 int16_t PowerAlgo_ExtLoadTemperature(void);

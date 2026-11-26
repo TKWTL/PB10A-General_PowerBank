@@ -81,3 +81,11 @@ The reference is 101325 Pa; no floating-point runtime or local sea-level
 pressure calibration is used. Outside the table range it returns invalid.
 Offline evaluation at all 80,001 integer Pa inputs found a maximum
 interpolation/rounding error of 0.993 m against the stated model.
+
+## Shared calibration utilities
+
+`mini_crc.c/.h` computes CRC16-CCITT-FALSE over byte sequences; the
+three-word helper preserves the little-endian retained record layout.
+`mini_math.c/.h` shares the three-axis accumulation, span check and mean
+for the magnetometer and accelerometer, while callers retain their own
+pose, sampling and retry policies.

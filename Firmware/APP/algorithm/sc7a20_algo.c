@@ -1,5 +1,6 @@
 /* SC7A20: IRQ-driven I2C initialization, XYZ sampling and STOP1 policy. */
 #include "sc7a20_algo.h"
+#include "mini_crc.h"
 #include "sc7a20.h"
 #include "sensor_common.h"
 #include "pt.h"
@@ -125,18 +126,6 @@ uint8_t SC7A20Algo_GetRotation(uint8_t *flipped) {
 
 /* CRC16-CCITT protects the uninitialized SRAM record across a warm reset.
  * Q14 slopes retain roughly 0.000061 mg/LSB resolution. */
-static uint16_t sc_record_crc(uint32_t a,uint32_t b,uint32_t c) {
-    uint16_t crc=0xFFFFu;
-    uint32_t words[3];
-    uint8_t i,j,k;
-    words[0]=a;words[1]=b;words[2]=c;
-    for(i=0u;i<3u;i++)for(j=0u;j<4u;j++) {
-        crc^=(uint16_t)((words[i]>>(j*8u))&255u)<<8;
-        for(k=0u;k<8u;k++)
-            crc=(uint16_t)((crc&0x8000u)?(crc<<1)^0x1021u:crc<<1);
-    }
-    return crc;
-}
 static void sc_calibration_load(void) {
     uint32_t a,b,c,tag;
     uint16_t xq,yq,zq;
@@ -144,8 +133,9 @@ static void sc_calibration_load(void) {
     b=s_calibration_noinit.b;
     c=s_calibration_noinit.c;
     tag=s_calibration_noinit.tag;
-    if((tag>>16)!=SC_CAL_RECORD_TAG ||
-       (uint16_t)tag!=sc_record_crc(a,b,c))return;
+    if ((tag >> 16) != SC_CAL_RECORD_TAG ||
+        (uint16_t)tag != crc16_ccitt_words3(a, b, c))
+        return;
     xq=(uint16_t)(b>>16);yq=(uint16_t)c;zq=(uint16_t)(c>>16);
     if(xq<4096u||yq<4096u||zq<4096u ||
        xq>49152u||yq>49152u||zq>49152u)return;
@@ -177,8 +167,8 @@ uint8_t SC7A20Algo_ApplySixFace(const int16_t face_raw[6][3]) {
     s_calibration_noinit.b=b;
     s_calibration_noinit.c=c;
     __DMB();
-    s_calibration_noinit.tag=
-        ((uint32_t)SC_CAL_RECORD_TAG<<16)|sc_record_crc(a,b,c);
+    s_calibration_noinit.tag =
+        ((uint32_t)SC_CAL_RECORD_TAG << 16) | crc16_ccitt_words3(a, b, c);
     __DSB();
     SC7A20_SetCalibrationQ14(zero, q);
     s_orientation=SC7A20_ORIENT_UNKNOWN;

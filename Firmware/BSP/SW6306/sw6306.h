@@ -1474,6 +1474,8 @@ uint8_t SW6306_ReadPiMaxSet(void);              //读取PISET设置值（0x45，
 uint8_t SW6306_ReadPoMaxSet(void);              //读取POSET设置值（0x4F，PowerLoad后更新，单位：W）
 SW6306_RET SW6306_SetMaxOutputPower(SW6306_ARGS(uint8_t watt)); //设置最大输出功率（单位W，如45/18）
 uint8_t SW6306_GetMaxOutputPowerSetting(void);  //读取当前目标最大输出功率（W）
+#define SW6306_QCSTAT_UNKNOWN 16u
+uint8_t SW6306_ReadProtocolCode(void); /* QCSTAT code, 16 when unknown */
 const char *SW6306_ReadProtocol(void);          //读取协议名称字符串
 /* 端口快充总开关（0x11F PORTQC，0=使能/1=禁止；A 口仅输出方向） */
 SW6306_RET SW6306_PortFastChargeSet(SW6306_ARGS(sw6306_port_t port, sw6306_port_dir_t dir, uint8_t enable));

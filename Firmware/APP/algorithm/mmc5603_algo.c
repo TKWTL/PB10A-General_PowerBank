@@ -1,5 +1,6 @@
 /* MMC5603: asynchronous single-shot magnetic field service. */
 #include "mmc5603_algo.h"
+#include "mini_crc.h"
 #include "mmc5603.h"
 #include "sensor_common.h"
 #include "pt.h"
@@ -73,18 +74,6 @@ uint8_t MMC5603Algo_GetSample(mmc5603_sample_t *out) {
 }
 
 /* CRC16-CCITT, same byte order and initial value as the SC7A20 record. */
-static uint16_t mag_cal_crc(const uint16_t bias[3]) {
-    uint16_t crc = 0xffffu;
-    for (unsigned i = 0u; i < 3u; ++i) {
-        for (unsigned j = 0u; j < 2u; ++j) {
-            crc ^= (uint16_t)((bias[i] >> (8u * j)) & 255u) << 8;
-            for (unsigned k = 0u; k < 8u; ++k)
-                crc = (uint16_t)((crc & 0x8000u) ? (crc << 1) ^ 0x1021u : crc << 1);
-        }
-    }
-    return crc;
-}
-
 static uint8_t mag_bias_valid(uint16_t bias) {
     int32_t value = (int32_t)bias - MMC_CAL_OFFSET_ZERO;
     return value >= -MMC_CAL_RANGE_MG && value <= MMC_CAL_RANGE_MG;
@@ -92,7 +81,7 @@ static uint8_t mag_bias_valid(uint16_t bias) {
 
 static void mag_cal_load(void) {
     uint16_t bias[3] = {s_cal_record.bias[0], s_cal_record.bias[1], s_cal_record.bias[2]};
-    if (s_cal_record.tag != MMC_CAL_TAG || s_cal_record.crc != mag_cal_crc(bias))
+    if (s_cal_record.tag != MMC_CAL_TAG || s_cal_record.crc != crc16_ccitt(bias, sizeof(bias)))
         return;
     for (unsigned i = 0u; i < 3u; ++i)
         if (!mag_bias_valid(bias[i]))
@@ -135,7 +124,7 @@ uint8_t MMC5603Algo_ApplySixFace(const int16_t face_mg[6][3]) {
     __DMB();
     for (unsigned i = 0u; i < 3u; ++i)
         s_cal_record.bias[i] = bias[i];
-    s_cal_record.crc = mag_cal_crc(bias);
+    s_cal_record.crc = crc16_ccitt(bias, sizeof(bias));
     __DMB();
     s_cal_record.tag = MMC_CAL_TAG;
     __DSB();

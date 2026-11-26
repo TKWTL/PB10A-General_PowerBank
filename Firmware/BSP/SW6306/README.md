@@ -35,3 +35,14 @@ PB10A 使用 10 kΩ、B3380 热敏电阻。默认表覆盖 −40 至 125 °C，�
 ```sh
 python3 Firmware/BSP/SW6306/gen_ntc_table.py --r25 10000 --beta 3380
 ```
+
+## 初始化与协议配置
+
+固定初始化寄存器使用顺序表，共用写入/位修改等待点；页切换、
+解锁、动态功率与电池限流、Source Capability 重播仍保留原有时序。
+PD/PPS/UFCS 电流档位直接计算寄存器编码，Protothread 只在首次进入
+时计算并保存待写字节，阻塞路径使用局部缓冲。协议开关查表保留
+原有方向限制、掩码及有效电平。现有 I²C 失败标志阻止后续配置写入。
+
+`SW6306_ReadProtocolCode()` 返回 QCSTAT 协议编号（16 表示未知）；
+`SW6306_ReadProtocol()` 保留旧字符串接口。

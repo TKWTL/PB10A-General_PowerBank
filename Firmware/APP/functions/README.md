@@ -82,7 +82,9 @@ them.
   shifts by 180 degrees so the native edge retains its required heading.
   Short CONF captures 16 new samples; LEFT redoes the previous pose.
   Flat entry/hold tolerances are 8/10 degrees and 100 mG span, versus
-  5 degrees and 50 mG for the four screen-up poses. Short stale gaps
+  5 degrees and 50 mG for the four screen-up poses. The pose comparison
+uses the original atan2/Q15 acceptance boundaries without square root or
+angle evaluation. Short stale gaps
   preserve progress, and three fresh bad flat poses abort the capture.
   Any key exits after success. The six-face storage order and existing
   bias formula are preserved. Offsets use twelve bytes of .bss.noinit;

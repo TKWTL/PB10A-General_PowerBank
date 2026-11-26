@@ -20,6 +20,15 @@ int16_t atan2_cdeg(int32_t y, int32_t x);
 uint8_t pressure_altitude_dm(int32_t pa, int32_t *out);
 uint8_t altitude_pressure_pa(int32_t dm, int32_t *out);
 
+/* Three-axis stable sample accumulator, caller owns limits and reset.
+ * Reset count to zero on any rejected sample; mean requires count > 0. */
+typedef struct {
+    int32_t sum[3], min[3], max[3];
+    uint8_t count;
+} axis_capture_t;
+uint8_t axis_capture_add(axis_capture_t *capture, const int values[3], int32_t span);
+void axis_capture_mean(const axis_capture_t *capture, int16_t mean[3]);
+
 #ifdef __cplusplus
 }
 #endif

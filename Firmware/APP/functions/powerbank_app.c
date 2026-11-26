@@ -46,44 +46,34 @@ static ui_animation_param_t s_slide_pid;
 static uint8_t s_active, s_dim_held;
 static uint32_t s_dim_at;
 
-static const char *short_protocol(const char *protocol) {
-    static const struct {
-        const char *name, *short_name;
-    } aliases[] = {
-        {"NONE", "5V"},
-        {"PDFIX", "PD"},
-        {"PDPPS", "PPS"},
-        {"QC2.0", "QC2"},
-        {"QC3.0", "QC3"},
-        {"PE1.1", "PE1"},
-        {"PE2.0", "PE2"},
-        {"VOOC1", "VOOC"},
-        {"VOOC4", "VOOC"},
-        {"SVOOC", "SVOO"},
-    };
-    if (!protocol)
-        return "UNK";
-    for (unsigned i = 0u; i < sizeof(aliases) / sizeof(aliases[0]); ++i)
-        if (strcmp(protocol, aliases[i].name) == 0)
-            return aliases[i].short_name;
-    return strlen(protocol) <= 4u ? protocol : "UNK";
-}
+/* QCSTAT encoding is contiguous; no string-to-string alias search. */
+static const char s_protocol_names[][5] = {
+    "5V", "QC2", "QC3", "QC3+", "FCP", "SCP", "PD", "PPS",
+    "PE1", "PE2", "VOOC", "VOOC", "SVOO", "SFCP", "AFC", "UFCS", "UNK"};
 
 static void draw_quantity(uint16_t x, uint16_t y, uint32_t milli, char unit, uint8_t valid) {
-    char text[7];
     if (!valid || milli >= 999950u) {
         Disp_DrawStr(x, y, "--");
         return;
     }
-    if (milli < 10000u) {
-        (void)mini_snprintf(text, sizeof(text), "%u.%03u%c",
-                            (unsigned)(milli / 1000u), (unsigned)(milli % 1000u), unit);
-    } else if (milli < 99995u) {
-        unsigned hundredths = (unsigned)((milli + 5u) / 10u);
-        (void)mini_snprintf(text, sizeof(text), "%u.%02u%c", hundredths / 100u, hundredths % 100u, unit);
-    } else {
-        unsigned tenths = (unsigned)((milli + 50u) / 100u);
-        (void)mini_snprintf(text, sizeof(text), "%u.%u%c", tenths / 10u, tenths % 10u, unit);
+    char text[7];
+    unsigned dot = 1u;
+    if (milli >= 99995u) {
+        milli = (milli + 50u) / 100u;
+        dot = 3u;
+    } else if (milli >= 10000u) {
+        milli = (milli + 5u) / 10u;
+        dot = 2u;
+    }
+    text[5] = unit;
+    text[6] = '\0';
+    for (unsigned i = 5u; i--;) {
+        if (i == dot)
+            text[i] = '.';
+        else {
+            text[i] = (char)('0' + milli % 10u);
+            milli /= 10u;
+        }
     }
     Disp_DrawStr(x, y, text);
 }
@@ -117,7 +107,9 @@ static void draw_bus(const power_monitor_t *power) {
             draw_centered(PB_BUS_CENTER, PB_ROW_INFO, "A+C");
         } else if (power->a1_on || c) {
             char text[7];
-            (void)mini_snprintf(text, sizeof(text), "%c:%s", c ? 'C' : 'A', short_protocol(power->protocol));
+            text[0] = c ? 'C' : 'A';
+            text[1] = ':';
+            memcpy(text + 2u, s_protocol_names[power->protocol], 5u);
             draw_centered(PB_BUS_CENTER, PB_ROW_INFO, text);
         } else {
             draw_centered(PB_BUS_CENTER, PB_ROW_INFO, "NC");
