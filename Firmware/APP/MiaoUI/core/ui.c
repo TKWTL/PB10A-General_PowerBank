@@ -1260,10 +1260,11 @@ default:
 static void Process_App_Run(ui_t *ui, ui_item_t *item, UI_ACTION Action) {
     if (item == NULL) return; // 检查空指针，避免未定义行为
 
-    if (MiaoUi_ItemLocksRotation(item))
-        Disp_SetRotation(0u);
-    else
+    ui_rotation_policy_t rotation = MiaoUi_ItemRotationPolicy(item);
+    if (rotation == UI_ROTATION_AUTO)
         Disp_ResumeRotation(ui);
+    else
+        Disp_SetRotationMode(rotation);
     ui->action = Action; // 设置项目的状态为当前菜单状态
 
     switch (item->itemType) // 根据项目类型执行不同的操作

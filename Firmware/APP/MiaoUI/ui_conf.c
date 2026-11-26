@@ -203,8 +203,12 @@ void Create_MenuTree(ui_t *ui) {
 }
 // clang-format on
 
-uint8_t MiaoUi_ItemLocksRotation(const ui_item_t *item) {
-    return item->page.location == &s_game || item == &s_leveler || item == &s_accel_cal;
+ui_rotation_policy_t MiaoUi_ItemRotationPolicy(const ui_item_t *item) {
+    if (item == &s_tetris)
+        return UI_ROTATION_R1;
+    if (item->page.location == &s_game || item == &s_leveler || item == &s_accel_cal)
+        return UI_ROTATION_R0;
+    return UI_ROTATION_AUTO;
 }
 
 /* Called from foreground services, never modifies any ui_t directly.

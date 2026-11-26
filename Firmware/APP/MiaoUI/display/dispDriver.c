@@ -95,7 +95,7 @@ void Add_Disp_Items(ui_page_t *parent_page) {
 
 uint8_t diapInit(void) {
     if(!SSD1306_Display_Begin(&u8g2))return 0u;
-    s_applied_rotation=0u;
+    s_applied_rotation = UI_ROTATION_R0;
     u8g2_SetFont(&u8g2, UI_FONT);
     SSD1306_Display_RequestContrast(disp_contrast_raw(Contrast));
     u8g2_ClearBuffer(&u8g2);
@@ -163,34 +163,35 @@ uint16_t Disp_DrawUTF8(uint16_t x, uint16_t y, const char *str) { return u8g2_Dr
 uint16_t Disp_GetUTF8Width(const char *str) { return u8g2_GetUTF8Width(&u8g2, str); }
 
 void Disp_SetRotation(uint8_t rotation) {
-    uint8_t flipped=rotation?1u:0u;
-    if(flipped==s_applied_rotation)return;
-    /* Match SSD1306_Display_Begin(): flip 0 is the native U8G2_R0. */
-    u8g2_SetDisplayRotation(&u8g2, flipped ? U8G2_R2 : U8G2_R0);
-    s_applied_rotation=flipped;
+    Disp_SetRotationMode(rotation ? UI_ROTATION_R2 : UI_ROTATION_R0);
 }
 
 uint8_t Disp_GetRotation(void) {
-    return s_applied_rotation == 1u;
+    return s_applied_rotation == UI_ROTATION_R2;
 }
 
 void Disp_SetRotationMode(uint8_t rotation_mode) {
     static const u8g2_cb_t *const rotations[4] = {U8G2_R0, U8G2_R1, U8G2_R2, U8G2_R3};
-    u8g2_SetDisplayRotation(&u8g2, rotations[rotation_mode & 3U]);
-    s_applied_rotation=(rotation_mode & 3u)==2u?1u:
-        ((rotation_mode & 3u)==0u?0u:2u);
+    rotation_mode &= 3u;
+    if (rotation_mode == s_applied_rotation)
+        return;
+    u8g2_SetDisplayRotation(&u8g2, rotations[rotation_mode]);
+    s_applied_rotation = rotation_mode;
 }
 
 void Disp_ResumeRotation(ui_t *ui) {
     uint8_t flipped;
-    if(ui == 0)return;
-    if(!ui->rotation) {
+    if (ui == 0)
+        return;
+    if (!ui->rotation) {
         Disp_SetRotation(0u);
         return;
     }
-    /* Unknown/intermediate attitude keeps the last confirmed direction. */
-    if(SC7A20Algo_GetRotation(&flipped))
+    /* Keep confirmed landscape direction; portrait must never leak into a menu. */
+    if (SC7A20Algo_GetRotation(&flipped))
         Disp_SetRotation(flipped);
+    else if (s_applied_rotation & 1u)
+        Disp_SetRotation(0u);
 }
 
 void Disp_UpdateRotation(ui_t *ui, uint8_t rotation_state) {

@@ -480,12 +480,15 @@ parity bits. No option bytes have been changed by this commit.
 
 ### Display flip orientation
 
-The SSD1306 initializes in native `U8G2_R0`. Game sessions, Leveler and
-Accel Calibration select `U8G2_R0` before each application draw. Menu draws
-apply the current Auto Rotation setting from the first frame after exit.
-Directional events and Powerbank continuous dimming keys follow the
-applied display rotation. Held directions are suppressed until release
-when the display flips; CONF is independent of rotation.
+The SSD1306 initializes in native `U8G2_R0`. Tetris selects `U8G2_R1`
+(64x128, same physical 90-degree CCW viewing orientation as Pac-Man).
+Other games, Leveler and Accel Calibration select `U8G2_R0`. Menu draws
+restore the current Auto Rotation setting from the first frame after exit.
+Tetris uses native UP/DOWN for portrait left/right, LEFT for soft drop,
+RIGHT for counterclockwise rotation and CONF for clockwise rotation.
+Normal menu directions and Powerbank continuous dimming follow the
+R0/R2 display flip; held directions are suppressed until release when
+it changes. CONF is independent of rotation.
 
 ### SC7A20 gravity rotation and STOP1 wake (2026-11-20)
 
