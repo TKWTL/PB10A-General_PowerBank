@@ -776,7 +776,8 @@ The **Tools** icon page now offers two WORD-page apps:
 - `-Accel Calibration` using Collar-Radio's
   `img_leveler_cal`. The PB02B six-face (not six independent
   accelerometer axes) procedure is ported with the same threshold
-  and stability rules: X-/X+/Y-/Y+/Z-/Z+ with each candidate held
+  and stability rules. Confirm the introduction with a short CONF, then
+  place the device on each of X-/X+/Y-/Y+/Z-/Z+ and hold the candidate
   for 10 additional fresh 200ms intervals (about 2 seconds).
   No partial face capture updates runtime calibration. When all
   faces validate, derive each axis' zero midpoint and
@@ -803,7 +804,7 @@ VDD power-down just like ordinary SRAM. Instead, a 16-byte
 `s_calibration_noinit` record shares the Keil linker scatter file's
 reserved `RW_NOINIT` section with `g_fault_record` (32 bytes) and
 the two battery statistics slots (32 bytes), and the MMC5603 magnetic
-bias record (12 bytes).
+bias record (12 bytes) plus the altitude reference (8 bytes).
 The scatter currently reserves the **last 256 bytes of 36 KiB SRAM**
 for this area. The calibration consists of three signed 16-bit zero
 codes and three unsigned 16-bit Q14 slopes, plus a 16-bit magic/version

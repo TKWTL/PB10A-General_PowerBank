@@ -60,7 +60,10 @@ them.
   Calibration uses six stable ±axis placements, then records zero/slope
   with CRC into the Keil `.noinit` SRAM area; this retains calibration
   across MCU reset while SRAM has power, **not** across total power loss.
-  Both applications release their PM lock on leave.
+  Short CONF starts sampling from the introductory page. Arrow and side-view
+  icons show the six poses, with an inverted active pose, completed checks
+  and a stability bar. Success returns after 1.2 s. Both applications release
+  their PM lock on leave.
 
 - `compass_app.c/.h`: magnetic heading with gravity-based tilt compensation,
   vector EMA, rotating compass rose, eight directions and magnetic strength.
@@ -69,7 +72,7 @@ them.
   Y,-X,Z based on the user's inferred mounting; verify against real north.
   The compass subtracts the retained native-axis hard-iron offsets before
   mapping and filtering. No gain matrix or declination correction. Both sensors use the 40 ms tool
-  target; only long CONF exits. Invalid/stale samples, rapid acceleration,
+  target. Short or long CONF exits. Invalid/stale samples, rapid acceleration,
   near-vertical forward axis or weak horizontal field suppress heading.
 - `compass_cal_app.c/.h`: guided six-pose magnetic offset calibration.
   With the screen facing up (native SC7A20 Y-), aim its right edge N/E/S/W
@@ -83,13 +86,16 @@ them.
   three native-axis uint16_t offsets (32768 = zero mG), CRC16 and tag use
   twelve bytes of .noinit. Statistics remains raw; reset retention requires
   powered SRAM. Calibration locks R0; the leave hook restores sampling/PM.
-- `altimeter_app.c/.h`: Pa snapshot, integer standard-atmosphere LUT,
-  standard/relative height in 0.1 m, pressure, sensor temperature and
-  vertical speed from the closest sample at least 5 s old. Short CONF
-  toggles STD/REL; LEFT or RIGHT zeros the relative height and selects REL;
-  long CONF exits. Relative reference is session RAM only.
-  Both sensor tools use the Leveler PM block/leave hook pattern and normal
-  screen auto-rotation; no new thread or I2C owner.
+- `altimeter_app.c/.h`: pressure, temperature and altitude from the raw
+  BMP180 sample. LEFT/RIGHT cycle Std Alt, Cal Alt and Rel Alt. UP/DOWN
+  open the known-elevation editor in Cal Alt or zero Rel Alt. In the editor,
+  UP/DOWN adjust metres (1/10/100 m with repeat), RIGHT starts averaging
+  16 fresh samples, and LEFT cancels. CONF exits the tool and discards
+  edits or samples in progress. An inverse lookup and the pressure ratio
+  determine the sea-level reference using 32-bit integer arithmetic.
+  The 8-byte CRC-protected record in .noinit survives powered SRAM resets.
+  Relative zero remains session-only. Altimeter and Accel Calibration use
+  12 px text with translation keys and leave the display corners clear.
 
 Shared foundation services such as RTC calendar editing and the buzzer
 are provided by `APP/framework/`; device logic resides in `APP/algorithm/`.

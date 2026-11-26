@@ -188,7 +188,7 @@ void Compass_AppOnLeave(ui_t *ui) {
 }
 
 void Compass_AppRun(ui_t *ui) {
-    if (!ui || ui->action == UI_ACTION_BACK)
+    if (!ui || ui->action == UI_ACTION_ENTER || ui->action == UI_ACTION_BACK)
         return;
     ui->action = UI_ACTION_NONE;
     if (!s_active) {

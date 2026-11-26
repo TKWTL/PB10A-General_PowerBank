@@ -186,9 +186,9 @@ static void draw_footer(const power_monitor_t *power) {
             (void)mini_snprintf(text, sizeof(text), "ETA %02uM%02u", seconds / 60u, seconds % 60u);
         else
             (void)mini_snprintf(text, sizeof(text), "ETA %02uH%02u", seconds / 3600u, seconds / 60u % 60u);
-        Disp_DrawStr(2u, PB_TIME_Y, text);
+        Disp_DrawStr(6u, PB_TIME_Y, text);
     } else {
-        Disp_DrawStr(2u, PB_TIME_Y, "ETA --");
+        Disp_DrawStr(6u, PB_TIME_Y, "ETA --");
     }
 
     if (rtc_valid && power->eta_valid) {
@@ -200,19 +200,19 @@ static void draw_footer(const power_monitor_t *power) {
             (void)mini_snprintf(text, sizeof(text), "END %02u:%02u+%u", hour, minute, day);
         else
             (void)mini_snprintf(text, sizeof(text), "END %02u:%02u", hour, minute);
-        Disp_DrawStr(2u, PB_DATE_Y, text);
+        Disp_DrawStr(6u, PB_DATE_Y, text);
     } else {
-        Disp_DrawStr(2u, PB_DATE_Y, "END --");
+        Disp_DrawStr(6u, PB_DATE_Y, "END --");
     }
 
     if (rtc_valid) {
         (void)mini_snprintf(text, sizeof(text), "%02d:%02d:%02d", sTime.Hours, sTime.Minutes, sTime.Seconds);
-        Disp_DrawStr(96u, PB_TIME_Y, text);
+        Disp_DrawStr(92u, PB_TIME_Y, text);
         (void)mini_snprintf(text, sizeof(text), "20%02d/%02d/%02d", sTime.Year, sTime.Month, sTime.Date);
-        Disp_DrawStr(88u, PB_DATE_Y, text);
+        Disp_DrawStr(84u, PB_DATE_Y, text);
     } else {
-        Disp_DrawStr(96u, PB_TIME_Y, "--:--:--");
-        Disp_DrawStr(88u, PB_DATE_Y, "----/--/--");
+        Disp_DrawStr(92u, PB_TIME_Y, "--:--:--");
+        Disp_DrawStr(84u, PB_DATE_Y, "----/--/--");
     }
 }
 

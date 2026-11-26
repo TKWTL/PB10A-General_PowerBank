@@ -1,4 +1,4 @@
-/* Standard pressure altitude, relative zero and 5-second vertical speed. */
+/* Standard, pressure-calibrated and relative altitude. */
 #include "altimeter_app.h"
 #include "tools_motion_app.h"
 #include "bmp180_algo.h"
@@ -8,6 +8,9 @@
 #include "pm_api.h"
 #include "mini_math.h"
 #include "mini_format.h"
+#include "indev/indevDriver.h"
+#include "i18n.h"
+#include "main.h"
 
 /* Original PB10A altimeter icon, 30 x 30 XBM. */
 // clang-format off
@@ -26,59 +29,255 @@ const unsigned char img_altimeter[] = {
 // clang-format on
 
 #define ALTIMETER_FRAME_MS 200u
-#define ALT_SPEED_WINDOW_MS 5000u
-#define ALT_HISTORY_COUNT 12u
+#define ALT_CAL_SAMPLES 16u
+#define ALT_REFERENCE_TAG 0x4131u
+/* Round(30 kPa * 101325 / 110 kPa) through 110 kPa * 101325 / 30 kPa. */
+#define ALT_REFERENCE_MIN_PA 27634u
+#define ALT_REFERENCE_MAX_PA 371525u
+#define ALT_LEFT 4u
+#define ALT_RIGHT 124u
+#define ALT_TOP 3u
+#define ALT_BOTTOM 61u
+
+typedef enum { ALT_STD,
+               ALT_CAL,
+               ALT_REL,
+               ALT_MODE_COUNT } alt_mode_t;
+typedef enum { ALT_MEASURE,
+               ALT_EDIT,
+               ALT_SAMPLING } alt_view_t;
+typedef enum { ALT_STATUS_NONE,
+               ALT_STATUS_SAVED,
+               ALT_STATUS_PRESSURE } alt_status_t;
 
 typedef struct {
-    int32_t dm;
-    uint32_t at_ms;
-} altitude_point_t;
+    uint32_t reference_pa;
+    uint32_t tag_crc;
+} alt_cal_record_t;
 
-static altitude_point_t s_history[ALT_HISTORY_COUNT];
-static uint8_t s_active, s_relative, s_reference_valid, s_seen;
-static uint8_t s_count, s_next, s_speed_valid;
-static int32_t s_reference_dm, s_speed_dmps;
-static uint32_t s_seq;
+static volatile alt_cal_record_t s_cal_record __attribute__((section(".noinit"), used, aligned(4)));
+static uint8_t s_active, s_zero_valid, s_repeat_count;
+static uint8_t s_sample_count;
+static alt_mode_t s_mode;
+static alt_view_t s_view;
+static alt_status_t s_status;
+static int32_t s_zero_dm, s_edit_m;
+static uint32_t s_reference_pa, s_last_seq, s_pressure_sum;
 
-/* Pick the nearest sample at least 5 seconds old and divide by the actual
- * elapsed time, not an assumed sampling period. One entry per BMP sample. */
-static void altitude_speed_update(int32_t dm, uint32_t at_ms) {
-    uint32_t best_age = UINT32_MAX;
-    s_speed_valid = 0u;
-    for (unsigned i = 0; i < s_count; ++i) {
-        uint32_t age = at_ms - s_history[i].at_ms;
-        if (age >= ALT_SPEED_WINDOW_MS && age < best_age) {
-            best_age = age;
-            s_speed_dmps = (dm - s_history[i].dm) * 1000 / (int32_t)age;
-            s_speed_valid = 1u;
-        }
+static uint16_t reference_crc(uint32_t reference_pa) {
+    uint16_t crc = 0xffffu;
+    for (unsigned i = 0u; i < 4u; ++i) {
+        crc ^= (uint16_t)(reference_pa & 255u) << 8;
+        reference_pa >>= 8;
+        for (unsigned bit = 0u; bit < 8u; ++bit)
+            crc = (uint16_t)((crc & 0x8000u) ? (crc << 1) ^ 0x1021u : crc << 1);
     }
-    s_history[s_next].dm = dm;
-    s_history[s_next].at_ms = at_ms;
-    s_next = (s_next + 1u) % ALT_HISTORY_COUNT;
-    if (s_count < ALT_HISTORY_COUNT)
-        ++s_count;
+    return crc;
 }
 
-static void altitude_draw_height(int32_t dm, uint8_t valid) {
-    if (!valid) {
-        Disp_DrawStr(2u, 31u, "-- m");
+static uint32_t reference_load(void) {
+    uint32_t pressure = s_cal_record.reference_pa;
+    uint32_t tag_crc = s_cal_record.tag_crc;
+    if (pressure < ALT_REFERENCE_MIN_PA || pressure > ALT_REFERENCE_MAX_PA ||
+        tag_crc != ((uint32_t)ALT_REFERENCE_TAG << 16 | reference_crc(pressure)))
+        return 0u;
+    return pressure;
+}
+
+static void reference_save(uint32_t pressure) {
+    s_cal_record.tag_crc = 0u;
+    __DMB();
+    s_cal_record.reference_pa = pressure;
+    __DMB();
+    s_cal_record.tag_crc = (uint32_t)ALT_REFERENCE_TAG << 16 | reference_crc(pressure);
+    __DSB();
+    s_reference_pa = pressure;
+}
+
+/* 101325 = 525 * 193. Split the first product into quotient and remainder
+ * before multiplying by 193. For the supported pressure and reference
+ * ranges both products stay below 72 million; round once at the end. */
+static uint32_t standard_ratio_pa(uint32_t pressure, uint32_t reference) {
+    uint32_t partial = pressure * 525u;
+    return (partial / reference) * 193u +
+           ((partial % reference) * 193u + reference / 2u) / reference;
+}
+
+static uint8_t pressure_in_range(int32_t pressure) {
+    return pressure >= PRESSURE_ALT_MIN_PA && pressure <= PRESSURE_ALT_MAX_PA;
+}
+
+static uint8_t calibrated_height(int32_t pressure, int32_t *height_dm) {
+    return s_reference_pa && pressure_in_range(pressure) &&
+           pressure_altitude_dm((int32_t)standard_ratio_pa((uint32_t)pressure, s_reference_pa), height_dm);
+}
+
+static void save_calibration(void) {
+    int32_t standard_pa;
+    if (!altitude_pressure_pa(s_edit_m * 10, &standard_pa)) {
+        s_view = ALT_EDIT;
         return;
     }
-    char text[12];
-    uint16_t x = 2u;
-    /* The existing large font has digits and '.' but no minus glyph. */
-    if (dm < 0) {
-        Disp_DrawBox(x, 24u, 7u, 2u);
-        x += 9u;
-        dm = -dm;
-    }
-    UI_FmtScaled(text, sizeof(text), dm, 1u);
+
+    uint32_t measured = (s_pressure_sum + ALT_CAL_SAMPLES / 2u) / ALT_CAL_SAMPLES;
+    uint32_t reference = standard_ratio_pa(measured, (uint32_t)standard_pa);
+    uint32_t normalized = standard_ratio_pa(measured, reference);
+    /* A one-Pa reference rounding at an endpoint can place the normalized
+     * pressure just outside the table. Use the adjacent reference then. */
+    if (normalized < PRESSURE_ALT_MIN_PA)
+        --reference;
+    else if (normalized > PRESSURE_ALT_MAX_PA)
+        ++reference;
+    reference_save(reference);
+    s_view = ALT_MEASURE;
+    s_status = ALT_STATUS_SAVED;
+}
+
+static void draw_right(uint16_t y, const char *text) {
+    uint16_t width = Disp_GetUTF8Width(text);
+    Disp_DrawStr(width <= ALT_RIGHT - ALT_LEFT ? ALT_RIGHT - width : ALT_LEFT, y, text);
+}
+
+static void draw_center(uint16_t y, const char *text) {
+    uint16_t width = Disp_GetUTF8Width(text);
+    Disp_DrawStr(width <= ALT_RIGHT - ALT_LEFT ? (UI_HOR_RES - width) / 2u : ALT_LEFT, y, text);
+}
+
+static void draw_height(int32_t value, uint8_t decimals) {
+    char number[12];
+    uint8_t negative = value < 0;
+    UI_FmtScaled(number, sizeof(number), negative ? -value : value, decimals);
+
     Disp_SetFont(font_radio_h24w12);
-    Disp_DrawStr(x, 35u, text);
-    x += Disp_GetUTF8Width(text);
+    uint16_t width = Disp_GetUTF8Width(number);
+    /* The large numeric font has no minus glyph. Reserve space for a line
+     * on the left and the unit in the normal font on the right. */
+    uint16_t x = (UI_HOR_RES - width - 9u - (negative ? 9u : 0u)) / 2u;
+    if (negative) {
+        Disp_DrawBox(x, 26u, 7u, 2u);
+        x += 9u;
+    }
+    Disp_DrawStr(x, 37u, number);
     Disp_SetFont(UI_FONT);
-    Disp_DrawStr(x + 3u, 35u, "m");
+    Disp_DrawStr(x + width + 3u, 37u, "m");
+}
+
+static void draw_measurement(const bmp180_sample_t *sample, uint8_t sample_valid,
+                             int32_t standard_dm, uint8_t standard_valid) {
+    static const char *const modes[] = {"Std Alt", "Cal Alt", "Rel Alt"};
+    char text[24], value[16];
+    Disp_DrawStr(ALT_LEFT, 13u, I18N_Text(modes[s_mode]));
+    mini_snprintf(text, sizeof(text), "%u/3", (unsigned)s_mode + 1u);
+    draw_right(13u, text);
+
+    int32_t height_dm = standard_dm;
+    uint8_t valid = standard_valid;
+    if (s_mode == ALT_CAL) {
+        valid = sample_valid && calibrated_height(sample->pressure_pa, &height_dm);
+    } else if (s_mode == ALT_REL) {
+        valid = standard_valid && s_zero_valid;
+        height_dm -= s_zero_dm;
+    }
+
+    if (valid) {
+        draw_height(height_dm, 1u);
+    } else if (s_mode == ALT_CAL && !s_reference_pa) {
+        draw_center(25u, "-- m");
+        draw_center(37u, I18N_Text("No calibration"));
+    } else {
+        draw_center(33u, "-- m");
+    }
+
+    Disp_DrawLine(ALT_LEFT, 39u, ALT_RIGHT - 1u, 39u);
+    if (sample_valid) {
+        UI_FmtScaled(value, sizeof(value), sample->pressure_pa / 10, 1u);
+        mini_snprintf(text, sizeof(text), "%shPa", value);
+        Disp_DrawStr(ALT_LEFT, 49u, text);
+        UI_FmtScaled(value, sizeof(value), sample->temperature_c10, 1u);
+        mini_snprintf(text, sizeof(text), "%s°C", value);
+        draw_right(49u, text);
+    } else {
+        Disp_DrawStr(ALT_LEFT, 49u, "--hPa");
+        draw_right(49u, "--°C");
+    }
+    Disp_DrawStr(ALT_LEFT, 60u, I18N_Text("L/R:Mode"));
+    const char *hint = "CONF:Exit";
+    if (s_mode == ALT_CAL)
+        hint = s_status == ALT_STATUS_SAVED ? "Cal saved" : "U/D:Cal";
+    else if (s_mode == ALT_REL)
+        hint = "U/D:Zero";
+    draw_right(60u, I18N_Text(hint));
+}
+
+static void draw_editor(void) {
+    draw_center(13u, I18N_Text("Set Altitude"));
+    draw_height(s_edit_m, 0u);
+    draw_center(49u, I18N_Text(s_status == ALT_STATUS_PRESSURE ? "Pressure unavailable" : "U/D:Adjust"));
+    Disp_DrawStr(ALT_LEFT, 60u, I18N_Text("L:Cancel"));
+    draw_right(60u, I18N_Text("R:Save"));
+}
+
+static void draw_sampling(void) {
+    char text[12];
+    draw_center(13u, I18N_Text("Calibrating"));
+    draw_center(30u, I18N_Text("Keep still"));
+    Disp_DrawFrame(8u, 38u, 112u, 8u);
+    if (s_sample_count)
+        Disp_DrawBox(10u, 40u, 108u * s_sample_count / ALT_CAL_SAMPLES, 4u);
+    mini_snprintf(text, sizeof(text), "%u/%u", (unsigned)s_sample_count, ALT_CAL_SAMPLES);
+    draw_center(60u, text);
+    Disp_DrawStr(ALT_LEFT, 60u, I18N_Text("L:Cancel"));
+}
+
+static void handle_action(UI_ACTION action, const bmp180_sample_t *sample, uint8_t sample_valid,
+                          int32_t standard_dm, uint8_t standard_valid) {
+    /* On the Tools icon page LEFT/RIGHT send UP/DOWN, and physical UP/DOWN
+     * send MINUS/PLUS. Preserve the physical increment direction. */
+    uint8_t vertical = action == UI_ACTION_MINUS || action == UI_ACTION_PLUS;
+    if (s_view == ALT_MEASURE) {
+        if (action == UI_ACTION_NONE || indevActionIsRepeat())
+            return;
+        s_status = ALT_STATUS_NONE;
+        if (action == UI_ACTION_UP)
+            s_mode = (s_mode + ALT_MODE_COUNT - 1u) % ALT_MODE_COUNT;
+        else if (action == UI_ACTION_DOWN)
+            s_mode = (s_mode + 1u) % ALT_MODE_COUNT;
+        else if (vertical && s_mode == ALT_CAL) {
+            int32_t initial_dm = standard_dm;
+            if (sample_valid)
+                (void)calibrated_height(sample->pressure_pa, &initial_dm);
+            s_edit_m = (initial_dm + (initial_dm < 0 ? -5 : 5)) / 10;
+            s_repeat_count = 0u;
+            s_view = ALT_EDIT;
+        } else if (vertical && s_mode == ALT_REL && standard_valid) {
+            s_zero_dm = standard_dm;
+            s_zero_valid = 1u;
+        }
+    } else if (action == UI_ACTION_UP && !indevActionIsRepeat()) {
+        s_view = ALT_MEASURE;
+        s_status = ALT_STATUS_NONE;
+    } else if (s_view == ALT_EDIT && vertical) {
+        if (!indevActionIsRepeat())
+            s_repeat_count = 0u;
+        else if (s_repeat_count < 15u)
+            ++s_repeat_count;
+        int32_t step = s_repeat_count >= 15u ? 100 : s_repeat_count >= 5u ? 10
+                                                                          : 1;
+        s_edit_m += action == UI_ACTION_MINUS ? step : -step;
+        if (s_edit_m < PRESSURE_ALT_MIN_M)
+            s_edit_m = PRESSURE_ALT_MIN_M;
+        if (s_edit_m > PRESSURE_ALT_MAX_M)
+            s_edit_m = PRESSURE_ALT_MAX_M;
+    } else if (s_view == ALT_EDIT && action == UI_ACTION_DOWN && !indevActionIsRepeat()) {
+        if (!standard_valid) {
+            s_status = ALT_STATUS_PRESSURE;
+            return;
+        }
+        s_pressure_sum = 0u;
+        s_sample_count = 0u;
+        s_last_seq = sample->seq;
+        s_view = ALT_SAMPLING;
+    }
 }
 
 void Altimeter_AppOnLeave(ui_t *ui) {
@@ -91,78 +290,56 @@ void Altimeter_AppOnLeave(ui_t *ui) {
 }
 
 void Altimeter_AppRun(ui_t *ui) {
-    if (!ui || ui->action == UI_ACTION_BACK)
+    if (!ui || ui->action == UI_ACTION_ENTER || ui->action == UI_ACTION_BACK)
         return;
     if (!s_active) {
         s_active = 1u;
-        s_relative = s_reference_valid = s_seen = 0u;
-        s_count = s_next = s_speed_valid = 0u;
+        s_zero_valid = 0u;
+        s_mode = ALT_STD;
+        s_view = ALT_MEASURE;
+        s_status = ALT_STATUS_NONE;
+        s_reference_pa = reference_load();
         pm_api_set_sleep_block(SENSOR_TOOL_PM_BLOCK, 1u);
         pm_api_refresh_idle();
     }
 
     bmp180_sample_t sample;
-    int32_t altitude_dm = 0;
+    int32_t standard_dm = 0;
     uint8_t sample_valid = BMP180Algo_GetSample(&sample);
-    uint8_t valid = sample_valid && pressure_altitude_dm(sample.pressure_pa, &altitude_dm);
-    if (valid) {
-        if (!s_reference_valid) {
-            s_reference_dm = altitude_dm;
-            s_reference_valid = 1u;
-        }
-        if (!s_seen || s_seq != sample.seq) {
-            s_seen = 1u;
-            s_seq = sample.seq;
-            altitude_speed_update(altitude_dm, sample.at_ms);
-        }
-    } else {
-        s_seen = s_count = s_next = s_speed_valid = 0u;
+    uint8_t standard_valid = sample_valid && pressure_altitude_dm(sample.pressure_pa, &standard_dm);
+    if (standard_valid && !s_zero_valid) {
+        s_zero_dm = standard_dm;
+        s_zero_valid = 1u;
     }
-    if (ui->action == UI_ACTION_ENTER) {
-        s_relative ^= 1u;
-    } else if (valid && (ui->action == UI_ACTION_UP || ui->action == UI_ACTION_DOWN)) {
-        /* Tools is an ICON page: physical LEFT/RIGHT map to UP/DOWN. */
-        s_reference_dm = altitude_dm;
-        s_relative = 1u;
-    }
+
+    handle_action(ui->action, &sample, sample_valid, standard_dm, standard_valid);
     ui->action = UI_ACTION_NONE;
+    if (s_view == ALT_SAMPLING) {
+        if (!standard_valid) {
+            s_view = ALT_EDIT;
+            s_status = ALT_STATUS_PRESSURE;
+        } else if (sample.seq != s_last_seq) {
+            s_last_seq = sample.seq;
+            s_pressure_sum += (uint32_t)sample.pressure_pa;
+            if (++s_sample_count == ALT_CAL_SAMPLES)
+                save_calibration();
+        }
+    }
 
     uint8_t fg = ui->bgColor ^ 1u;
     Disp_SetMaxClipWindow();
     Disp_SetDrawColor(&ui->bgColor);
     Disp_DrawBox(0u, 0u, UI_HOR_RES, UI_VER_RES);
+    Disp_SetClipWindow(ALT_LEFT, ALT_TOP, ALT_RIGHT, ALT_BOTTOM);
     Disp_SetDrawColor(&fg);
     Disp_SetFont(UI_FONT);
-    Disp_DrawStr(2u, 10u, s_relative ? "Rel Alt" : "Std Alt");
-    Disp_SetFont(font_home_h6w4);
-    Disp_DrawStr(84u, 10u, "CONF:Mode");
-    Disp_SetFont(UI_FONT);
-    altitude_draw_height(s_relative ? altitude_dm - s_reference_dm : altitude_dm, valid);
-    Disp_DrawLine(0u, 38u, 127u, 38u);
-
-    char text[16], value[12];
-    if (sample_valid) {
-        UI_FmtScaled(value, sizeof(value), sample.pressure_pa / 10, 1u);
-        mini_snprintf(text, sizeof(text), "P:%shPa", value);
-        Disp_DrawStr(0u, 49u, text);
-        UI_FmtScaled(value, sizeof(value), sample.temperature_c10, 1u);
-        mini_snprintf(text, sizeof(text), "T:%s°C", value);
-        uint16_t width = Disp_GetUTF8Width(text);
-        Disp_DrawStr(UI_HOR_RES - width, 49u, text);
-    } else {
-        Disp_DrawStr(0u, 49u, "P:--hPa");
-        Disp_DrawStr(80u, 49u, "T:--°C");
-    }
-    if (s_speed_valid) {
-        UI_FmtScaled(value, sizeof(value), s_speed_dmps, 1u);
-        mini_snprintf(text, sizeof(text), "V:%sm/s", value);
-    } else {
-        mini_snprintf(text, sizeof(text), "V:--m/s");
-    }
-    Disp_DrawStr(0u, 62u, text);
-    Disp_SetFont(font_home_h6w4);
-    Disp_DrawStr(88u, 62u, "L/R:Zero");
-    Disp_SetFont(UI_FONT);
+    if (s_view == ALT_MEASURE)
+        draw_measurement(&sample, sample_valid, standard_dm, standard_valid);
+    else if (s_view == ALT_EDIT)
+        draw_editor();
+    else
+        draw_sampling();
+    Disp_SetMaxClipWindow();
     Disp_SendBuffer();
     UI_RequestNextFrame(ui, ALTIMETER_FRAME_MS);
 }

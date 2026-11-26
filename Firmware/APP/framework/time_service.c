@@ -201,8 +201,8 @@ void Add_TimeSet_Items(ui_page_t *parent) {
     static const char *const labels[6]={
         " Second"," Minute"," Hour"," Date"," Month"," Year"
     };
-    AddItem("-Time&Date",UI_ITEM_PARENTS,img_home,&s_time_item,parent,&s_time_page,0);
-    AddPage("[Time&Date]",&s_time_page,UI_PAGE_TEXT,parent);
+    AddItem("-Time & Date", UI_ITEM_PARENTS, img_home, &s_time_item, parent, &s_time_page, 0);
+    AddPage("[Time & Date]", &s_time_page, UI_PAGE_TEXT, parent);
     AddItem("[Back]",UI_ITEM_RETURN,0,&s_back,&s_time_page,parent,0);
     for(i=0u;i<6u;i++)
         AddItem(labels[i],UI_ITEM_DATA,0,&s_fields[i],&s_time_page,0,0);

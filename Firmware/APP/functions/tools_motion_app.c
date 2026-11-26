@@ -13,6 +13,8 @@
 #include "millis.h"
 #include "mini_math.h"
 #include "mini_format.h"
+#include "core/ui.h"
+#include "i18n.h"
 #include <string.h>
 
 // clang-format off
@@ -61,8 +63,14 @@ static uint8_t s_level_active,s_level_valid,s_level_mode;
 static uint32_t s_level_seq,s_level_draw_at;
 static int32_t s_level_x, s_level_y, s_level_z; /* mg in Q4 */
 
-static uint8_t s_cal_active,s_cal_done[CAL_FACE_COUNT],s_cal_candidate;
-static uint8_t s_cal_intervals,s_cal_samples,s_cal_completed;
+typedef enum { CAL_CLOSED,
+               CAL_INTRO,
+               CAL_CAPTURING,
+               CAL_SAVED,
+               CAL_FAILED } cal_state_t;
+static cal_state_t s_cal_state;
+static uint8_t s_cal_done[CAL_FACE_COUNT], s_cal_candidate;
+static uint8_t s_cal_intervals, s_cal_samples;
 static int16_t s_cal_faces[CAL_FACE_COUNT][3];
 static int16_t s_cal_min[3],s_cal_max[3];
 static int32_t s_cal_sum[3];
@@ -89,8 +97,9 @@ void Motion_LevelerOnLeave(ui_t *ui) {
 }
 void Motion_CalibrationOnLeave(ui_t *ui) {
     (void)ui;
-    if(!s_cal_active)return;
-    s_cal_active=0u;
+    if (s_cal_state == CAL_CLOSED)
+        return;
+    s_cal_state = CAL_CLOSED;
     motion_tool_end();
 }
 static void draw_black(void) {
@@ -357,15 +366,16 @@ static void cal_capture(uint8_t face) {
     for(i=0u;i<CAL_FACE_COUNT;i++)
         if(!s_cal_done[i])all_done=0u;
     if(all_done) {
-        s_cal_completed=SC7A20Algo_ApplySixFace(
-            (const int16_t (*)[3])s_cal_faces)?1u:2u;
+        s_cal_state = SC7A20Algo_ApplySixFace(
+                          (const int16_t (*)[3])s_cal_faces)
+                          ? CAL_SAVED
+                          : CAL_FAILED;
         s_cal_complete_at=Millis();
     }
 }
 static void cal_process_sample(const sc7a20_sample_t *sample) {
     uint8_t face,i;
-    const int16_t *raw=sample->raw;
-    if(s_cal_completed)return;
+    const int16_t *raw = sample->raw;
     face=cal_detect(raw);
     if(face==CAL_FACE_NONE ||
        s_cal_done[face]) {cal_reset_candidate();return;}
@@ -382,68 +392,135 @@ static void cal_process_sample(const sc7a20_sample_t *sample) {
     ++s_cal_samples;
     if(++s_cal_intervals>=CAL_HOLD_INTERVALS)cal_capture(face);
 }
+static void cal_center(uint16_t y, const char *key) {
+    const char *text = I18N_Text(key);
+    uint16_t width = Disp_GetUTF8Width(text);
+    Disp_DrawStr(width <= 120u ? (UI_HOR_RES - width) / 2u : 4u, y, text);
+}
+
+static void cal_check(uint16_t x, uint16_t y) {
+    Disp_DrawLine(x - 4u, y, x - 1u, y + 3u);
+    Disp_DrawLine(x - 1u, y + 3u, x + 5u, y - 3u);
+}
+
+static void cal_draw_face(unsigned face) {
+    /* Same order as SC7A20Algo_ApplySixFace: X-, X+, Y-, Y+, Z-, Z+. */
+    static const uint8_t centers[CAL_FACE_COUNT][2] = {
+        {113, 34},
+        {15, 34},
+        {44, 34},
+        {84, 34},
+        {64, 22},
+        {64, 46},
+    };
+    static const int8_t directions[CAL_FACE_COUNT][2] = {
+        {1, 0},
+        {-1, 0},
+        {0, 0},
+        {0, 0},
+        {0, -1},
+        {0, 1},
+    };
+    int x = centers[face][0], y = centers[face][1];
+    uint8_t white = 1u, black = 0u;
+    uint8_t side_view = face == 2u || face == 3u;
+    if (face == s_cal_candidate) {
+        unsigned half_width = side_view ? 12u : 7u;
+        Disp_DrawBox(x - half_width, y - 7, half_width * 2u + 1u, 15u);
+        Disp_SetDrawColor(&black);
+    }
+    if (side_view) {
+        /* Side view: outline = housing, solid line = OLED, base = table. */
+        Disp_DrawFrame(x - 9, y - 3, 19u, 7u);
+        unsigned screen_y = face == 2u ? y - 4 : y + 4;
+        Disp_DrawLine(x - 5, screen_y, x + 5, screen_y);
+        Disp_DrawLine(x - 10, y + 6, x + 10, y + 6);
+        if (s_cal_done[face])
+            cal_check(x + 16, y);
+    } else if (s_cal_done[face]) {
+        cal_check(x, y);
+    } else {
+        int dx = directions[face][0], dy = directions[face][1];
+        int tip_x = x + dx * 4, tip_y = y + dy * 4;
+        int base_x = x + dx, base_y = y + dy;
+        Disp_DrawLine(x - dx * 4, y - dy * 4, tip_x, tip_y);
+        Disp_DrawLine(base_x - dy * 3, base_y + dx * 3, tip_x, tip_y);
+        Disp_DrawLine(base_x + dy * 3, base_y - dx * 3, tip_x, tip_y);
+    }
+    Disp_SetDrawColor(&white);
+}
+
 static void cal_draw(void) {
-    char info[28];
-    uint8_t count=0u,i,white=1u;
+    uint8_t white = 1u;
     draw_black();
+    Disp_SetClipWindow(4u, 3u, 124u, 61u);
     Disp_SetDrawColor(&white);
     Disp_SetFont(UI_FONT);
-    for(i=0u;i<CAL_FACE_COUNT;i++)count+=s_cal_done[i]!=0u;
-    if(s_cal_completed==1u) {
-        Disp_DrawStr(28u,28u,"Calibration");
-        Disp_DrawStr(41u,43u,"Saved");
+    if (s_cal_state == CAL_INTRO) {
+        cal_center(13u, "Accel Calibration");
+        cal_center(27u, "Rest on each face");
+        cal_center(41u, "Hold still for 2s");
+        cal_center(59u, "CONF:Start");
+    } else if (s_cal_state == CAL_SAVED) {
+        cal_center(27u, "Calibration");
+        cal_center(43u, "Cal saved");
+    } else if (s_cal_state == CAL_FAILED) {
+        cal_center(24u, "Cal error");
+        cal_center(39u, "Check orientation");
+        cal_center(58u, "Any key:Exit");
+    } else {
+        char info[8];
+        unsigned count = 0u;
+        for (unsigned face = 0u; face < CAL_FACE_COUNT; ++face) {
+            count += s_cal_done[face] != 0u;
+            cal_draw_face(face);
+        }
+        Disp_DrawStr(4u, 13u, I18N_Text(s_cal_candidate == CAL_FACE_NONE ? "Place on a face" : "Hold still"));
+        mini_snprintf(info, sizeof(info), "%u/6", count);
+        Disp_DrawStr(124u - Disp_GetUTF8Width(info), 13u, info);
+        Disp_DrawFrame(8u, 55u, 112u, 6u);
+        if (s_cal_intervals)
+            Disp_DrawBox(10u, 57u, 108u * s_cal_intervals / CAL_HOLD_INTERVALS, 2u);
     }
-    else if(s_cal_completed==2u) {
-        Disp_DrawStr(32u,29u,"Cal error");
-        Disp_DrawStr(12u,44u,"Check orientation");
-    }
-    else {
-        (void)mini_snprintf(info,sizeof(info),"CAL %u/6",(unsigned)count);
-        Disp_DrawStr(3u,10u,info);
-        if(s_cal_candidate!=CAL_FACE_NONE)
-            (void)mini_snprintf(info,sizeof(info),"%2u/10",
-                           (unsigned)s_cal_intervals);
-        else (void)mini_snprintf(info,sizeof(info),"Hold 2s");
-        Disp_DrawStr(77u,10u,info);
-        Disp_DrawStr(54u,22u,s_cal_done[4]?"OK":"UP");
-        Disp_DrawStr(48u,61u,s_cal_done[5]?"OK":"DOWN");
-        Disp_DrawStr(1u,36u,s_cal_done[1]?"OK":"LEFT");
-        Disp_DrawStr(94u,36u,s_cal_done[0]?"OK":"RIGHT");
-        (void)mini_snprintf(info,sizeof(info),"ZU:%s ZD:%s",
-                       s_cal_done[2]?"OK":"--",
-                       s_cal_done[3]?"OK":"--");
-        Disp_DrawStr(26u,47u,info);
-    }
+    Disp_SetMaxClipWindow();
     Disp_SendBuffer();
 }
+
 void Motion_CalibrationRun(ui_t *ui) {
-    sc7a20_sample_t sample;
-    uint32_t now=Millis();
-    if(!ui)return;
-    if(!s_cal_active) {
-        s_cal_active=1u;
-        memset(s_cal_done,0,sizeof(s_cal_done));
-        s_cal_completed=0u;s_cal_seq=0u;s_cal_sample_at=0u;
-        cal_reset_candidate();
-        motion_tool_begin(2u);
+    if (!ui || ui->action == UI_ACTION_BACK)
+        return;
+    uint32_t now = Millis();
+    if (s_cal_state == CAL_CLOSED) {
+        s_cal_state = CAL_INTRO;
+        pm_api_set_sleep_block(SENSOR_TOOL_PM_BLOCK, 1u);
+        pm_api_refresh_idle();
     }
-    if(ui->action!=UI_ACTION_NONE) {
-        ui->action=UI_ACTION_BACK;
-        Motion_CalibrationOnLeave(ui);
+    if (s_cal_state == CAL_INTRO) {
+        if (ui->action == UI_ACTION_ENTER) {
+            memset(s_cal_done, 0, sizeof(s_cal_done));
+            s_cal_seq = s_cal_sample_at = 0u;
+            cal_reset_candidate();
+            SC7A20Algo_SetToolMode(2u);
+            s_cal_state = CAL_CAPTURING;
+        }
+        ui->action = UI_ACTION_NONE;
+    } else if (ui->action != UI_ACTION_NONE) {
         return;
     }
-    if(s_cal_completed==1u &&
-       (uint32_t)(now-s_cal_complete_at)>1200u) {
-        Motion_CalibrationOnLeave(ui);
-        ui->action=UI_ACTION_BACK;
+
+    if (s_cal_state == CAL_SAVED && (uint32_t)(now - s_cal_complete_at) >= 1200u) {
+        ui->action = UI_ACTION_BACK;
         return;
     }
-    if(!s_cal_completed && SC7A20Algo_GetSample(&sample) &&
-       sample.seq!=s_cal_seq &&
-       (!s_cal_sample_at || (uint32_t)(now-s_cal_sample_at)>=CAL_VIEW_MS-25u)) {
-        s_cal_seq=sample.seq;
-        s_cal_sample_at=now;
-        cal_process_sample(&sample);
+    if (s_cal_state == CAL_CAPTURING) {
+        sc7a20_sample_t sample;
+        if (SC7A20Algo_GetSample(&sample) && sample.seq != s_cal_seq &&
+            (!s_cal_sample_at || (uint32_t)(now - s_cal_sample_at) >= CAL_VIEW_MS - 25u)) {
+            s_cal_seq = sample.seq;
+            s_cal_sample_at = now;
+            cal_process_sample(&sample);
+        }
     }
     cal_draw();
+    UI_RequestNextFrame(ui, CAL_VIEW_MS);
 }
