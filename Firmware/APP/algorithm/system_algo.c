@@ -20,13 +20,14 @@ static uint8_t s_click_on,s_radio_auto,s_power_auto,s_aux_auto;
 static int s_volume_level;
 /* Determination (Undertale), right hand, first eight measures.
  * F# major, 6/8, dotted-quarter = 115 BPM, eighth note ~= 174 ms.
+ * m2/m6 first note is #4 (B# = C), middle octave: BEEP_C5.
  */
 static const uint16_t s_determination_rh[] = {
     /* m1 */
     BEEP_FS5, 174u, BEEP_F5, 174u, BEEP_DS5, 174u,
     BEEP_CS5, 174u, BEEP_DS5, 174u, BEEP_AS4, 174u,
     /* m2 */
-    BEEP_B5, 174u, BEEP_REST, 174u, BEEP_GS4, 174u,
+    BEEP_C5, 174u, BEEP_REST, 174u, BEEP_GS4, 174u,
     BEEP_REST, 174u, BEEP_DS5, 174u, BEEP_F5, 174u,
     /* m3 */
     BEEP_FS5, 174u, BEEP_REST, 174u, BEEP_GS5, 174u,
@@ -37,7 +38,7 @@ static const uint16_t s_determination_rh[] = {
     BEEP_FS5, 174u, BEEP_F5, 174u, BEEP_DS5, 174u,
     BEEP_CS5, 174u, BEEP_DS5, 174u, BEEP_AS4, 174u,
     /* m6 */
-    BEEP_B5, 174u, BEEP_REST, 174u, BEEP_GS4, 174u,
+    BEEP_C5, 174u, BEEP_REST, 174u, BEEP_GS4, 174u,
     BEEP_REST, 174u, BEEP_DS4, 174u, BEEP_F4, 174u,
     /* m7 */
     BEEP_FS4, 174u, BEEP_REST, 174u, BEEP_F4, 174u,
