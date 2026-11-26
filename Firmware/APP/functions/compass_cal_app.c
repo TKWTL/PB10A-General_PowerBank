@@ -1,4 +1,4 @@
-/* Six guided magnetic poses: screen-up N/E/S/W, flat N, flipped flat N. */
+/* Six guided magnetic poses: flat N, flipped flat N, screen-up N/E/S/W. */
 #include "compass_cal_app.h"
 #include "tools_motion_app.h"
 #include "mmc5603_algo.h"
@@ -30,37 +30,57 @@ const unsigned char img_compass_cal[] = {
 
 #define CAL_FRAME_MS 40u
 #define CAL_FRESH_MS 200u
+#define CAL_STALE_ABORT_MS 500u
 #define CAL_SAMPLES 16u
 #define CAL_MAX_TILT_CDEG 500
+#define CAL_FLAT_ENTER_CDEG 800
+#define CAL_FLAT_HOLD_CDEG 1000
 #define CAL_MAG_SPAN_MG 50
+#define CAL_FLAT_SPAN_MG 100
+#define CAL_FLAT_BAD_SAMPLES 3u
 #define CAL_STEPS 6u
 
+/* UI order is independent of the algorithm's N,E,S,W,flat,flipped order. */
+static const uint8_t s_face_order[CAL_STEPS] = {4u, 5u, 0u, 1u, 2u, 3u};
 static uint8_t s_active, s_step, s_count, s_sampling, s_result;
-static uint32_t s_mag_seq;
+static uint8_t s_waiting_data, s_accel_bad, s_retry;
+static uint32_t s_mag_seq, s_accel_seq, s_stale_since;
 static int16_t s_faces[CAL_STEPS][3];
 static int32_t s_sum[3], s_min[3], s_max[3];
 
-static uint8_t pose_ok(const sc7a20_sample_t *a, uint8_t step) {
+static uint8_t pose_ok(const sc7a20_sample_t *a, uint8_t face, uint8_t holding) {
     /* Native SC7A20: Y- screen-up; Z- normally flat; Z+ flipped. */
     int32_t x = a->mg[0], y = a->mg[1], z = a->mg[2];
     uint32_t g2 = (uint32_t)(x * x) + (uint32_t)(y * y) + (uint32_t)(z * z);
     if (g2 < 750u * 750u || g2 > 1250u * 1250u)
         return 0u;
-    int32_t along = step < 4u ? -y : step == 4u ? -z
+    int32_t along = face < 4u ? -y : face == 4u ? -z
                                                 : z;
     uint32_t transverse = g2 - (uint32_t)(along * along);
-    return along > 0 && atan2_cdeg((int32_t)isqrt_u32(transverse), along) <= CAL_MAX_TILT_CDEG;
+    int32_t limit = CAL_MAX_TILT_CDEG;
+    if (face >= 4u)
+        limit = holding ? CAL_FLAT_HOLD_CDEG : CAL_FLAT_ENTER_CDEG;
+    return along > 0 && atan2_cdeg((int32_t)isqrt_u32(transverse), along) <= limit;
 }
 
 static void cancel_capture(void) {
     s_sampling = 0u;
     s_count = 0u;
+    s_waiting_data = 0u;
+    s_accel_bad = 0u;
+    s_retry = 0u;
 }
 
-static void capture(const mmc5603_sample_t *m) {
+static void abort_capture(void) {
+    cancel_capture();
+    s_retry = 1u;
+}
+
+static void capture(const mmc5603_sample_t *m, uint8_t face) {
     if (m->seq == s_mag_seq)
         return;
     s_mag_seq = m->seq;
+    int32_t span = face >= 4u ? CAL_FLAT_SPAN_MG : CAL_MAG_SPAN_MG;
     for (unsigned i = 0u; i < 3u; ++i) {
         int32_t v = m->mg[i];
         if (!s_count) {
@@ -72,8 +92,8 @@ static void capture(const mmc5603_sample_t *m) {
             if (v > s_max[i])
                 s_max[i] = v;
             /* Yaw changes cannot be detected by gravity alone. */
-            if (s_max[i] - s_min[i] > CAL_MAG_SPAN_MG) {
-                cancel_capture();
+            if (s_max[i] - s_min[i] > span) {
+                abort_capture();
                 return;
             }
         }
@@ -82,10 +102,48 @@ static void capture(const mmc5603_sample_t *m) {
     if (++s_count != CAL_SAMPLES)
         return;
     for (unsigned i = 0u; i < 3u; ++i)
-        s_faces[s_step][i] = (int16_t)(s_sum[i] / (int32_t)CAL_SAMPLES);
+        s_faces[face][i] = (int16_t)(s_sum[i] / (int32_t)CAL_SAMPLES);
     cancel_capture();
     if (++s_step == CAL_STEPS)
         s_result = MMC5603Algo_ApplySixFace(s_faces) ? 1u : 2u;
+}
+
+static void capture_update(const sc7a20_sample_t *a, uint8_t accel_valid,
+                           const mmc5603_sample_t *m, uint8_t mag_valid, uint32_t now) {
+    uint8_t face = s_face_order[s_step];
+    uint8_t was_paused = s_waiting_data || s_accel_bad;
+
+    if (!accel_valid || !mag_valid) {
+        if (!s_waiting_data)
+            s_stale_since = now;
+        s_waiting_data = 1u;
+        if ((uint32_t)(now - s_stale_since) >= CAL_STALE_ABORT_MS) {
+            abort_capture();
+            return;
+        }
+    } else {
+        s_waiting_data = 0u;
+    }
+
+    uint8_t pose_valid = accel_valid && pose_ok(a, face, 1u);
+    if (accel_valid && a->seq != s_accel_seq) {
+        s_accel_seq = a->seq;
+        if (pose_valid) {
+            s_accel_bad = 0u;
+        } else if (face < 4u || ++s_accel_bad >= CAL_FLAT_BAD_SAMPLES) {
+            abort_capture();
+            return;
+        }
+    }
+
+    /* Preserve all accepted samples during a pause. Skip the latest
+     * magnetic snapshot on recovery as it may have arrived while paused. */
+    if (s_waiting_data || !pose_valid || was_paused) {
+        if (mag_valid)
+            s_mag_seq = m->seq;
+        return;
+    }
+    capture(m, face);
 }
 
 static void center_text(uint16_t y, const char *text) {
@@ -93,7 +151,7 @@ static void center_text(uint16_t y, const char *text) {
     Disp_DrawStr(width < UI_HOR_RES ? (UI_HOR_RES - width) / 2u : 0u, y, text);
 }
 
-static void draw_cal(const sc7a20_sample_t *a, uint8_t accel_valid, uint8_t ready) {
+static void draw_cal(uint8_t data_valid, uint8_t pose_valid) {
     static const char *const directions[4] = {"N", "E", "S", "W"};
     uint8_t black = 0u, white = 1u;
     char text[22];
@@ -107,31 +165,30 @@ static void draw_cal(const sc7a20_sample_t *a, uint8_t accel_valid, uint8_t read
         center_text(40u, s_result == 1u ? "Hold CONF: Exit" : "CONF: Retry");
         center_text(62u, s_result == 1u ? "CAL 6/6" : "Check headings");
     } else {
-        if (s_step < 4u) {
-            center_text(10u, "Screen face up");
-            /* The physical reference is always the screen's right edge. */
-            Disp_DrawBox(17u, 24u, 42u, 3u);
-            Disp_DrawLine(58u, 18u, 68u, 25u);
-            Disp_DrawLine(58u, 32u, 68u, 25u);
-            Disp_DrawStr(84u, 30u, directions[s_step]);
-            center_text(46u, s_sampling ? "Hold still" : ready ? "Move phone away"
-                                                               : "Adjust position");
-        } else {
-            if (accel_valid) {
-                Disp_SetClipWindow(0u, 0u, UI_HOR_RES, 51u);
-                Motion_DrawHorizon(a->level_mg);
-                Disp_SetMaxClipWindow();
-            }
-            /* Text strips stay legible against the shared white/black horizon. */
-            Disp_SetDrawColor(&black);
-            Disp_DrawBox(0u, 0u, UI_HOR_RES, 13u);
-            Disp_DrawBox(0u, 39u, UI_HOR_RES, 13u);
-            Disp_SetDrawColor(&white);
-            center_text(10u, s_step == 4u ? "Flat - right to N" : "Flip long axis");
-            center_text(49u, s_sampling ? "Hold still" : s_step == 5u ? "Keep right to N"
-                                                     : ready          ? "Hold still"
-                                                                      : "Adjust position");
-        }
+        uint8_t face = s_face_order[s_step];
+        const char *title = face < 4u ? "Screen face up" : face == 4u ? "Lay flat"
+                                                                      : "Flip long axis";
+        center_text(10u, title);
+        /* All poses aim the screen's right edge at the indicated heading.
+         * Keep the same north heading when flipping the flat device. */
+        Disp_DrawBox(17u, 24u, 42u, 3u);
+        Disp_DrawLine(58u, 18u, 68u, 25u);
+        Disp_DrawLine(58u, 32u, 68u, 25u);
+        Disp_DrawStr(84u, 30u, directions[face < 4u ? face : 0u]);
+
+        const char *prompt;
+        if (!data_valid)
+            prompt = "Waiting data";
+        else if (!pose_valid)
+            prompt = "Adjust position";
+        else if (s_sampling)
+            prompt = "Hold still";
+        else if (s_retry)
+            prompt = "Retry capture";
+        else
+            prompt = "Press CONF";
+        center_text(46u, prompt);
+
         /* Progress/controls are deliberately at the bottom. */
         Disp_SetDrawColor(&black);
         Disp_DrawBox(0u, 52u, UI_HOR_RES, 12u);
@@ -140,8 +197,7 @@ static void draw_cal(const sc7a20_sample_t *a, uint8_t accel_valid, uint8_t read
         Disp_SetFont(font_home_h6w4);
         mini_snprintf(text, sizeof(text), "CAL %u/6 %u/16", (unsigned)(s_step + 1u), (unsigned)s_count);
         Disp_DrawStr(2u, 62u, text);
-        Disp_DrawStr(76u, 62u, s_sampling ? "Hold still" : ready ? "L:Prev CONF"
-                                                                 : "L:Prev Wait");
+        Disp_DrawStr(76u, 62u, !s_sampling && data_valid && pose_valid ? "L:Prev CONF" : "L:Prev");
         Disp_SetFont(UI_FONT);
     }
     Disp_SendBuffer();
@@ -176,7 +232,6 @@ void CompassCal_AppRun(ui_t *ui) {
     uint32_t now = Millis();
     uint8_t accel_valid = SC7A20Algo_GetSample(&a) && (uint32_t)(now - a.at_ms) <= CAL_FRESH_MS;
     uint8_t mag_valid = MMC5603Algo_GetSample(&m) && (uint32_t)(now - m.at_ms) <= CAL_FRESH_MS;
-    uint8_t ready = !s_result && accel_valid && mag_valid && pose_ok(&a, s_step);
 
     if (ui->action == UI_ACTION_UP && !s_result) { /* physical LEFT, previous */
         cancel_capture();
@@ -186,21 +241,21 @@ void CompassCal_AppRun(ui_t *ui) {
         if (s_result == 2u) {
             s_step = s_result = 0u;
             cancel_capture();
-        } else if (ready && !s_sampling) {
-            s_count = 0u;
+        } else if (!s_result && !s_sampling && accel_valid && mag_valid &&
+                   pose_ok(&a, s_face_order[s_step], 0u)) {
+            cancel_capture();
             s_mag_seq = m.seq; /* only collect new, independent samples */
+            s_accel_seq = a.seq;
             s_sampling = 1u;
         }
     }
     ui->action = UI_ACTION_NONE;
-    if (s_sampling) {
-        if (!ready)
-            cancel_capture();
-        else
-            capture(&m);
-    }
-    /* Recompute after advancing or backing up a pose. */
-    ready = !s_result && accel_valid && mag_valid && pose_ok(&a, s_step);
-    draw_cal(&a, accel_valid, ready);
+    if (s_sampling)
+        capture_update(&a, accel_valid, &m, mag_valid, now);
+
+    /* Recompute after advancing, canceling or backing up a pose. */
+    uint8_t pose_valid = !s_result && accel_valid &&
+                         pose_ok(&a, s_face_order[s_step], s_sampling);
+    draw_cal(accel_valid && mag_valid, pose_valid);
     UI_RequestNextFrame(ui, CAL_FRAME_MS);
 }
