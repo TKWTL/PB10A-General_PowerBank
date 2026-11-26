@@ -143,10 +143,10 @@ static const setting_desc_t s_settings[CFG_COUNT] = {
     [CFG_PD_SCP] = {" PD Yield SCP", SET_PD_YIELD},
     [CFG_PD_VOOC] = {" PD Yield VOOC", SET_PD_YIELD},
     [CFG_PD_UFCS] = {" PD Yield UFCS", SET_PD_YIELD},
-    [CFG_PPS_BROADCAST] = {" PPS Broadcast", SET_BROADCAST},
+    [CFG_PPS_BROADCAST] = {"!PPS Broadcast", SET_BROADCAST},
     [CFG_PPS_11] = {" 11V PPS", SET_PPS, SW6306_PPS_1},
     [CFG_PPS_21] = {" 21V PPS", SET_PPS, SW6306_PPS_3},
-    [CFG_UFCS_BROADCAST] = {" UFCS Broadcast", SET_BROADCAST},
+    [CFG_UFCS_BROADCAST] = {"!UFCS Broadcast", SET_BROADCAST},
     [CFG_UFCS_OUT] = PROTO(" UFCS Output", UFCS, SOURCE),
     [CFG_UFCS_IN] = PROTO(" UFCS Input", UFCS, SINK),
     [CFG_QC] = PROTO(" QC", QC, SOURCE),
@@ -168,7 +168,9 @@ static const unsigned s_idle_seconds[] = {5u, 10u, 30u, 60u, 300u, 900u, 1800u};
 static const char *const s_idle_labels[] = {"5s", "10s", "30s", "1min", "5min", "15min", "30min", "Off"};
 static int s_output_w = SW6306_OUTPUT_POWER_MAX, s_input_w = SW6306_INPUT_POWER_MAX;
 static uint8_t s_output_requested = SW6306_OUTPUT_POWER_MAX, s_input_requested = SW6306_INPUT_POWER_MAX;
-static int s_idle_timeout = 3, s_idle_threshold = 12, s_aux_threshold = 50; /* 1 min */
+#define CFG_IDLE_TIMEOUT_DEFAULT 3 /* 1 min */
+#define CFG_IDLE_THRESHOLD_DEFAULT 12
+static int s_idle_timeout = CFG_IDLE_TIMEOUT_DEFAULT, s_idle_threshold = CFG_IDLE_THRESHOLD_DEFAULT, s_aux_threshold = 50;
 static uint8_t s_setting_switch[CFG_COUNT] = {[CFG_AUX_ENABLE] = 1u};
 #define s_aux_allowed (s_setting_switch[CFG_AUX_ENABLE])
 
@@ -177,6 +179,8 @@ static ui_element_t s_setting_elements[CFG_COUNT - 2u];
 static ui_data_t s_setting_data[CFG_COUNT - 2u];
 static unsigned s_setting_data_count;
 static uint32_t s_config_dirty;
+static ui_item_t s_config_reset_item;
+static uint8_t s_config_reset_pending;
 static uint8_t s_idle_running, s_idle_fired;
 static uint32_t s_idle_since;
 static uint8_t s_bus_force_off, s_bus_cycle_pending;
@@ -262,8 +266,14 @@ static void add_settings(ui_page_t *page, unsigned first, unsigned end) {
     }
 }
 
+static void config_reset_selected(ui_t *ui) {
+    (void)ui;
+    s_config_reset_pending = 1u;
+}
+
 void PowerAlgo_AddPowerLimitItems(ui_page_t *page) {
     add_settings(page, CFG_OUTPUT, CFG_C1_INPUT);
+    AddItem("!SW6306 Reset", UI_ITEM_ONCE_FUNCTION, 0, &s_config_reset_item, page, 0, config_reset_selected);
 }
 
 void PowerAlgo_AddPortItems(ui_page_t *page) {
@@ -1806,6 +1816,21 @@ static uint32_t config_eligible(void) {
     return s_config_dirty & (CFG_POWER_MASK | CFG_BROADCAST_MASK | CFG_CHIP_SWITCH_MASK);
 }
 
+/* Execute only between SW6306 transactions. The chip's Init writes the
+ * enabled baseline; discard queued edits and restore its runtime targets. */
+static void config_reset(void) {
+    s_output_w = s_output_requested = SW6306_OUTPUT_POWER_MAX;
+    s_input_w = s_input_requested = SW6306_INPUT_POWER_MAX;
+    s_idle_timeout = CFG_IDLE_TIMEOUT_DEFAULT;
+    s_idle_threshold = CFG_IDLE_THRESHOLD_DEFAULT;
+    for (unsigned i = CFG_C1_INPUT; i < CFG_COUNT; ++i)
+        if (CFG_CHIP_SWITCH_MASK & CFG_BIT(i))
+            s_setting_switch[i] = 1u;
+    s_config_dirty = 0u;
+    idle_reset();
+    SW6306_ResetSettings();
+}
+
 static void config_restore_switches(void) {
     /* Init writes the ON baseline. Replay user-disabled switches in the
      * next configuration slots. Pending UI requests survive reinit. */
@@ -1927,9 +1952,14 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             THRD_DELAY(50u);
             continue;
         }
-        if(!SW6306_IsInitialized()) {
-            if (s_fault_has_snapshot || s_monitor.initialized)
+        if (s_config_reset_pending || !SW6306_IsInitialized()) {
+            if (s_config_reset_pending) {
+                s_config_reset_pending = 0u;
+                config_reset();
+                s_retry_at = Millis();
+            } else if (s_fault_has_snapshot || s_monitor.initialized) {
                 fault_offline();
+            }
             s_fault_status_ok = 0u;
             s_ext_valid = 0u;
             meter_invalidate();
@@ -2024,7 +2054,7 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
         }
         if ((int32_t)(Millis() - s_sw_next_at) < 0) {
             THRD_UNTIL((int32_t)(Millis() - s_sw_next_at) >= 0 ||
-                       s_meter_irq || s_bus_cycle_pending || s_ext_pm_work || pm_api_ui_should_block());
+                       s_meter_irq || s_bus_cycle_pending || s_config_reset_pending || s_ext_pm_work || pm_api_ui_should_block());
             continue;
         }
         if (s_sw_phase != 2u && s_meter_a2 != METER_A2_OFF) {

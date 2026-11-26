@@ -41,6 +41,13 @@ static void sw6306_i2c_succeeded(void) { s_i2c_fail_groups = 0U; }
 static uint8_t s_pimax_target = SW6306_INPUT_POWER_MAX;
 static uint8_t s_pomax_target = SW6306_OUTPUT_POWER_MAX;   // 运行时最大输出功率目标（W），Init 写入、可由 SetMaxOutputPower 修改
 
+/* RAM-only reset; the owner replays the normal Init register sequence. */
+void SW6306_ResetSettings(void) {
+    s_pimax_target = SW6306_INPUT_POWER_MAX;
+    s_pomax_target = SW6306_OUTPUT_POWER_MAX;
+    SW6306_Invalidate();
+}
+
 /* 功率设置会立即重算并重播协议电流能力；实现定义在初始化区。 */
 static SW6306_RET SW6306_PDCurrentSet(SW6306_ARGS(uint8_t watt));
 static SW6306_RET SW6306_UFCSCurrentSet(SW6306_ARGS(uint8_t watt));

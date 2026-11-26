@@ -56,8 +56,8 @@ Powerbank, Radio, Game, Tools, Settings and Statistics appear in that order. Sta
 Game order: Tetris, Pac-Man, Bomber, Invaders, Arkanoid.
 Tools order: Leveler, Compass, Altimeter, SOS Blink, Accel Calibration, Mag Calibration, I2C Scanner.
 
-Settings lists Power Limits, Ports, Protocol#1 and Protocol#2 before Display.
-They expose 32 RAM-only settings and actions derived from PB02B.
+Settings lists Ports, Protocol#1, Protocol#2 and Power Limits before Display.
+They expose 32 RAM-only settings and actions derived from PB02B plus `!SW6306 Reset`.
 
 - Power Limits: input 5–100 W, output 5–105 W, both in 5 W steps; defaults 100 W / 105 W. Higher output requests were rejected in hardware testing.
 - Ports: C1 input/output and A1 output fast-charge switches,
@@ -75,7 +75,11 @@ in the next configuration slot regardless of port or external-load
 state. UI edits are coalesced and requeued after failed writes.
 PowerLoad detects loss of the applied power configuration;
 reinitialization restores the applied power limits and requeues disabled
-protocol/port switches. MCU reset returns settings to defaults.
+protocol/port switches. `!SW6306 Reset` restores the default chip power
+targets, protocol/port switches and BUS idle policy, discards pending chip
+configuration edits, and requests immediate Init in the owner coroutine
+without resetting Aux-A, battery history or MCU settings. MCU reset returns
+all RAM settings to defaults.
 BUS idle shutdown is disabled while charging, in low-current mode,
 during external-load requests or metering, or with invalid telemetry.
 The independent Aux-A idle timeout remains 60 seconds.

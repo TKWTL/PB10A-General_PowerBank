@@ -90,7 +90,7 @@ void Add_Disp_Items(ui_page_t *parent_page) {
     AddItem(" Contrast", UI_ITEM_DATA, 0, &s_contrast_item, parent_page, 0, 0);
     AddItem(" Auto Rotation", UI_ITEM_DATA, 0, &s_rotation_item, parent_page, 0, 0);
     AddItem(" Background", UI_ITEM_DATA, 0, &s_background_item, parent_page, 0, 0);
-    AddItem(" Burn-in Test", UI_ITEM_WORD, 0, &s_burnin_item, parent_page, 0, Disp_BurninPage);
+    AddItem("!Burn-in Test", UI_ITEM_WORD, 0, &s_burnin_item, parent_page, 0, Disp_BurninPage);
 }
 
 uint8_t diapInit(void) {

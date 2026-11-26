@@ -90,7 +90,7 @@ __attribute__((noinline)) void System_AddSettingsItems(ui_page_t *page) {
     s_volume_element.data = &s_volume_data;
     Create_element(&s_volume_item, &s_volume_element);
     AddItem(" Beep Volume", UI_ITEM_DATA, 0, &s_volume_item, page, 0, 0);
-    AddItem(" Play Music", UI_ITEM_ONCE_FUNCTION, 0, &s_play_music_item, page, 0, system_play_music);
+    AddItem("!Play Music", UI_ITEM_ONCE_FUNCTION, 0, &s_play_music_item, page, 0, system_play_music);
     s_radio_auto_data.name = " Headphone Nav";
     s_radio_auto_data.ptr=&s_radio_auto;
     s_radio_auto_data.dataType=UI_DATA_SWITCH;
@@ -115,7 +115,7 @@ __attribute__((noinline)) void System_AddSettingsItems(ui_page_t *page) {
     Create_element(&s_aux_auto_item,&s_aux_auto_element);
     AddItem(" Aux-A Nav", UI_ITEM_DATA, 0, &s_aux_auto_item, page, 0, 0);
 
-    AddItem(" System Reset",UI_ITEM_ONCE_FUNCTION,0,&s_reset_item,page,0,system_reset_selected);
+    AddItem("!System Reset", UI_ITEM_ONCE_FUNCTION, 0, &s_reset_item, page, 0, system_reset_selected);
 }
 
 void System_AddStatisticsItems(ui_page_t *page) {

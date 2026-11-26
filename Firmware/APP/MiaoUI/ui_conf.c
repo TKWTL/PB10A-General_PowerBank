@@ -1,7 +1,8 @@
 /* PB10A top-level navigation. TEXT item labels:
  *   [Back]    Return entries use square brackets; 'B' at x=one glyph.
- *    Option   Non-submenu items start with one blank to align with 'B'.
- *   -Submenu  Parent entries start with '-' instead of the blank.
+ *    Option   Data items start with one blank to align with 'B'.
+ *   !Action   Executable function items start with '!'.
+ *   -Submenu  Parent entries start with '-'.
  * ICON page labels keep their native conventions.
  */
 #include "ui_conf.h"
@@ -131,18 +132,14 @@ void Create_MenuTree(ui_t *ui) {
 
     AddPage("[Settings]",&s_settings,UI_PAGE_TEXT,&s_home);
         add_return(&s_settings,&s_home,&s_settings_back,0);
-        AddItem("-Power Limits",UI_ITEM_PARENTS,0,&s_power_limit_item,&s_settings,&s_power_limit,0);
         AddItem("-Ports",UI_ITEM_PARENTS,0,&s_ports_item,&s_settings,&s_ports,0);
         AddItem("-Protocol#1",UI_ITEM_PARENTS,0,&s_protocol1_item,&s_settings,&s_protocol1,0);
         AddItem("-Protocol#2",UI_ITEM_PARENTS,0,&s_protocol2_item,&s_settings,&s_protocol2,0);
+        AddItem("-Power Limits",UI_ITEM_PARENTS,0,&s_power_limit_item,&s_settings,&s_power_limit,0);
         AddItem("-Display",UI_ITEM_PARENTS,0,&s_display_item,&s_settings,&s_display,0);
         AddItem("-Sleep & Wake",UI_ITEM_PARENTS,0,&s_sleep_wake_item,&s_settings,&s_sleep_wake,0);
         Add_TimeSet_Items(&s_settings);
         AddItem("-System",UI_ITEM_PARENTS,0,&s_system_item,&s_settings,&s_sys,0);
-
-        AddPage("[Power Limits]",&s_power_limit,UI_PAGE_TEXT,&s_settings);
-            add_return(&s_power_limit,&s_settings,&s_power_limit_back,0);
-            PowerAlgo_AddPowerLimitItems(&s_power_limit);
 
         AddPage("[Ports]",&s_ports,UI_PAGE_TEXT,&s_settings);
             add_return(&s_ports,&s_settings,&s_ports_back,0);
@@ -155,6 +152,10 @@ void Create_MenuTree(ui_t *ui) {
         AddPage("[Protocol#2]",&s_protocol2,UI_PAGE_TEXT,&s_settings);
             add_return(&s_protocol2,&s_settings,&s_protocol2_back,0);
             PowerAlgo_AddProtocolItems(&s_protocol2,2u);
+
+        AddPage("[Power Limits]",&s_power_limit,UI_PAGE_TEXT,&s_settings);
+            add_return(&s_power_limit,&s_settings,&s_power_limit_back,0);
+            PowerAlgo_AddPowerLimitItems(&s_power_limit);
 
         AddPage("[Display]",&s_display,UI_PAGE_TEXT,&s_settings);
             add_return(&s_display,&s_settings,&s_display_back,0);
