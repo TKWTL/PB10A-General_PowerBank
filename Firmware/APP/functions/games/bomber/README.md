@@ -10,7 +10,8 @@ not included or required by PB10A.
 
 - Native horizontal 128×64 monochrome display; original `BackBlitz`, `back`,
   `caracters`, `fire`, `BlocDetect`, `level`, `bomb`, and `Music` asset bytes
-  are preserved without changing or rescaling the artwork.
+  are preserved losslessly without changing or rescaling the artwork;
+  the two full-screen rasters are compressed as described below.
 - One player, four enemies sharing the original random-wall-turn movement;
   no pursuit AI, score, collectible, or more than one simultaneous bomb.
 - Three maps cycle as 14-byte MSB-first bitmaps (15×7 = 105 valid cells);
@@ -25,7 +26,7 @@ not included or required by PB10A.
 - Original 6×7 actor/bitmap collision probes; **PB10A custom 40×40 cross**
   extends each arm to two obstacle cells in every direction. Rendering repeats
   the original 8px arm pieces without any new bitmap arrays; damage and block
-  clearing use the same reach. Fixed walls still cannot be destroyed.
+  clearing use the same wall-clipped reach. Fixed walls still cannot be destroyed.
   The original 24×24 cross is deliberately superseded by this change.
 - Original map bounds safety is retained, with
   signed/bounded accesses for map edges and valid cell bits 0..104.
@@ -53,7 +54,8 @@ Logic runs in nominal 22 ms steps; render requests use 44 ms. A time gap over
 150 ms (e.g., STOP1) is discarded, not caught up, so the fuse does not
 silently complete during auto sleep. OLED output is written directly into
 `Disp_GetBufferPtr()` page bytes, followed by `Disp_SendBuffer()`; the standard
-MiaoUI DMA-busy handling owns concurrency. No second 1024-byte RAM buffer.
+MiaoUI DMA-busy handling owns concurrency. No additional per-game framebuffer; the shared 1024-byte asset cache
+holds the decompressed fixed collision mask.
 Short nonblocking audio cues use existing Beep Service when available; the
 original 42-byte `Music[]` is kept as an archival source asset but full intro
 music and blocking note delays are not played.
@@ -67,7 +69,9 @@ music and blocking note delays are not played.
 - `bomber_assets.c/.h`: eight original byte-for-byte arrays in const Flash.
 - `LICENSE-GPL-3.0`: unchanged original `COPYING.txt`.
 
-Device display and ARMClang integration still require physical verification.
+Validation: use the integrated Keil target and test the blast against both
+fixed walls and the first destructible block, including leave/re-entry and
+STOP1. This README does not certify a new board test.
 
 ## Game-index icon
 
