@@ -686,7 +686,7 @@ thresholds must still be verified on real hardware.
   Lower-priority navigation is suppressed while an alarm rings.
   A higher-priority target can replace a temporary lower-priority
   application without losing the original bookmark. No nested stack.
-- `Settings > System`: `Headphone Nav`, `USB Port Nav` and
+- `Settings > Display`: `Headphone Nav`, `USB Port Nav` and
   `Aux-A Nav` are three independent, default-ON, RAM-only switches
   immediately before `!Burn-in Test`. They control page changes,
   not the Radio power policy or SW6306 output mode. Radio's MiaoUI leave
