@@ -8,7 +8,7 @@
 | `SW6306_USE_PROTOTHREAD` | 阻塞式 I²C | Protothread 等待 I²C 中断 |
 | `SW6306_NTC_TEMP_CALC_EN` | 关闭温度缓存计算和整数查表 | 启用温度缓存计算 |
 
-PB10A 的 Keil 工程选择整数，应用通过现有的 Protothread 任务访问驱动。驱动头文件默认保留浮点接口。FPU 由目标工程的编译选项配置。
+PB10A 的 Keil 工程选择整数，应用通过现有的 Protothread 任务访问驱动。驱动头文件默认 `SW6306_USE_PROTOTHREAD=1`、`SW6306_USE_FLOAT_API=1`、`SW6306_NTC_TEMP_CALC_EN=1`；Keil 明确覆盖浮点接口为 0。FPU 由目标工程的编译选项配置。
 
 ## 采样电阻和电流校准
 
@@ -36,6 +36,12 @@ PB10A 整数 BUS 增益来自 4.97 A 参考仪表读数、4.46 A SW6306 未补�
 
 BUS 校准只修正电流读数；不修改 BUS 硬件限流、PD/PPS/UFCS 档位、
 外部电流注入 `IextSet` 或 ADC 原始镜像。BAT 默认 1/1，保持原限流设置。
+
+## PB10A 运行时约束
+
+SW6306 由唯一的应用协程持有，不允许并发执行另一套 SW6306 Protothread。底层使用 `Core/Src/i2c.c` 的 LL 中断传输与前台恢复服务，而非 HAL DMA/IT。30 ms 传输超时及 10 ms 中止超时由总线层处理；恢复不会重放失败写入。调用方检查本次操作结果并由业务状态机决定重试或重新初始化。普通 NACK 不触发总线清除。
+
+Statistics 的 Battery Voltage / Battery Current 使用同一轮 ADC 镜像，电流采用已校准的 IBAT 读数；失效的镜像不显示为有效零值。BUS 补偿仍不改变协议电流档位或硬件限流。
 
 ## RTOS 移植
 
