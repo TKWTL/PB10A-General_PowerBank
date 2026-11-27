@@ -1,206 +1,206 @@
 $PACKAGES
 AUDIO-SMD_PJ-320D ! PJ-320D ! '{Value}' ! '{Tolerance}' ; CN1 
 BUZ-TH_BD12_0-P7_60-D0_6-FD ! 2.4kHz ! '2.4kHz' ! '{Tolerance}' ; BUZZER1 
-C0402 ! 100nF ! 100nF ! '{Tolerance}' ; C32 C40 C65 C71 C72 C76 C77 C78 C79 ,
-        C80 C82 C83 C84 C85 C86 C93 
-C0402 ! 10pF ! 10pF ! '{Tolerance}' ; C73 C74 C89 
-C0402 ! 1nF ! 1nF ! '{Tolerance}' ; C36 C44 
-C0402 ! 1uF ! 1uF ! '{Tolerance}' ; C61 C62 C67 C75 C81 
-C0402 ! 2.2uF ! '2.2uF' ! '{Tolerance}' ; C43 
-C0402 ! NC ! NC ! '{Tolerance}' ; C33 C70 
-C0603 ! 2.2uF ! '2.2uF' ! '{Tolerance}' ; C63 C64 C66 
+C0402 ! 100nF ! 100nF ! '{Tolerance}' ; C1 C2 C10 C11 C12 C13 C15 C16 C17 C18 ,
+        C19 C24 C29 C41 C45 C48 
+C0402 ! 10pF ! 10pF ! '{Tolerance}' ; C20 C33 C34 
+C0402 ! 1nF ! 1nF ! '{Tolerance}' ; C46 C47 
+C0402 ! 1uF ! 1uF ! '{Tolerance}' ; C5 C14 C27 C28 C35 
+C0402 ! 2.2uF ! '2.2uF' ! '{Tolerance}' ; C44 
+C0402 ! NC ! NC ! '{Tolerance}' ; C6 C40 
+C0603 ! 2.2uF ! '2.2uF' ! '{Tolerance}' ; C30 C31 C32 
 C0805 ! 22uF ! 22uF ! '{Tolerance}' ; C37 C38 C39 
-C1206 ! 100uF ! 100uF ! '{Tolerance}' ; C87 C88 
-C1206 ! 10uF ! 10uF ! '{Tolerance}' ; C90 C91 C92 
-C1206 ! 10uF/50 ! '10uF/50' ! '{Tolerance}' ; C55 
-C1206 ! 22uF ! 22uF ! '{Tolerance}' ; C41 C42 
-CAP-SMD_L3_2-W1_6-FD ! 100uF ! 100uF ! '±20%' ; C10 C69 
-CAP-TH_BD6_3-P2_50-D0_6-FD-1 ! 220uF ! 220uF ! '±20%' ; C52 C53 
-CAP-TH_BD6_3-P2_50-D1_0-FD ! 220uF ! 220uF ! '±20%' ; C34 
+C1206 ! 100uF ! 100uF ! '{Tolerance}' ; C25 C26 
+C1206 ! 10uF ! 10uF ! '{Tolerance}' ; C21 C22 C23 
+C1206 ! 10uF/50 ! '10uF/50' ! '{Tolerance}' ; C7 
+C1206 ! 22uF ! 22uF ! '{Tolerance}' ; C42 C43 
+CAP-SMD_L3_2-W1_6-FD ! 100uF ! 100uF ! '±20%' ; C3 C4 
+CAP-TH_BD6_3-P2_50-D0_6-FD-1 ! 220uF ! 220uF ! '±20%' ; C8 C9 
+CAP-TH_BD6_3-P2_50-D1_0-FD ! 220uF ! 220uF ! '±20%' ; C36 
 DSOP-8_L5_0-W5_0-P1_27-LS6_0-BL-EP ! TPH1R403NL ! '{Value}' ! '{Tolerance}' ; ,
-        Q25 Q27 
+        Q7 Q8 
 FC-135R_L3_2-W1_5 ! 32.768kHz ! '32.768kHz' ! '{Tolerance}' ; X1 
 FLIPCHIP-4_L0_8-W0_8-R2-C2-P0_40-TL ! MMC5603NJ ! '{Value}' ! '{Tolerance}' ; ,
-        U29 
-HDR-TH_3P-P2_54-V-M ! 'HDR-M_2.54_1x3P' ! '{Value}' ! '{Tolerance}' ; H1 
+        U3 
+HDR-TH_3P-P2_54-V-M ! 'HDR-M_2.54_1x3P' ! '{Value}' ! '{Tolerance}' ; H2 
 ,
         HDR-TH_4P-P2_54-V-M-R2-C2-S2_54-1 ! 'HDR-M_2.54_2x2' ! '{Value}' ! '{Tolerance}' ,
-        ; H3 
+        ; H1 
 ,
         HDR-TH_6P-P2_54-V-R2-C3-S2_54_A2541WV-2X3P ! 'HDR-M_2.54_2x3' ! '{Value}' ! '{Tolerance}' ,
-        ; H4 
-IND-SMD_L11_6-W10_1 ! 2.2uH ! '2.2uH' ! '±20%' ; L2 
-IND-SMD_L4_4-W4_2 ! 10uH ! 10uH ! '±20%' ; L3 
-L0603 ! BLM18HE152SN1D ! '{Value}' ! '±25%' ; L5 L6 
-L0603 ! BLM18PG471SN1D ! '{Value}' ! '±25%' ; L7 
+        ; H3 
+IND-SMD_L11_0-W10_2 ! 10uH ! 10uH ! '±20%' ; L5 
+IND-SMD_L4_4-W4_2 ! 10uH ! 10uH ! '±20%' ; L4 
+L0603 ! BLM18HE152SN1D ! '{Value}' ! '±25%' ; L1 L2 
+L0603 ! BLM18PG471SN1D ! '{Value}' ! '±25%' ; L3 
 LED_0603 ! 'LED_0603-B' ! '{Value}' ! '{Tolerance}' ; LED1 LED2 LED3 LED4 LED5 
-LGA-12_L2_0-W2_0-P0_50-BL ! SC7A20TR ! '{Value}' ! '{Tolerance}' ; U6 
+LGA-12_L2_0-W2_0-P0_50-BL ! SC7A20TR ! '{Value}' ! '{Tolerance}' ; U1 
 LQFP-32_L7_0-W7_0-P0_80-LS9_0-BL ! STM32G070KBT6 ! '{Value}' ! '{Tolerance}' ; ,
-        U32 
-MSOP-10_L3_0-W3_0-P0_50-LS5_0-BL ! RDA5807M ! '{Value}' ! '{Tolerance}' ; U2 
+        U7 
+MSOP-10_L3_0-W3_0-P0_50-LS5_0-BL ! RDA5807M ! '{Value}' ! '{Tolerance}' ; U4 
 OLED_0_96-30P-P0_70-12864 ! N096-2864KSWEG01-H30 ! '{Value}' ! '{Tolerance}' ; ,
         OLED1 
-QFN-10_L3_0-W3_0-P0_45-TL_SILERGY ! SY8368QNC ! '{Value}' ! '{Tolerance}' ; ,
-        U33 
-R0402 ! 100K ! 100K ! '{Tolerance}' ; R38 
-R0402 ! 100R ! 100R ! '{Tolerance}' ; R25 R66 R70 R74 R78 
-R0402 ! 10K ! 10K ! '{Tolerance}' ; R62 R88 
-R0402 ! 10M ! 10M ! '{Tolerance}' ; R80 R85 
-R0402 ! 150K ! 150K ! '{Tolerance}' ; R90 
-R0402 ! 1K ! 1K ! '{Tolerance}' ; R49 R63 R67 R71 R75 R79 R84 
-R0402 ! 1M ! 1M ! '{Tolerance}' ; R47 R82 R83 
-R0402 ! 2.2K ! '2.2K' ! '{Tolerance}' ; R81 
-R0402 ! 220K ! 220K ! '{Tolerance}' ; R41 R86 
-R0402 ! 22R ! 22R ! '{Tolerance}' ; R91 
-R0402 ! 27K ! 27K ! '{Tolerance}' ; R36 R37 
-R0402 ! 4.7K ! '4.7K' ! '{Tolerance}' ; R50 R51 
-R0402 ! 4.7M ! '4.7M' ! '{Tolerance}' ; R24 R65 R69 R73 R77 
-R0402 ! 47K ! 47K ! '{Tolerance}' ; R13 
-R0402 ! 5.6K ! '5.6K' ! '{Tolerance}' ; R87 
-R0402 ! 680K ! 680K ! '{Tolerance}' ; R39 R89 
-R1206 ! 5mR ! 5mR ! '{Tolerance}' ; R40 
-R2512 ! 10Ω ! '10Ω' ! '±5%' ; R11 R64 R68 R72 R76 
-R2512 ! 3mΩ ! '3mΩ' ! '±1%' ; R56 
-RES-SMD_L6_4-W3_2-1 ! 5mΩ ! '5mΩ' ! '±1%' ; R42 
+R0402 ! 100K ! 100K ! '{Tolerance}' ; R46 
+R0402 ! 100R ! 100R ! '{Tolerance}' ; R9 R14 R20 R26 R31 
+R0402 ! 10K ! 10K ! '{Tolerance}' ; R28 R42 
+R0402 ! 10M ! 10M ! '{Tolerance}' ; R36 R38 
+R0402 ! 150K ! 150K ! '{Tolerance}' ; R41 
+R0402 ! 1K ! 1K ! '{Tolerance}' ; R6 R7 R8 R13 R19 R25 R30 R47 R51 
+R0402 ! 1M ! 1M ! '{Tolerance}' ; R16 R17 R40 
+R0402 ! 2.2K ! '2.2K' ! '{Tolerance}' ; R33 
+R0402 ! 220K ! 220K ! '{Tolerance}' ; R32 R48 
+R0402 ! 22R ! 22R ! '{Tolerance}' ; R43 
+R0402 ! 27K ! 27K ! '{Tolerance}' ; R49 R50 
+R0402 ! 4.7K ! '4.7K' ! '{Tolerance}' ; R1 R2 
+R0402 ! 4.7M ! '4.7M' ! '{Tolerance}' ; R12 R18 R23 R29 R35 
+R0402 ! 47K ! 47K ! '{Tolerance}' ; R3 
+R0402 ! 5.6K ! '5.6K' ! '{Tolerance}' ; R24 
+R0402 ! 680K ! 680K ! '{Tolerance}' ; R39 R45 
+R0603 ! 10K ! 10K ! '{Tolerance}' ; R4 R5 
+R1206 ! 10mR ! 10mR ! '{Tolerance}' ; R44 
+R2512 ! 10Ω ! '10Ω' ! '±5%' ; R10 R15 R21 R27 R34 
+R2512 ! 3mΩ ! '3mΩ' ! '±1%' ; R37 
+RES-SMD_L6_4-W3_2-1 ! 5mΩ ! '5mΩ' ! '±1%' ; R11 
 RES-TH_L2_5-W2_5-P1_70-D0_3 ! MF52A103F3950 (A1) ! '{Value}' ! '{Tolerance}' ; ,
-        R59 
+        R22 
 SC-70-6_L2_2-W1_3-P0_65-LS2_1-BR ! INA199A1DCKR ! '{Value}' ! '{Tolerance}' ; ,
-        U35 
-SENSOR-SMD_BMP180-SHUTL ! BMP180-SHUTL ! '{Value}' ! '{Tolerance}' ; U7 
-SOD-123_L2_8-W1_8-LS3_7-RD ! SMF3.3A ! '{Value}' ! '{Tolerance}' ; D2 
+        U10 
+SENSOR-SMD_BMP180-SHUTL ! BMP180-SHUTL ! '{Value}' ! '{Tolerance}' ; U2 
+SOD-123_L2_8-W1_8-LS3_7-RD ! SMF3.3A ! '{Value}' ! '{Tolerance}' ; D1 
 SOD-323_L1_7-W1_3-LS2_6-RD-1 ! BAT46WS ! '{Value}' ! '{Tolerance}' ; D3 
-SOD-323_L1_8-W1_3-LS2_5-RD ! 1N4148WS ! '{Value}' ! '{Tolerance}' ; D4 
-SOT-23-3_L2_9-W1_3-P1_90-LS2_4-BR ! AO3400A ! '{Value}' ! '{Tolerance}' ; Q23 ,
-        Q28 Q29 Q30 Q31 
-SOT-23-3_L2_9-W1_6-P1_90-LS2_8-BR ! BAV99,215 ! '{Value}' ! '{Tolerance}' ; D5 
-SOT-23-6_L2_9-W1_6-P0_95-LS2_8-BL ! IP2161 ! '{Value}' ! '{Tolerance}' ; U34 
+SOD-323_L1_8-W1_3-LS2_5-RD ! 1N4148WS ! '{Value}' ! '{Tolerance}' ; D5 
+SOT-23-3_L2_9-W1_3-P1_90-LS2_4-BR ! AO3400A ! '{Value}' ! '{Tolerance}' ; Q2 ,
+        Q3 Q4 Q5 Q6 
+SOT-23-3_L2_9-W1_6-P1_90-LS2_8-BR ! BAV99,215 ! '{Value}' ! '{Tolerance}' ; D4 
+SOT-23-6_L2_9-W1_6-P0_95-LS2_8-BL ! IP2161 ! '{Value}' ! '{Tolerance}' ; U8 
 SOT-23-6_L2_9-W1_6-P0_95-LS2_8-BL ! TPS54302DDCR ! '{Value}' ! '{Tolerance}' ; ,
-        U37 
-SOT-23-6_L2_9-W1_6-P0_95-LS2_8-BL-1 ! SRV05-4 ! '{Value}' ! '{Tolerance}' ; D1 
-SOT-363_L2_1-W1_3-P0_65-LS2_3-BL ! CJ3439KDW ! '{Value}' ! '{Tolerance}' ; Q18 
+        U6 U9 
+SOT-23-6_L2_9-W1_6-P0_95-LS2_8-BL-1 ! SRV05-4 ! '{Value}' ! '{Tolerance}' ; D2 
+SOT-363_L2_1-W1_3-P0_65-LS2_3-BL ! CJ3439KDW ! '{Value}' ! '{Tolerance}' ; Q1 
 SW-SMD_ST-1185U ! ST-1185U ! '{Value}' ! '{Tolerance}' ; SW1 
 ,
         TSSOP-28_L9_7-W4_4-P0_65-LS6_4-BL ! BM3451TNDC-T28A ! '{Value}' ! '{Tolerance}' ,
-        ; U36 
+        ; U5 
 USB-A-TH_U234-051N-3GRA03 ! U234-051N-3GRA035-5 ! '{Value}' ! '{Tolerance}' ; ,
-        USB3 
+        USB1 
 $A_PROPERTIES
 $NETS
-'$1N1590' ; C69.2 L5.1 
-'$1N1591' ; C10.2 L6.1 
-'$6N11285' ; LED1.1 R25.1 
-'$6N11289' ; Q23.3 R11.2 R25.2 
-'$6N11292' ; Q23.1 R24.1 
-'$6N12924' ; LED2.1 R66.1 
-'$6N12926' ; Q28.3 R64.2 R66.2 
-'$6N12929' ; Q28.1 R65.1 
-'$6N13124' ; LED3.1 R70.1 
-'$6N13126' ; Q29.3 R68.2 R70.2 
-'$6N13129' ; Q29.1 R69.1 
-'$6N13324' ; LED4.1 R74.1 
-'$6N13326' ; Q30.3 R72.2 R74.2 
-'$6N13329' ; Q30.1 R73.1 
-'$6N13524' ; LED5.1 R78.1 
-'$6N13526' ; Q31.3 R76.2 R78.2 
-'$6N13529' ; Q31.1 R77.1 
-'$6N13772' ; C76.2 R63.2 U36.19 
-'$6N13921' ; C77.2 R67.2 U36.21 
-'$6N13926' ; C78.2 R71.2 U36.23 
-'$6N13932' ; C79.2 R75.2 U36.25 
-'$6N13938' ; C80.2 R79.2 U36.27 
-'$6N13996' ; R24.2 U36.18 
-'$6N14025' ; R65.2 U36.20 
-'$6N14040' ; R69.2 U36.22 
-'$6N14057' ; R73.2 U36.24 
-'$6N14074' ; R77.2 U36.26 
-'$6N14095' ; Q25.5 Q25.6 Q25.7 Q25.8 Q25.9 Q27.5 Q27.6 Q27.7 Q27.8 Q27.9 
-'$6N14111' ; Q27.1 Q27.2 Q27.3 R56.1 R80.2 U36.14 
-'$6N14302' ; C81.2 D3.1 R82.2 R83.2 R88.2 U36.28 
-'$6N14330' ; D3.2 R84.1 
-'$6N14343' ; R82.1 U36.2 
-'$6N14348' ; R83.1 U36.3 
-'$6N14407' ; Q27.4 R81.1 
-'$6N14414' ; R81.2 U36.12 
-'$6N14442' ; Q25.4 R85.2 U36.11 
-'$6N14493' ; R86.2 U36.10 
-'$6N14656' ; R87.2 U36.9 
-'$6N14660' ; R59.1 U36.8 
-'$6N14666' ; C84.2 U36.7 
-'$6N14673' ; C83.2 U36.6 
-'$6N14679' ; C85.2 U36.5 
-'$6N14685' ; C82.2 U36.4 
-'$6N14763' ; R88.1 U36.16 
-'$7N1708' ; C61.2 OLED1.2 
-'$7N1709' ; C61.1 OLED1.3 
-'$7N1710' ; C62.2 OLED1.4 
-'$7N1711' ; C62.1 OLED1.5 
-'$7N1722' ; C64.2 OLED1.28 
-'$7N1723' ; C63.2 OLED1.27 
-'$7N1724' ; OLED1.26 R47.2 
-'$7N2542' ; C74.2 U32.2 X1.1 
-'$7N2546' ; C73.2 U32.3 X1.2 
-'$7N2603' ; C66.2 OLED1.6 Q18.3 
-'$7N2638' ; Q18.5 Q18.6 R62.1 
-'$7N3367' ; C86.2 L3.1 U37.2 
-'$7N3419' ; C86.1 U37.6 
-'$7N3701' ; C89.1 R89.1 R90.2 U37.4 
-'$7N4919' ; BUZZER1.1 R91.1 
-'$7N5811' ; R91.2 U32.16 
-'$9N1365' ; C40.2 L2.2 U33.10 
-'$9N1369' ; C40.1 U33.6 
-'$9N1529' ; C43.2 U33.5 
-'$9N1564' ; R36.2 R37.2 R38.1 U33.4 U34.3 
-'$9N457' ; C33.2 U34.1 USB3.4 
-'$9N526' ; U34.6 USB3.2 
-'$9N986' ; C37.2 C38.2 C39.2 L2.1 R40.2 U35.4 
-'$9N990' ; C34.1 D4.1 R38.2 R39.2 R40.1 U35.5 USB3.1 
-'BAT-' ; C76.1 C77.1 C78.1 C79.1 C80.1 C81.1 C82.1 C83.1 C84.1 C85.1 Q23.2 ,
-        R56.2 R59.2 R87.1 U36.17 
-'CS_O' ; OLED1.13 U32.11 
-'D/C_O' ; OLED1.15 U32.10 
-'MOSI_O' ; OLED1.19 OLED1.20 U32.9 
-'SCK_O' ; OLED1.18 U32.8 
-'SUB_EN' ; C32.2 U32.13 U33.1 U34.5 U35.3 
-'SUB_INDET' ; D4.2 D5.3 U32.14 
-'SUB_IOUT' ; C36.2 U32.7 U35.6 
-'SUB_VOUT' ; C44.2 R39.1 R41.2 U32.12 
-3V3 ; C65.2 C67.2 C71.2 C75.2 C87.2 C88.2 C89.2 D1.5 D2.1 D5.2 L3.2 OLED1.9 ,
-        Q18.4 R13.1 R50.1 R51.1 R62.2 R89.2 U2.7 U6.3 U6.7 U7.2 U7.3 U29.B1 ,
-        U32.4 
-AGND ; C70.2 CN1.1 CN1.2 D1.1 L7.2 U2.2 
-B1 ; LED1.2 Q28.2 R11.1 R63.1 
-B2 ; LED2.2 Q29.2 R64.1 R67.1 
-B3 ; LED3.2 Q30.2 R68.1 R71.1 
-B4 ; LED4.2 Q31.2 R72.1 R75.1 
-CONF ; U32.23 
-CPEN ; Q18.2 U32.17 
-DOWN ; U32.21 
-F32K ; U2.6 U32.18 
-GND ; BUZZER1.2 C32.1 C33.1 C34.2 C36.1 C37.1 C38.1 C39.1 C41.1 C42.1 C43.1 ,
-        C44.1 C52.2 C53.2 C55.1 C63.1 C64.1 C65.1 C66.1 C67.1 C70.1 C71.1 ,
-        C72.1 C73.1 C74.1 C75.1 C87.1 C88.1 C90.1 C91.1 C92.1 C93.1 D1.2 D2.2 ,
-        D5.1 H1.3 H3.4 H4.4 H4.6 L7.1 OLED1.1 OLED1.8 OLED1.10 OLED1.11 ,
-        OLED1.12 OLED1.16 OLED1.17 OLED1.21 OLED1.22 OLED1.23 OLED1.24 ,
-        OLED1.25 OLED1.29 OLED1.30 Q18.1 Q25.1 Q25.2 Q25.3 R36.1 R37.1 R41.1 ,
-        R47.1 R80.1 R85.1 R86.1 R90.1 SW1.1 U2.1 U2.3 U2.8 U6.8 U6.9 U7.7 ,
-        U29.A1 U32.5 U33.9 U34.2 U35.1 U35.2 U37.1 USB3.5 USB3.6 USB3.7 USB3.8 ,
-        USB3.9 
-INT ; H4.2 U6.5 U32.29 
-L ; CN1.4 L5.2 
-LEFT ; U32.26 
-LOUT ; C69.1 D1.3 U2.10 
-MICINDET ; D1.6 R49.1 U32.15 
-PWM ; H4.5 U32.22 
-R ; CN1.3 L6.2 R49.2 
-RIGHT ; U32.20 
-ROUT ; C10.1 D1.4 U2.9 
-RST ; C72.2 OLED1.14 R13.2 SW1.2 U32.6 
-SCL ; H4.3 R51.2 U2.4 U6.12 U7.5 U29.A2 U32.32 
-SDA ; H4.1 R50.2 U2.5 U6.2 U7.6 U29.B2 U32.1 
-SWC ; H1.1 U32.25 
-SWD ; H1.2 U32.24 
-UP ; U32.19 
-VBAT ; C52.1 C53.1 H3.1 H3.2 LED5.2 R42.2 R76.1 R79.1 R84.2 
-VSYS ; C41.2 C42.2 C55.2 C90.2 C91.2 C92.2 C93.2 H3.3 R42.1 U33.7 U33.8 U37.3 
+'$1N2449' ; C3.2 R4.1 
+'$1N2450' ; C4.2 R5.1 
+'$1N2451' ; L2.1 R5.2 
+'$1N2452' ; L1.1 R4.2 
+'$6N11285' ; LED5.1 R31.1 
+'$6N11289' ; Q6.3 R31.2 R34.2 
+'$6N11292' ; Q6.1 R35.1 
+'$6N12924' ; LED4.1 R26.1 
+'$6N12926' ; Q5.3 R26.2 R27.2 
+'$6N12929' ; Q5.1 R29.1 
+'$6N13124' ; LED3.1 R20.1 
+'$6N13126' ; Q4.3 R20.2 R21.2 
+'$6N13129' ; Q4.1 R23.1 
+'$6N13324' ; LED2.1 R14.1 
+'$6N13326' ; Q3.3 R14.2 R15.2 
+'$6N13329' ; Q3.1 R18.1 
+'$6N13524' ; LED1.1 R9.1 
+'$6N13526' ; Q2.3 R9.2 R10.2 
+'$6N13529' ; Q2.1 R12.1 
+'$6N13772' ; C19.2 R30.2 U5.19 
+'$6N13921' ; C18.2 R25.2 U5.21 
+'$6N13926' ; C17.2 R19.2 U5.23 
+'$6N13932' ; C16.2 R13.2 U5.25 
+'$6N13938' ; C15.2 R8.2 U5.27 
+'$6N13996' ; R35.2 U5.18 
+'$6N14025' ; R29.2 U5.20 
+'$6N14040' ; R23.2 U5.22 
+'$6N14057' ; R18.2 U5.24 
+'$6N14074' ; R12.2 U5.26 
+'$6N14095' ; Q7.5 Q7.6 Q7.7 Q7.8 Q7.9 Q8.5 Q8.6 Q8.7 Q8.8 Q8.9 
+'$6N14111' ; Q8.1 Q8.2 Q8.3 R37.1 R38.2 U5.14 
+'$6N14302' ; C14.2 D3.1 R16.2 R17.2 R28.2 U5.28 
+'$6N14330' ; D3.2 R7.1 
+'$6N14343' ; R17.1 U5.2 
+'$6N14348' ; R16.1 U5.3 
+'$6N14407' ; Q8.4 R33.1 
+'$6N14414' ; R33.2 U5.12 
+'$6N14442' ; Q7.4 R36.2 U5.11 
+'$6N14493' ; R32.2 U5.10 
+'$6N14656' ; R24.2 U5.9 
+'$6N14660' ; R22.1 U5.8 
+'$6N14666' ; C13.2 U5.7 
+'$6N14673' ; C12.2 U5.6 
+'$6N14679' ; C11.2 U5.5 
+'$6N14685' ; C10.2 U5.4 
+'$6N14763' ; R28.1 U5.16 
+'$7N1708' ; C27.2 OLED1.2 
+'$7N1709' ; C27.1 OLED1.3 
+'$7N1710' ; C28.2 OLED1.4 
+'$7N1711' ; C28.1 OLED1.5 
+'$7N1722' ; C31.2 OLED1.28 
+'$7N1723' ; C30.2 OLED1.27 
+'$7N1724' ; OLED1.26 R40.2 
+'$7N2542' ; C33.2 U7.2 X1.1 
+'$7N2546' ; C34.2 U7.3 X1.2 
+'$7N2603' ; C32.2 OLED1.6 Q1.3 
+'$7N2638' ; Q1.5 Q1.6 R42.1 
+'$7N3367' ; C24.2 L4.1 U6.2 
+'$7N3419' ; C24.1 U6.6 
+'$7N3701' ; C20.1 R39.1 R41.2 U6.4 
+'$7N4919' ; BUZZER1.1 R43.1 
+'$7N5811' ; R43.2 U7.16 
+'$9N1212' ; C48.2 R51.2 U9.5 U10.3 
+'$9N1564' ; R46.1 R49.2 R50.2 U8.3 U9.4 
+'$9N4267' ; C45.2 U9.6 
+'$9N4268' ; C45.1 L5.2 U9.2 
+'$9N457' ; C40.2 U8.1 USB1.4 
+'$9N526' ; U8.6 USB1.2 
+'$9N584' ; C44.2 R47.1 U8.4 U8.5 
+'$9N986' ; C37.2 C38.2 C39.2 L5.1 R44.2 U10.4 
+'$9N990' ; C36.1 D5.1 R44.1 R45.2 R46.2 U10.5 USB1.1 
+'BAT-' ; C10.1 C11.1 C12.1 C13.1 C14.1 C15.1 C16.1 C17.1 C18.1 C19.1 Q6.2 ,
+        R22.2 R24.1 R37.2 U5.17 
+'CS_O' ; OLED1.13 U7.11 
+'D/C_O' ; OLED1.15 U7.10 
+'MOSI_O' ; OLED1.19 OLED1.20 U7.9 
+'SCK_O' ; OLED1.18 U7.8 
+'SUB_EN' ; R47.2 R51.1 U7.13 
+'SUB_INDET' ; D4.3 D5.2 U7.14 
+'SUB_IOUT' ; C46.2 U7.7 U10.6 
+'SUB_VOUT' ; C47.2 R45.1 R48.2 U7.12 
+3V3 ; C2.2 C5.2 C20.2 C25.2 C26.2 C29.2 C35.2 D1.1 D2.5 D4.2 L4.2 OLED1.9 Q1.4 ,
+        R1.1 R2.1 R3.1 R39.2 R42.2 U1.3 U1.7 U2.2 U2.3 U3.B1 U4.7 U7.4 
+AGND ; C6.2 CN1.1 CN1.2 D2.1 L3.2 U4.2 
+B1 ; LED5.2 Q5.2 R30.1 R34.1 
+B2 ; LED4.2 Q4.2 R25.1 R27.1 
+B3 ; LED3.2 Q3.2 R19.1 R21.1 
+B4 ; LED2.2 Q2.2 R13.1 R15.1 
+CONF ; U7.23 
+CPEN ; Q1.2 U7.17 
+DOWN ; U7.21 
+F32K ; U4.6 U7.18 
+GND ; BUZZER1.2 C1.1 C2.1 C5.1 C6.1 C7.1 C8.2 C9.2 C21.1 C22.1 C23.1 C25.1 ,
+        C26.1 C29.1 C30.1 C31.1 C32.1 C33.1 C34.1 C35.1 C36.2 C37.1 C38.1 ,
+        C39.1 C40.1 C41.1 C42.1 C43.1 C44.1 C46.1 C47.1 C48.1 D1.2 D2.2 D4.1 ,
+        H1.4 H2.3 H3.4 H3.6 L3.1 OLED1.1 OLED1.8 OLED1.10 OLED1.11 OLED1.12 ,
+        OLED1.16 OLED1.17 OLED1.21 OLED1.22 OLED1.23 OLED1.24 OLED1.25 ,
+        OLED1.29 OLED1.30 Q1.1 Q7.1 Q7.2 Q7.3 R32.1 R36.1 R38.1 R40.1 R41.1 ,
+        R48.1 R49.1 R50.1 SW1.1 U1.8 U1.9 U2.7 U3.A1 U4.1 U4.3 U4.8 U6.1 U7.5 ,
+        U8.2 U9.1 U10.1 U10.2 USB1.5 USB1.6 USB1.7 USB1.8 USB1.9 
+INT ; H3.2 U1.5 U7.29 
+L ; CN1.4 L1.2 
+LEFT ; U7.26 
+LOUT ; C3.1 D2.3 U4.10 
+MICINDET ; D2.6 R6.1 U7.15 
+PWM ; H3.5 U7.22 
+R ; CN1.3 L2.2 R6.2 
+RIGHT ; U7.20 
+ROUT ; C4.1 D2.4 U4.9 
+RST ; C1.2 OLED1.14 R3.2 SW1.2 U7.6 
+SCL ; H3.3 R2.2 U1.12 U2.5 U3.A2 U4.4 U7.32 
+SDA ; H3.1 R1.2 U1.2 U2.6 U3.B2 U4.5 U7.1 
+SWC ; H2.1 U7.25 
+SWD ; H2.2 U7.24 
+UP ; U7.19 
+VBAT ; C8.1 C9.1 H1.1 H1.2 LED1.2 R7.2 R8.1 R10.1 R11.2 
+VSYS ; C7.2 C21.2 C22.2 C23.2 C41.2 C42.2 C43.2 H1.3 R11.1 U6.3 U9.3 
 $SCHEDULE
 $END
