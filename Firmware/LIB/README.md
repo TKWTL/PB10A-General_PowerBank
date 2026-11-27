@@ -4,7 +4,7 @@
 U8g2 or application dependencies. The CRC utility optionally uses the
 STM32G0 LL CRC peripheral. Pac-Man, Bomber and Invaders now use
 this RLE codec for native page data, and Beep Service uses FIFO records. Add an algorithm's
-`.c` file to the Keil project only when it is used; with `-Os` and LTO,
+`.c` file to the Keil project only when it is used; with `-Oz` and LTO,
 measure the final linked Flash rather than assuming abstraction saves space.
 
 ## Four-mode byte RLE
@@ -49,9 +49,11 @@ or interrupts-disabled critical section. Compatible with ArmClang/GCC.
   commit. Multi-byte values use little-endian byte order and may wrap
   across the end of the caller-owned buffer. `FIFO_Write/Read` remain
   byte-stream helpers for UART-like transfers (may transfer only a prefix).
-- Beep Service now enqueues a single 32-bit sequence pointer via
+- Beep Service enqueues a single 32-bit sequence pointer via
   `FIFO_Push4` and reads it via `FIFO_Pop4`. PB10A Cortex-M0+ pointers
-  are 4 bytes; eight-entry capacity and play/stop/tone behavior remain.
+  are 4 bytes; eight-entry capacity remains. Alarm loop and fault tones
+  are arbitrated by Beep Service outside the FIFO; the FIFO has no priority
+  or audio semantics.
   `Push1/Pop1` are suitable for IH01A-style USART software byte rings,
   although IRQ-DMA UART integration itself belongs in its hardware driver.
 - Existing Radio queues are not migrated automatically.
@@ -78,8 +80,12 @@ buffers must not alias. No dynamic allocation.
 
 `pressure_altitude_dm()` interpolates 81 integer-metre standard-atmosphere
 nodes (30–110 kPa in 1 kPa steps, 162 bytes), returning decimetres.
-The reference is 101325 Pa; no floating-point runtime or local sea-level
-pressure calibration is used. Outside the table range it returns invalid.
+The standard reference is 101325 Pa; no floating-point runtime is used.
+`altitude_pressure_pa()` provides the inverse interpolation over the same
+node table. The application computes a calibrated sea-level pressure from
+known elevation and uses a pressure ratio for calibrated altitude; the
+library itself remains standard-atmosphere only. Both functions return 0
+outside their table domains.
 Offline evaluation at all 80,001 integer Pa inputs found a maximum
 interpolation/rounding error of 0.993 m against the stated model.
 
@@ -87,7 +93,9 @@ interpolation/rounding error of 0.993 m against the stated model.
 
 `mini_crc.c/.h` computes CRC-32/MPEG-2 over three MSB-first 32-bit words.
 On STM32G070, `MINI_CRC_USE_HW` defaults to 1 and reuses the default
-CubeMX CRC32 configuration initialized before the application. Other
+CubeMX CRC32 configuration initialized before the application. Hardware mode is
+foreground-only; the fault snapshot uses its own checksum rather than
+calling this utility from an exception. Other
 targets can use the equivalent software path. Retained records store
 the full CRC32 and a separate version marker; old CRC16 records are
 not compatible.
