@@ -40,7 +40,15 @@
 
 # 交互式 BOM 导出(内嵌图片与全量位号数据,单文件可达十几 MB):
 # 按二进制处理,避免每次 status/diff 扫描整份数据。
-Hardware/Manufacturing/BOM/*.html binary
+# 两个目录都会放:Manufacturing/BOM/ 是随生产包发的,Preview/ 是自阅的,
+# 规则必须都覆盖,漏一个就会把十几 MB 的 HTML 当文本做行尾归一化。
+Hardware/Manufacturing/BOM/*.html  binary
+Hardware/Preview/*.html            binary
+
+# 制造用 CSV(BOM 与坐标文件):内容是文本,要能在 review 里看行级 diff,
+# 但贴片厂/Excel 拿到的一致行尾比 diff 更好用,故固定检出为 CRLF。
+# 与上面的 *.tel 同理,这是 binary 通配之外显式声明 text 的例外。
+Hardware/Manufacturing/**/*.csv  text eol=crlf
 
 # 归档与机械导出。
 *.rar  binary
