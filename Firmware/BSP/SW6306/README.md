@@ -41,6 +41,8 @@ BUS 校准只修正电流读数；不修改 BUS 硬件限流、PD/PPS/UFCS 档�
 
 SW6306 由唯一的应用协程持有，不允许并发执行另一套 SW6306 Protothread。底层使用 `Core/Src/i2c.c` 的 LL 中断传输与前台恢复服务，而非 HAL DMA/IT。30 ms 传输超时及 10 ms 中止超时由总线层处理；恢复不会重放失败写入。调用方检查本次操作结果并由业务状态机决定重试或重新初始化。普通 NACK 不触发总线清除。
 
+普通 STOP1 休眠以 `SW6306_PowerPathsIdle()` 判断充放电及 C1/C2/A1/A2 功率通路均关闭。PT 调用方必须先取得新鲜有效的端口状态镜像；CC 连接、端口在线及历史故障标志本身不阻止休眠。
+
 Statistics 的 Battery Voltage / Battery Current 使用同一轮 ADC 镜像，电流采用已校准的 IBAT 读数；失效的镜像不显示为有效零值。BUS 补偿仍不改变协议电流档位或硬件限流。
 
 ## RTOS 移植

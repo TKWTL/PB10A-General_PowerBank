@@ -1,6 +1,7 @@
 /* SW6306 and auxiliary USB-A power policy; preserve PD and live outputs.
  * Only request the IC's low-power register mode when its live port status
- * confirms every connection is idle. Never force charge/discharge OFF. */
+ * confirms charging/discharging and all power paths are idle.
+ * Do not force active power paths off for MCU sleep. */
 #include "power_algo.h"
 #include "pm_device.h"
 #include "sw6306.h"
@@ -961,9 +962,9 @@ static pm_hook_result_t sw_suspend(void *ctx) {
         result=SW6306_PortStatusLoad(&s_sw_suspend_pt);
         if(PT_SCHEDULE(result)) return PM_HOOK_PENDING;
         s_sw_suspend_stage=0u;
-        s_idle_verified=(uint8_t)(SW6306_LastOperationOK() &&
-            SW6306_PortReadSequence()!=s_sw_verify_before &&
-            SW6306_TransportPortsIdle());
+        s_idle_verified = (uint8_t)(SW6306_LastOperationOK() &&
+                                    SW6306_PortReadSequence() != s_sw_verify_before &&
+                                    SW6306_PowerPathsIdle());
         if(!s_idle_verified) {
             pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK,1u);
             return PM_HOOK_ERROR;
@@ -1667,7 +1668,7 @@ THRD_DECLARE(meter_read_ports) {
 
 static void meter_update_guard(void) {
     s_idle_verified = meter_ports_fresh(Millis()) &&
-                      s_meter_a2 == METER_A2_OFF && SW6306_TransportPortsIdle();
+                      s_meter_a2 == METER_A2_OFF && SW6306_PowerPathsIdle();
     s_monitor.port_busy = !s_idle_verified;
     pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK, !s_idle_verified);
     if (!s_idle_verified && !s_ext_pm_closing)

@@ -449,7 +449,7 @@ SW6306_RET SW6306_NTCTempLoad(SW6306_NOARG) {
 }
 
 /*============================================================================
- * 6. 端口状态、连接掩码与运输模式
+ * 6. 端口状态、连接掩码与功率通路空闲检测
  *============================================================================*/
 SW6306_RET SW6306_PortStatusLoad(SW6306_NOARG) {
 #if SW6306_USE_PROTOTHREAD
@@ -505,12 +505,11 @@ uint8_t SW6306_ConnectedPortMask(void) {
     return mask;
 }
 
-/* 运输模式安全门：重新读取实时端口状态；任一读操作失败即拒绝。
- * A口禁止VBUS插拔检测，不能识别所有已插但未供电的被动A口连接；
- * 已打开A1/A2、检测到A1/A2在线的情况禁止运输；物理端口存在标志不能表示设备插入。
- * 独立于SW6306缓存镜像，避免利用500ms前的旧数据。 */
-uint8_t SW6306_TransportPortsIdle(void) {
-    uint8_t sys = 0u, typec = 0u, port = 0u;
+/* 普通休眠只要求充放电和功率通路停止。
+ * CC连接、端口在线标志和历史故障不等于通路正在供电。
+ * 协程模式由调用者保证PortStatusLoad成功且镜像新鲜。 */
+uint8_t SW6306_PowerPathsIdle(void) {
+    uint8_t sys = 0u;
     if (!SW6306_IsInitialized())
         return 0u;
 #if SW6306_USE_PROTOTHREAD
@@ -519,8 +518,6 @@ uint8_t SW6306_TransportPortsIdle(void) {
     if (!s_port_read_seq)
         return 0u;
     sys = SW6306_Status.sys_stat;
-    typec = SW6306_Status.typec_stat;
-    port = SW6306_Status.port_stat;
 #else
     if (SW6306_BLOCKING_LOCK() != 0) {
         s_io_failed = 1u;
@@ -529,20 +526,14 @@ uint8_t SW6306_TransportPortsIdle(void) {
     SW6306_OperationReset();
     SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_STRG_SYS_STAT);
     SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_SYS_STAT, &sys);
-    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_TYPEC, &typec);
-    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_PORT_STA, &port);
     uint8_t ok = SW6306_LastOperationOK();
     SW6306_MUTEX_GIVE;
     if (!ok)
         return 0u;
 #endif
-    return ((sys & (SW6306_SYS_STAT_CHGING | SW6306_SYS_STAT_DISCHGING |
-                    SW6306_SYS_STAT_C1ON | SW6306_SYS_STAT_A1ON | SW6306_SYS_STAT_A2ON)) == 0u &&
-            (typec & (SW6306_TYPEC_C1MSK | SW6306_TYPEC_C1_CC1 | SW6306_TYPEC_C1_CC2)) == 0u &&
-            (port & (SW6306_PORT_STA_C1SRC | SW6306_PORT_STA_C1SNK |
-                     SW6306_PORT_STA_C1OL | SW6306_PORT_STA_A1OL | SW6306_PORT_STA_A2OL)) == 0u)
-               ? 1u
-               : 0u;
+    return (sys & (SW6306_SYS_STAT_CHGING | SW6306_SYS_STAT_DISCHGING |
+                   SW6306_SYS_STAT_C1ON | SW6306_SYS_STAT_C2ON |
+                   SW6306_SYS_STAT_A1ON | SW6306_SYS_STAT_A2ON)) == 0u;
 }
 
 uint8_t SW6306_IsPortC1ON(void) {

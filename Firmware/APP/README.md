@@ -355,7 +355,14 @@ capacity %, negotiated protocol, and C1/A1 path flags. UI labels
 freshness as unavailable until initialization and successful
 StatusLoad within the current cycle. An age above 2.5 seconds invalidates the snapshot. The coroutine read groups now check IRQ completion and publish entire register groups only on success; the service checks all required groups before presenting valid data.
 
-PM sleep-block bit 0x08 is held while ports are active or status is uncertain. Before STOP1, the PM hook asynchronously performs a fresh `SW6306_PortStatusLoad()` and requires its successful sequence to advance; only then can `SW6306_TransportPortsIdle()` use the just-refreshed RAM snapshot. LPSET and subsequent wake/unlock also yield without blocking unrelated coroutines. The inherited SW6306
+PM sleep-block bit 0x08 is held while charging/discharging, a power
+path is enabled, A2 cleanup is incomplete, or port status is uncertain.
+A cable remaining connected after a protection shutdown is not by itself
+a sleep blocker. Before STOP1, the PM hook asynchronously performs a
+fresh `SW6306_PortStatusLoad()` and checks that its successful sequence
+advanced; only then does `SW6306_PowerPathsIdle()` check SYS_STAT.
+LPSET and subsequent wake/unlock yield without blocking unrelated
+coroutines. The inherited SW6306
 configuration disables passive A-port VBUS insertion detection, so
 a cable plugged into an inactive A port may not be detectable.
 
