@@ -1,22 +1,28 @@
 # Firmware · STM32G070KBTx
 
-**状态：基础硬件联调阶段。** 已完成 ADC、蜂鸣器、FM 等板级功能的初步验证；应用菜单、按键映射和部分功耗行为仍需整机回归测试。调试经验见 [`Docs/Debug/`](../Docs/Debug/README.md)，早期 OLED 记录见 [`Docs/OLED_BRINGUP.md`](../Docs/OLED_BRINGUP.md)。
+**状态：主要功能已集成，进入功能收敛与长期可靠性验证阶段。** ADC、蜂鸣器、FM 等基础硬件已有板级联调记录；当前固件包含多口电源管理、FM、传感器、双 RTC 闹钟、游戏、中英文界面及故障恢复。最新源码的所有组合与低功耗行为仍需整机回归，本文不代表完成新一轮编译或实测。调试经验见 [`Docs/Debug/`](../Docs/Debug/README.md)，早期 OLED 记录见 [`Docs/OLED_BRINGUP.md`](../Docs/OLED_BRINGUP.md)。
 
 ## 分层与依赖
 
 ```
-APP (framework / algorithm / functions)
-       └──► BSP  ──► Core / Drivers
+APP (framework / algorithm / functions / MiaoUI)
+       ├──► Scheduler (coroOS + Protothreads 1.4)
+       ├──► LIB (整数算法、FIFO、RLE、CRC)
+       └──► BSP ──► Core / Drivers
             设备驱动   CubeMX 生成层 + ST 库
 ```
 
 | 目录 | 放什么 | 不放什么 |
 |---|---|---|
-| `Core/` | CubeMX 生成的外设初始化、中断向量和时钟；I²C HAL 适配 API 与回调在对应 `USER CODE BEGIN/END` 区 | 应用业务策略；修改 CubeMX 管理的初始化段 |
+| `Core/` | CubeMX 生成的外设初始化、中断向量和时钟；I²C LL 中断状态机、SPI/ADC DMA 适配在对应 `USER CODE BEGIN/END` 区 | 应用业务策略；修改 CubeMX 管理的初始化段 |
 | `Drivers/` | STM32G0xx HAL/LL 与 CMSIS 头文件 | 任何手写代码 |
-| `APP/framework/` | 基础系统服务：RTC 时间/日历编辑、蜂鸣器 PWM/提示音队列、低功耗与调度框架 | 页面级功能逻辑 |
+| `APP/framework/` | 基础系统服务：RTC 时间/日历编辑、双闹钟、蜂鸣器 PWM/提示音队列、低功耗框架 | 页面级功能逻辑 |
 | `APP/algorithm/` | 设备状态机、ADC/功率/FM/传感器算法、配置与故障记录；纯计算部分尽量独立于 HAL | 与页面直接耦合的 UI 绘图 |
-| `BSP/` | 板载人机与调试接口的板级封装：OLED、按键、蜂鸣器、调试串口/CLI | 外接功能芯片协议 |
+| [`BSP/`](BSP/README.md) | OLED、按键、SW6306、RDA5807、SC7A20、BMP180、MMC5603、Millis、WWDG 与 u8g2 | 应用业务策略 |
+| [`Scheduler/`](Scheduler/) | coroOS 与第三方 Protothreads 1.4，固定顺序合作式调度 | 设备和页面业务 |
+| [`LIB/`](LIB/README.md) | FIFO、字节 RLE、整数格式化、CRC32 和数学辅助 | UI/应用依赖 |
+| [`APP/functions/`](APP/functions/README.md) | 独立应用及游戏 | 外设传输所有权 |
+| `APP/MiaoUI/` | 菜单、显示交互、字体及图标 | 芯片协议状态机 |
 | `MDK-ARM/` | Keil 工程、启动文件、RTE、调试器配置 | 源码 |
 
 ## 约定
@@ -25,7 +31,7 @@ APP (framework / algorithm / functions)
 - **命名**：文件与目录用小写下划线（`power_path.c`）；对外接口统一加模块前缀（`pp_`、`batt_`、`oled_`）；私有函数加 `static`。
 - **头文件**：一个模块一个同名 `.h`，只暴露必要接口；跨层调用只允许自上而下。
 - **新增源文件后必须同步工程**：在 `MDK-ARM/PB10A-General_PowerBank.uvprojx` 里加入对应 Group，新目录要补 `IncludePath`，否则编译不到。
-- **目录深度**：`Firmware/` 下最多两层，不再新增同义目录（例如不要再建 `Module/`、`Src2/`）。
+- **目录深度**：沿用已有职责目录；MiaoUI、游戏、BSP 设备及第三方库可保留必要子目录。不再新增同义目录（例如 `Module/`、`Src2/`）。
 
 ## 外设移植
 
@@ -34,7 +40,10 @@ APP (framework / algorithm / functions)
 | 用途 | 当前绑定 |
 | --- | --- |
 | OLED 发送 | SPI1、DMA1 通道 1 |
-| 传感器和 SW6306 总线 | I²C1 中断 |
+| FM、传感器和 SW6306 总线 | I²C1 LL 中断，PB8 SCL / PB9 SDA |
+| FM 参考时钟 | PA8 MCO，LSE ÷1 |
+| 蜂鸣器 | TIM3 PWM |
+| 调度看门狗 | WWDG，STOP1 前后切换低功耗时钟门控 |
 | ADC 扫描 | ADC1、DMA1 通道 2，依次采集 Aux-A 电流、Aux-A 电压、片内温度和 VREFINT |
 
 重新生成后，在对应的 `USER CODE` 区保留 SPI / ADC 的 DMA 地址初始化。DMA 中断调用 `DMA_TransferIRQ()` 并传入该向量的 IRQ 编号。I²C 中断调用 `I2C_TransferIRQ()`。
@@ -46,11 +55,12 @@ APP (framework / algorithm / functions)
 | 工程 | `MDK-ARM/PB10A-General_PowerBank.uvprojx` |
 | 目标 | `PB10A-General_PowerBank` |
 | 输出 | `MDK-ARM/Objects/`（`Objects/`、`Listings/` 不入库） |
-| 宏定义 | `USE_HAL_DRIVER`, `USE_FULL_LL_DRIVER`, `STM32G070xx` |
+| 宏定义 | `USE_HAL_DRIVER`, `USE_FULL_LL_DRIVER`, `STM32G070xx`；`SC7A20_USE_FLOAT_API=0`, `BMP180_USE_FLOAT_API=0`, `SW6306_USE_FLOAT_API=0`, `COROOS_USE_IDLE_SLEEP=1`, `COROOS_USE_WATCHDOG=1` |
+| 优化 | Arm Compiler 6，`-Oz` + LTO（以工程实际选项为准） |
 | 设备内存 | IROM 0x08000000 / 128 KB，IRAM 0x20000000 / 36 KB；布局见 `MDK-ARM/Ld/PB10A-General_PowerBank.sct`（末 256 B 为 `.bss.noinit` 复位不清除区） |
-| 现有分组 | `Application/MDK-ARM`、`Application/User/Core`、`Drivers/STM32G0xx_HAL_Driver`、`Drivers/CMSIS`、`::CMSIS` |
+| 现有分组 | `Application/MDK-ARM`、`Application/User/Core`、`Drivers/STM32G0xx_HAL_Driver`、`Drivers/CMSIS`、`Application/APP`、`BSP/Buttons`、`Application/MiaoUI`、`Application/LIB`、`Application/BSP`、`BSP/u8g2`、`::CMSIS` |
 
-已新增 `Application/APP`、`Application/MiaoUI`、`Application/BSP` 和 `ThirdParty/u8g2` 分组，包含 OLED 最小系统所需的源码。`MiaoUI` 保留库原有子目录，作为目录深度约定的例外。未加入不需要的电源管理和外设驱动。
+工程已包含完整应用、PM、设备驱动和必要的第三方子集。检查链接占用时以 `.map` 的 `LR_IROM1`、`RW_IRAM1`、`RW_NOINIT` 区域为准；`Code + RO-data + RW-data` 是 ROM 数据统计，可能与实际加载区存在对齐差异。SRAM 包含预留栈；静态链接占用不能证明运行时栈峰值。AXF 的调试信息不计入烧录容量。
 
 ### Code formatting
 
@@ -84,6 +94,17 @@ labels use bounded direct copying instead of `%.15s`. Measure real linked
 size after Keil compilation rather than assuming theoretical gains. This byte RLE is
 unrelated to u8g2 font RLE. See [LIB/README.md](LIB/README.md).
 
-Radio now reuses the 12px main UI font for identical ASCII glyphs. The 24px
-Spleen font is subsetted for radio and I2C scanner messages; see
-[font subset notes](APP/MiaoUI/fonts/README.md).
+Radio shares the 12px main UI font; the 24px Spleen subset serves radio
+and scanner messages. The current shared 12px font contains 96 Latin/degree
+and 264 Han glyphs (8175 B). Language is RAM-only, Chinese by default;
+see [font subset notes](APP/MiaoUI/fonts/README.md).
+
+## 当前核心功能与可靠性机制
+
+- **调度**：`APP/app_task.c` 注册 10 个固定顺序协程；UI、OLED、系统、PM、ADC、SW6306、Radio 与三种传感器各自推进，不使用 FreeRTOS。共享 I2C 服务在每轮调度之前运行。
+- **FM**：AUTO 随耳机插拔运行，ON 不依赖耳机，OFF 关闭。87–108 MHz / 100 kHz；硬件 SEEK 后对命中及相邻两个频点分别取两次有效 RSSI 的较低值，邻频须改善至少 2 个计数或替代无效原分数；预设全扫向上，双向 Search 优先探测搜索方向。原五项菜单不变。正常调谐先显示目标并等待 STC/READCHAN 匹配。PA8 直接输出 LSE，RTC 平滑校准不修改 FM 参考频率。
+- **低功耗**：STOP1 前按设备状态机挂起；FM 后台播放时由 30 分钟 RTC WUT 检查电池与耳机，正常后台巡检不点亮 OLED。双 RTC 日历闹钟与 WUT 独立；报警播放有独立的 PM 锁。
+- **I2C 恢复**：30 ms 传输 / 10 ms 中止期限，失败中止或空闲总线异常持续 50 ms 后尝试 Bus Clear 和 RCC 复位；失败 1 s 后重试，不自动重放写入。
+- **WWDG**：64 MHz PCLK 下标称 524.288 ms；完整调度轮且 Millis 前进才喂狗，普通 Sleep 保持监控，STOP1 前喂狗并关闭 WWDGSMEN，退出后恢复。无需修改 Option Bytes。NOINIT 保存故障与调度现场，复位后可检查，断电不保证保留。
+
+模块细节与现有板级验证记录见 [APP/README.md](APP/README.md)、[BSP/README.md](BSP/README.md)；用户应用见 [functions/README.md](APP/functions/README.md)。后续以编译资源、搜台重复性、I2C 恢复成功率、最大调度轮时长、STOP1 功耗及唤醒稳定性为回归指标。
