@@ -630,9 +630,9 @@ __attribute__((noinline)) void RadioAlgo_Poll(void) {
         s_last_battery_guard=now;
         PowerAlgo_GetMonitor(&power);
         if(power.valid && power.capacity_valid) {
-            if(power.capacity_pct==0u || power.vbat_mv<14000u)
+            if (power.capacity_pct == 0u || power.vbat_mv < POWER_BATTERY_CUTOFF_MV)
                 radio_force_low_battery_off();
-            else if(power.capacity_pct>5u && power.vbat_mv>=14500u)
+            else if (power.capacity_pct > 5u && power.vbat_mv >= POWER_BATTERY_CUTOFF_MV + 500u)
                 s_low_battery_latched=0u;
         }
     }
@@ -645,7 +645,7 @@ __attribute__((noinline)) void RadioAlgo_Poll(void) {
             /* Inspect only complete fresh SW6306 transactions. Never
              * infer empty capacity from a communications failure. */
             if(checked==1u) {
-                if(battery_pct==0u || battery_mv<14000u)
+                if (battery_pct == 0u || battery_mv < POWER_BATTERY_CUTOFF_MV)
                     radio_force_low_battery_off();
             }
             else if(s_bg_inspection && ++s_bg_retry_count<3u) {

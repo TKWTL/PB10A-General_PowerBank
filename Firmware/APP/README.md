@@ -293,6 +293,14 @@ same shared protection do not increment the fault count. E21 and N02
 are reserved: AUX invalid samples currently do not trigger a cutoff, and
 there is no low-current-mode operation UI. Protection policy is unchanged.
 
+E01 (battery UVLO) is a WARNING: normal discharge termination is
+expected and is part of SW6306 capacity learning. E01 retains fault
+history and its event acknowledgement, but does not play the FAULT
+cue or independently delay sleep. A separate fresh discharge event
+with a newly observed fault reason retains its own classification.
+The 3.0 V/cell SW6306 discharge cutoff (15.0 V for 5S) retains its
+0.3 V/cell hysteresis; external loads use the matching pack threshold.
+
 The priority mailbox overlays INFO/WARNING for 2.5 s or FAULT for 4 s.
 Only FAULT requests audio at notice creation, independently of OLED/Toast:
 a 610 ms three-high-note cue (2400 Hz, 150 ms each, two 80 ms gaps), coalesced while playing. Beep Service priority
@@ -828,11 +836,11 @@ A background-check timeout also falls back to RUN for diagnosis
 instead of silently skipping protection.
 
 Battery shutdown on a fresh successful snapshot:
-`capacity_pct == 0` or `vbat_mv < 14000` (5S x 2.8 V) forces
+`capacity_pct == 0` or `vbat_mv < 15000` (5S x 3.0 V) forces
 Radio Power Mode to OFF, cancels pending UI commands and powers down
 RDA5807 asynchronously. Mode OFF remains until explicitly changed
 after the low-voltage lock is cleared by capacity >5% and voltage
->=14,500 mV. Failed SW6306 I2C transactions are not assumed to be
+>=15,500 mV. Failed SW6306 I2C transactions are not assumed to be
 0%; the patrol retries up to three fresh ADC+Capacity sequences.
 If all fail, unattended Radio is turned OFF (fail closed).
 During normal RUN the Radio coroutine also monitors the latest valid

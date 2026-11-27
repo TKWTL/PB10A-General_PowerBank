@@ -73,6 +73,8 @@ python3 Firmware/BSP/SW6306/gen_ntc_table.py --r25 10000 --beta 3380
 
 ## 初始化与协议配置
 
+放电 UVLO 为单节 3.0 V（5S 整包约 15.0 V），单节迟滞保持 0.3 V。UVLO 中断与容量学习流程仍启用。
+
 固定初始化寄存器使用顺序表，共用写入/位修改等待点；页切换、
 解锁、动态功率与电池限流、Source Capability 重播仍保留原有时序。
 PD/PPS/UFCS 电流档位直接计算寄存器编码，Protothread 只在首次进入

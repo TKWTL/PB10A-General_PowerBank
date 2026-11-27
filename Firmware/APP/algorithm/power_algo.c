@@ -293,7 +293,6 @@ void PowerAlgo_AddProtocolItems(ui_page_t *page, uint8_t group) {
 
 /************************ WLED / Aux-A common policy ************************/
 #define EXT_LOAD_PM_BLOCK 0x40u
-#define EXT_BATTERY_MIN_MV 14000u /* Five cells x configured 2.8 V UVLO. */
 #define EXT_NTC_STOP_C10 600
 #define EXT_NTC_RESTART_C10 450
 #define METER_RELEASE_MS 200u
@@ -408,7 +407,8 @@ const char *PowerAlgo_NoticeText(uint8_t code) {
 }
 
 static uint8_t fault_severity(uint8_t code) {
-    return code == 6u || code == 8u || code == 12u ? POWER_NOTICE_WARNING : POWER_NOTICE_FAULT;
+    /* UVLO is the normal discharge endpoint, not an abnormal fault. */
+    return code == 1u || code == 6u || code == 8u || code == 12u ? POWER_NOTICE_WARNING : POWER_NOTICE_FAULT;
 }
 
 static void fault_offer_notice(uint8_t code, uint8_t severity) {
@@ -548,8 +548,17 @@ static void fault_consume_status(void) {
     s_fault_live_mask &= (uint8_t)~falling;
     uint8_t charge_code = (directions & SW6306_SYS_STAT_CHGERR) ? fault_direction_code(changed, snap, SW6306_SYS_STAT_CHGERR) : 0u;
     uint8_t discharge_code = (directions & SW6306_SYS_STAT_DISCHGERR) ? fault_direction_code(changed, snap, SW6306_SYS_STAT_DISCHGERR) : 0u;
-    if (fresh & SW6306_FAULT0_UVLO)
-        discharge_code = 1u;
+    if (fresh & SW6306_FAULT0_UVLO) {
+        /* A normal UVLO may also set DISCHGERR. Only a separate fresh
+         * discharge event with a newly observed reason warrants both notices. */
+        uint8_t other = (fresh & SW6306_FAULT0_DISCHGERR) ? fault_decode(changed, SW6306_SYS_STAT_DISCHGERR) : 13u;
+        if (other == 13u)
+            discharge_code = 1u;
+        else {
+            fault_hardware_report(1u, SW6306_SYS_STAT_DISCHGERR);
+            discharge_code = other;
+        }
+    }
     if (charge_code && charge_code == discharge_code) {
         fault_hardware_report(charge_code, directions);
     } else {
@@ -603,7 +612,7 @@ static uint8_t ext_inhibit(uint32_t now) {
             if ((uint32_t)(now - s_ext_stamp[i]) > SW_MONITOR_STALE_MS)
                 flags |= EXT_INHIBIT_DATA;
     }
-    if ((ext_sample_fresh(EXT_ADC, now) && s_monitor.vbat_mv <= EXT_BATTERY_MIN_MV) ||
+    if ((ext_sample_fresh(EXT_ADC, now) && s_monitor.vbat_mv <= POWER_BATTERY_CUTOFF_MV) ||
         (ext_sample_fresh(EXT_CAPACITY, now) && s_monitor.capacity_pct == 0u))
         flags |= EXT_INHIBIT_EMPTY;
     if (s_ext_hot)
@@ -632,7 +641,7 @@ static uint8_t ext_fault_code(uint8_t inhibit) {
         return code == 2u || code == 3u || code == 4u || code == 9u ? code : 41u;
     }
     if (inhibit & EXT_INHIBIT_EMPTY)
-        return ext_sample_fresh(EXT_ADC, Millis()) && s_monitor.vbat_mv <= EXT_BATTERY_MIN_MV ? 1u : 41u;
+        return ext_sample_fresh(EXT_ADC, Millis()) && s_monitor.vbat_mv <= POWER_BATTERY_CUTOFF_MV ? 1u : 41u;
     return 0u;
 }
 

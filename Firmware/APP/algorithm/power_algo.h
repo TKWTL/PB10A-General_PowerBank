@@ -5,6 +5,10 @@
 #include "coroOS.h"
 #include "pm_device.h"
 #include "sw6306.h"
+/* PB10A: five cells x SW6306 3.0 V/cell discharge UVLO.
+ * Shared by loads outside the SW6306 power-stage cutoff. */
+#define POWER_BATTERY_CUTOFF_MV 15000u
+
 /* SW6306 plus auxiliary A-port PA6 and ADC1 DMA telemetry. */
 /* Task-facing SW6306 monitor, based on PB02B 100ms staggered LOAD.
  * The displayed BUS voltage/current is the shared SW6306 BUS ADC, not
