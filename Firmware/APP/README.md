@@ -434,18 +434,22 @@ are not probed; their visual matrix cells stay `--`.
 Radio main view: logical UP increases and DOWN decreases RDA5807
 0-15 volume; LEFT/RIGHT selects lower/higher frequency according to
 Radio Mode: Search (seek), Preset (saved stations, wraps), Frequency
-(100 kHz step). Stereo draws a mirrored 6x9 speaker at x=66 only in
-READY with ST set; the original speaker and volume text stay at x=73
-and x=79.
+(100 kHz step). Stereo draws a mirrored 6x9 speaker at x=64 only in
+READY with ST set; the original speaker and volume text stay at x=71
+and x=77. Chinese mode names are 自动搜台 / 预设电台 / 手动调频.
 
-Every successful hardware SEEK probes one adjacent 100 kHz channel in
-the search direction (always up for full Preset scans). Skip probes
-beyond the band. TUNE must complete before a fresh status/RSSI sample
-at least 100 ms later; accept a valid, ready channel only if RSSI rises
-by at least 3. Otherwise restore the original frequency and wait
-for TUNE completion. Save/continue scanning only from the final
-frequency. Preset selection and manual tuning do not probe; the
-five-item menu, SEEKTH=8 and AFC remain unchanged.
+Every successful hardware SEEK re-samples the raw hit and probes both
+adjacent 100 kHz channels, skipping out-of-band frequencies. After STC,
+take two fresh valid/ready RSSI samples 100 ms apart (at least 100 ms
+before the first); score each frequency by the lower reading. A valid
+neighbour must improve the original score by at least 2, or replace an
+invalid original score. If neither neighbour qualifies, keep the raw
+hit. Wait for final TUNE completion before saving or continuing.
+For repeated Search/full scans, if the correction moved behind the raw
+hit, tune back to that hit before starting the next SEEK, so a false
+adjacent hit cannot trap or prematurely end a forward scan. No automatic
+merging of adjacent presets. Manual tuning, the five-item menu, SEEKTH=8
+and AFC remain unchanged.
 
 CONF short release enters the five-row settings menu. In that menu
 physical UP/DOWN selects items, CONF short release activates them:

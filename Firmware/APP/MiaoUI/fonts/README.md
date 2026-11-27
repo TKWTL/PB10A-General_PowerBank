@@ -28,7 +28,7 @@ The 264 Han glyphs are from the supplied
 `fusion-pixel-12px-proportional-zh_hans.bdf` (FONT_VERSION 2026.09.25).
 The 96 Latin/degree glyphs are restored from PB10A's earlier
 MiaoUI-based font, byte-for-byte. Existing Han glyph records are
-unchanged; the Unicode index was rebuilt for the About text. The
+unchanged; the Unicode index reflects the current translation catalog. The
 360-glyph array occupies 8,175 bytes; the ASCII/degree advance is 6px
 and Han advance is 12px. Layout still measures actual text width.
 

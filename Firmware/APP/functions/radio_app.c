@@ -102,11 +102,11 @@ void Radio_AppDraw(ui_t *ui) {
     Disp_DrawStr(44u, (uint16_t)(10 - slide),
                  LL_GPIO_IsInputPinSet(MIC_INDET_GPIO_Port, MIC_INDET_Pin) ? "OFF" : "ON");
     if (s_snapshot.state == RADIO_STATE_READY && s_snapshot.stereo)
-        Disp_DrawXBMP(66u, (uint16_t)(1 - slide), 6u, 9u, s_speaker_left_icon);
-    Disp_DrawXBMP(73u, (uint16_t)(1 - slide), 6u, 9u, s_speaker_icon);
+        Disp_DrawXBMP(64u, (uint16_t)(1 - slide), 6u, 9u, s_speaker_left_icon);
+    Disp_DrawXBMP(71u, (uint16_t)(1 - slide), 6u, 9u, s_speaker_icon);
     (void)mini_snprintf(buf,sizeof(buf),":%u%%",
         (unsigned)(((uint16_t)s_snapshot.volume+1u)*100u/16u));
-    Disp_DrawStr(79u, (uint16_t)(10 - slide), buf);
+    Disp_DrawStr(77u, (uint16_t)(10 - slide), buf);
     /* Collar-Radio battery icon driven by the SW6306 cache. When pack
      * capacity <=5%, flash the entire icon; above 5%, show the outline
      * and 0/1/2/3/4 bars at >=10/30/50/70% respectively.
