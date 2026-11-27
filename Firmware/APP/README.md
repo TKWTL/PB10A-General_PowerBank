@@ -431,9 +431,22 @@ are not probed; their visual matrix cells stay `--`.
 
 ### Radio MiaoUI WORD page (Collar-Radio five-item menu)
 
-Radio main view: physical UP/DOWN controls RDA5807 0-15 volume;
-LEFT/RIGHT selects lower/higher frequency according to Radio Mode:
-Search (seek), Preset (saved stations, wraps), Frequency (100 kHz step).
+Radio main view: logical UP increases and DOWN decreases RDA5807
+0-15 volume; LEFT/RIGHT selects lower/higher frequency according to
+Radio Mode: Search (seek), Preset (saved stations, wraps), Frequency
+(100 kHz step). Stereo draws a mirrored 6x9 speaker at x=66 only in
+READY with ST set; the original speaker and volume text stay at x=73
+and x=79.
+
+Every successful hardware SEEK probes one adjacent 100 kHz channel in
+the search direction (always up for full Preset scans). Skip probes
+beyond the band. TUNE must complete before a fresh status/RSSI sample
+at least 100 ms later; accept a valid, ready channel only if RSSI rises
+by at least 3. Otherwise restore the original frequency and wait
+for TUNE completion. Save/continue scanning only from the final
+frequency. Preset selection and manual tuning do not probe; the
+five-item menu, SEEKTH=8 and AFC remain unchanged.
+
 CONF short release enters the five-row settings menu. In that menu
 physical UP/DOWN selects items, CONF short release activates them:
 Return, Power Mode (AUTO / ON / OFF), Radio Mode

@@ -19,6 +19,12 @@
 #define RADIO_HEADPHONE_DEBOUNCE_MS 40u
 #define RADIO_QUERY_MS       180u
 #define RADIO_SEEK_TIMEOUT_MS 8000u
+#define RADIO_TUNE_TIMEOUT_MS 1200u
+#define RADIO_SEEK_RSSI_GAIN 3u
+#define RADIO_SEEK_SETTLE_MS 100u
+#define RADIO_FREQ_MIN 3480u
+#define RADIO_FREQ_MAX 4320u
+#define RADIO_FREQ_STEP 4u /* 100 kHz, in 25 kHz units */
 #define RADIO_COMMAND_QUEUE  8u
 #define RADIO_DEFAULT_VOLUME 0u
 
@@ -26,8 +32,17 @@ static uint8_t s_state,s_mode=RADIO_MODE_PRESET,s_power_mode=RADIO_POWER_AUTO;
 static uint8_t s_volume,s_rssi,s_stereo,s_search_failed,s_error_code;
 static uint8_t s_stop_pending,s_stop_requested,s_start_requested,s_pm_stopping;
 static uint8_t s_boot_sleep_ack,s_full_scan,s_first_seek_pending,s_station_count;
-static uint16_t s_freq_units=3480u,s_scan_last_freq;
+static uint16_t s_freq_units = RADIO_FREQ_MIN, s_scan_last_freq;
 static uint16_t s_stations[RADIO_MAX_STATIONS];
+
+enum {
+    SEEK_HARDWARE,
+    SEEK_PROBE_TUNE,
+    SEEK_PROBE_SETTLE,
+    SEEK_RESTORE
+};
+static uint8_t s_seek_stage, s_seek_upward, s_seek_rssi;
+static uint16_t s_seek_freq;
 static uint32_t s_state_at,s_last_query;
 static uint8_t s_view_open,s_battery_inspection_pending,s_low_battery_latched;
 static uint8_t s_keep_awake_radio,s_phone_stable,s_phone_candidate;
@@ -104,7 +119,8 @@ static void radio_start(void) {
     s_error_code=0u;s_search_failed=0u;s_first_seek_pending=1u;
     s_full_scan=0u;s_scan_last_freq=0u;
     s_volume=RADIO_DEFAULT_VOLUME;s_stereo=0u;s_rssi=0u;
-    s_freq_units=3480u;s_station_count=0u;
+    s_freq_units = RADIO_FREQ_MIN;
+    s_station_count = 0u;
     /* Active FM is not an idle-timer block. Its async operations are
      * drained by radio_prepare before STOP1; MCO must keep running. */
     radio_clock_enable();
@@ -127,14 +143,18 @@ static void radio_stop(void) {
 static void radio_seek(uint8_t upward) {
     if(RDA5807_AsyncSeek(upward)!=I2C_OK){radio_fail(4u);return;}
     s_state=RADIO_STATE_SEARCH;
+    s_seek_stage = SEEK_HARDWARE;
+    s_seek_upward = upward;
     s_state_at=Millis();s_last_query=s_state_at;
     s_search_failed=0u;s_first_seek_pending=0u;
 }
 static void radio_tune(uint16_t freq) {
     if(s_state!=RADIO_STATE_READY && s_state!=RADIO_STATE_SEARCH &&
         s_state!=RADIO_STATE_TUNE_WAIT)return;
-    if(freq<3480u)freq=4320u;
-    if(freq>4320u)freq=3480u;
+    if (freq < RADIO_FREQ_MIN)
+        freq = RADIO_FREQ_MAX;
+    if (freq > RADIO_FREQ_MAX)
+        freq = RADIO_FREQ_MIN;
     if(RDA5807_AsyncTune(freq)!=I2C_OK){radio_fail(4u);return;}
     s_freq_units=freq;
     s_state=RADIO_STATE_TUNE_WAIT;
@@ -159,6 +179,89 @@ static void radio_save_station(uint16_t freq) {
     s_stations[i]=freq;
     ++s_station_count;
 }
+/* Only the confirmed frequency enters the list or advances a full scan. */
+static void radio_finish_seek(void) {
+    if (!s_search_failed)
+        radio_save_station(s_freq_units);
+    s_state = RADIO_STATE_READY;
+    if (!s_full_scan)
+        return;
+    if (s_search_failed || s_station_count >= RADIO_MAX_STATIONS ||
+        s_freq_units >= RADIO_FREQ_MAX ||
+        (s_scan_last_freq && s_freq_units <= s_scan_last_freq)) {
+        s_full_scan = 0u;
+        return;
+    }
+    s_scan_last_freq = s_freq_units;
+    radio_seek(1u);
+}
+
+/* Probe and restore use TUNE, but stay in SEARCH until confirmation ends. */
+static void radio_seek_tune(uint16_t freq, uint8_t stage) {
+    if (RDA5807_AsyncTune(freq) != I2C_OK) {
+        radio_fail(4u);
+        return;
+    }
+    s_seek_stage = stage;
+    s_state_at = Millis();
+    s_last_query = s_state_at - RADIO_QUERY_MS;
+}
+
+static void radio_publish_status(uint16_t freq, uint16_t status, uint16_t signal) {
+    s_freq_units = freq;
+    s_rssi = (uint8_t)((signal & RDA5807_REG0B_RSSI_MSK) >> 9);
+    s_stereo = (uint8_t)((status & RDA5807_REG0A_ST) != 0u);
+}
+
+static void radio_search_status(uint16_t freq, uint16_t status, uint16_t signal, uint32_t now) {
+    uint32_t elapsed = now - s_state_at;
+    if (s_seek_stage == SEEK_HARDWARE) {
+        radio_publish_status(freq, status, signal);
+        if ((status & RDA5807_REG0A_STC) && elapsed >= 250u) {
+            s_search_failed = (uint8_t)((status & RDA5807_REG0A_SF) != 0u);
+            /* Do not wrap a confirmation probe, or extend a completed scan. */
+            if (s_search_failed ||
+                (s_seek_upward ? freq >= RADIO_FREQ_MAX : freq <= RADIO_FREQ_MIN) ||
+                (s_full_scan && s_scan_last_freq && freq <= s_scan_last_freq)) {
+                radio_finish_seek();
+                return;
+            }
+            s_seek_freq = freq;
+            s_seek_rssi = s_rssi;
+            radio_seek_tune(s_seek_upward ? freq + RADIO_FREQ_STEP : freq - RADIO_FREQ_STEP,
+                            SEEK_PROBE_TUNE);
+        } else if (elapsed > RADIO_SEEK_TIMEOUT_MS)
+            radio_fail(6u);
+        return;
+    }
+
+    uint16_t probe = (uint16_t)(s_seek_upward ? s_seek_freq + RADIO_FREQ_STEP : s_seek_freq - RADIO_FREQ_STEP);
+    if (s_seek_stage == SEEK_PROBE_TUNE) {
+        if ((status & RDA5807_REG0A_STC) && freq == probe) {
+            /* Take a NEW status/RSSI pair only after the tuner has settled. */
+            s_seek_stage = SEEK_PROBE_SETTLE;
+            s_last_query = now;
+        } else if (elapsed >= RADIO_TUNE_TIMEOUT_MS)
+            radio_seek_tune(s_seek_freq, SEEK_RESTORE);
+    } else if (s_seek_stage == SEEK_PROBE_SETTLE) {
+        unsigned rssi = (signal & RDA5807_REG0B_RSSI_MSK) >> 9;
+        if (freq == probe &&
+            (signal & (RDA5807_REG0B_STA | RDA5807_REG0B_RDY)) == (RDA5807_REG0B_STA | RDA5807_REG0B_RDY) &&
+            rssi >= (unsigned)s_seek_rssi + RADIO_SEEK_RSSI_GAIN) {
+            radio_publish_status(freq, status, signal);
+            radio_finish_seek();
+        } else
+            radio_seek_tune(s_seek_freq, SEEK_RESTORE);
+    } else if (s_seek_stage == SEEK_RESTORE) {
+        /* Never start a new SEEK while the original frequency is restoring. */
+        if ((status & RDA5807_REG0A_STC) && freq == s_seek_freq) {
+            radio_publish_status(freq, status, signal);
+            radio_finish_seek();
+        } else if (elapsed >= RADIO_TUNE_TIMEOUT_MS)
+            radio_fail(6u);
+    }
+}
+
 static void radio_toggle_station(uint16_t freq) {
     uint8_t i,j;
     for(i=0u;i<s_station_count;i++) {
@@ -177,7 +280,7 @@ static void radio_move_station(uint8_t up) {
         s_station_count=0u;
         s_full_scan=1u;
         s_scan_last_freq=0u;
-        radio_tune(3480u);
+        radio_tune(RADIO_FREQ_MIN);
         s_first_seek_pending=1u;
         return;
     }
@@ -202,15 +305,15 @@ static void radio_move_station(uint8_t up) {
 static void radio_start_full_scan(void) {
     if(s_state==RADIO_STATE_OFF || s_state==RADIO_STATE_ERROR)return;
     s_station_count=0u;s_full_scan=1u;s_scan_last_freq=0u;
-    radio_tune(3480u);
+    radio_tune(RADIO_FREQ_MIN);
     s_first_seek_pending=1u;
 }
 static void radio_frequency_step(uint8_t up) {
     if(s_state!=RADIO_STATE_READY && s_state!=RADIO_STATE_SEARCH)return;
     if(s_mode==RADIO_MODE_FREQ) {
         if(s_state==RADIO_STATE_SEARCH)radio_tune(s_freq_units);
-        else radio_tune(up?(s_freq_units>=4320u?3480u:s_freq_units+4u):
-            (s_freq_units<=3480u?4320u:s_freq_units-4u));
+        else
+            radio_tune(up ? (s_freq_units >= RADIO_FREQ_MAX ? RADIO_FREQ_MIN : s_freq_units + RADIO_FREQ_STEP) : (s_freq_units <= RADIO_FREQ_MIN ? RADIO_FREQ_MAX : s_freq_units - RADIO_FREQ_STEP));
     }
     else if(s_mode==RADIO_MODE_PRESET)radio_move_station(up);
     else if(s_state==RADIO_STATE_SEARCH)radio_tune(s_freq_units);
@@ -512,40 +615,30 @@ __attribute__((noinline)) void RadioAlgo_Poll(void) {
     }
     if(s_state!=RADIO_STATE_TUNE_WAIT && s_state!=RADIO_STATE_SEARCH &&
         s_state!=RADIO_STATE_READY)return;
-    if((uint32_t)(now-s_last_query)<RADIO_QUERY_MS)return;
-    s_last_query=now;
-    ret=RDA5807_AsyncTakeStatus(&status,&signal);
-    if(ret==RDA5807_ASYNC_PENDING)return;
-    if(ret!=I2C_OK){radio_fail(5u);return;}
-    s_rssi=(uint8_t)((signal&RDA5807_REG0B_RSSI_MSK)>>9);
-    s_stereo=(uint8_t)((status&RDA5807_REG0A_ST)!=0u);
-    s_freq_units=(uint16_t)(3480u+4u*(status&RDA5807_REG0A_CHAN_MSK));
-    if(s_state==RADIO_STATE_TUNE_WAIT) {
-        if((status&RDA5807_REG0A_STC) ||
-            (uint32_t)(now-s_state_at)>=1200u) {
-            if(s_first_seek_pending)radio_seek(1u);
-            else s_state=RADIO_STATE_READY;
-        }
+    /* Status reads in the confirmation stages use the same async queue.
+     * In SETTLE, s_last_query is the observed TUNE completion time. */
+    uint32_t query_ms = s_state == RADIO_STATE_SEARCH && s_seek_stage == SEEK_PROBE_SETTLE ? RADIO_SEEK_SETTLE_MS : RADIO_QUERY_MS;
+    if ((uint32_t)(now - s_last_query) < query_ms)
+        return;
+    s_last_query = now;
+    ret = RDA5807_AsyncTakeStatus(&status, &signal);
+    if (ret == RDA5807_ASYNC_PENDING)
+        return;
+    if (ret != I2C_OK) {
+        radio_fail(5u);
+        return;
     }
-    else if(s_state==RADIO_STATE_SEARCH) {
-        if((status&RDA5807_REG0A_STC) &&
-            (uint32_t)(now-s_state_at)>=250u) {
-            s_search_failed=(uint8_t)((status&RDA5807_REG0A_SF)!=0u);
-            if(!s_search_failed)radio_save_station(s_freq_units);
-            s_state=RADIO_STATE_READY;
-            if(s_full_scan) {
-                if(s_search_failed || s_station_count>=RADIO_MAX_STATIONS ||
-                    s_freq_units>=4320u ||
-                    (s_scan_last_freq && s_freq_units<=s_scan_last_freq))
-                    s_full_scan=0u;
-                else {
-                    s_scan_last_freq=s_freq_units;
-                    radio_seek(1u);
-                }
-            }
-        }
-        else if((uint32_t)(now-s_state_at)>RADIO_SEEK_TIMEOUT_MS) {
-            s_full_scan=0u;radio_fail(6u);
-        }
+    uint16_t freq = (uint16_t)(RADIO_FREQ_MIN + RADIO_FREQ_STEP * (status & RDA5807_REG0A_CHAN_MSK));
+    if (s_state == RADIO_STATE_SEARCH) {
+        radio_search_status(freq, status, signal, now);
+        return;
+    }
+    radio_publish_status(freq, status, signal);
+    if (s_state == RADIO_STATE_TUNE_WAIT &&
+        ((status & RDA5807_REG0A_STC) || (uint32_t)(now - s_state_at) >= RADIO_TUNE_TIMEOUT_MS)) {
+        if (s_first_seek_pending)
+            radio_seek(1u);
+        else
+            s_state = RADIO_STATE_READY;
     }
 }

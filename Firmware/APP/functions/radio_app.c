@@ -46,6 +46,8 @@ static const uint8_t s_signal_icon[]={
 static const uint8_t s_speaker_icon[]={
     0x30,0x28,0x27,0x25,0x25,0x25,0x27,0x28,0x30
 };
+static const uint8_t s_speaker_left_icon[] = {
+    0x03, 0x05, 0x39, 0x29, 0x29, 0x29, 0x39, 0x05, 0x03};
 const uint8_t s_battery_icon[16] = {
     0xfc, 0xff, 0x04, 0x80, 0x07, 0x80, 0x05, 0x80, 0x05, 0x80,
     0x07, 0x80, 0x04, 0x80, 0xfc, 0xff};
@@ -99,10 +101,12 @@ void Radio_AppDraw(ui_t *ui) {
     Disp_DrawStr(16u, (uint16_t)(10 - slide), buf);
     Disp_DrawStr(44u, (uint16_t)(10 - slide),
                  LL_GPIO_IsInputPinSet(MIC_INDET_GPIO_Port, MIC_INDET_Pin) ? "OFF" : "ON");
-    Disp_DrawXBMP(69u,(uint16_t)(1-slide),6u,9u,s_speaker_icon);
+    if (s_snapshot.state == RADIO_STATE_READY && s_snapshot.stereo)
+        Disp_DrawXBMP(66u, (uint16_t)(1 - slide), 6u, 9u, s_speaker_left_icon);
+    Disp_DrawXBMP(73u, (uint16_t)(1 - slide), 6u, 9u, s_speaker_icon);
     (void)mini_snprintf(buf,sizeof(buf),":%u%%",
         (unsigned)(((uint16_t)s_snapshot.volume+1u)*100u/16u));
-    Disp_DrawStr(75u,(uint16_t)(10-slide),buf);
+    Disp_DrawStr(79u, (uint16_t)(10 - slide), buf);
     /* Collar-Radio battery icon driven by the SW6306 cache. When pack
      * capacity <=5%, flash the entire icon; above 5%, show the outline
      * and 0/1/2/3/4 bars at >=10/30/50/70% respectively.
@@ -303,9 +307,9 @@ void Radio_AppRun(ui_t *ui) {
         return;
     }
     if(action==UI_ACTION_MINUS)
-        (void)RadioAlgo_Request(RADIO_CMD_VOLUME_DOWN);
-    else if(action==UI_ACTION_PLUS)
         (void)RadioAlgo_Request(RADIO_CMD_VOLUME_UP);
+    else if (action == UI_ACTION_PLUS)
+        (void)RadioAlgo_Request(RADIO_CMD_VOLUME_DOWN);
     else if(action==UI_ACTION_UP)
         (void)RadioAlgo_Request(RADIO_CMD_FREQUENCY_DOWN);
     else if(action==UI_ACTION_DOWN)
