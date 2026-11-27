@@ -1,15 +1,17 @@
 # Firmware/APP · 应用层
 
-业务逻辑所在地，不直接操作寄存器。按职责分两类：
+应用层按系统服务、设备算法、独立应用与界面划分。底层外设初始化与传输状态机由 Core/BSP 持有，应用通过设备服务边界访问硬件。
 
 | 目录 | 放什么 |
 |---|---|
 | `framework/` | 系统级基础服务：`beep_service`（TIM3 PWM + 队列）、`time_service`（RTC 时间与日历编辑）、`alarm_service`（双闹钟与响铃页）、低功耗框架 |
 | `algorithm/` | 设备服务与算法：ADC/功率、FM、传感器、系统配置、故障记录以及标定与滤波 |
+| `functions/` | 独立 MiaoUI WORD 应用、游戏与工具，读取缓存和提交命令；详见 [应用说明](functions/README.md) |
+| `MiaoUI/` | 菜单、界面、交互、动画与绘图适配；字体见 [fonts/README.md](MiaoUI/fonts/README.md) |
 
 规则：
 
-- 通过 `BSP/` 设备驱动与 `Core/` HAL 适配访问硬件；`algorithm/` 允许在设备服务边界调用驱动和 HAL，但应把可以独立测试的计算尽量与硬件交互隔离。
+- 通过 `BSP/` 设备驱动与 `Core/` HAL/LL 适配访问硬件；`algorithm/` 允许在设备服务边界调用驱动和 HAL，但应把可以独立测试的计算尽量与硬件交互隔离。
 - 新增模块 `xxx.c/.h` 后必须在 Keil 工程里加入 `Application/APP` 分组。
 - 基础系统服务集中在 `framework/`，可复用的设备算法与状态机集中在 `algorithm/`；不再使用空的 `Peripheral/` 和 `APP/services/` 目录。
 
@@ -43,7 +45,7 @@ SW6306 (PB02B-derived, 5 mΩ battery shunt for PB10A), SC7A20 (PB02B-derived) an
 - `APP/app_task.c` registers coroOS tasks and polls shared services
 - `Scheduler/coroOS.*` now wraps the actual Protothreads 1.4 (`Scheduler/pt1.4/pt.h`, `pt-sem.h`, `lc-switch.h`), as in Handheld-Fan; ten separate cooperative tasks are registered (not FreeRTOS, no priorities)
 - `APP/framework/beep_service.c` consolidates the former beep hardware PWM and nonblocking melody sequencer; `APP/framework/time_service.c` consolidates RTC calendar/uptime calculations with the MiaoUI time editor. Remaining device logic, fault recorder and system algorithms reside in `APP/algorithm/`
-- `APP/functions/` hosts independent user-facing MiaoUI applications. Powerbank displays cached SW6306 voltage, current, percentage and protocol; Radio is forced low-power at boot and starts only when its WORD page is entered (or kept running in explicit background ON mode)
+- `APP/functions/` hosts independent user-facing MiaoUI applications. Powerbank displays cached SW6306 voltage, current, percentage and protocol; Radio queues a boot power-down write, then its own service starts it in AUTO with a debounced inserted headset or in explicit ON regardless of UI visibility; OFF does not start it
 - `APP/i18n.c/h` contains the English/Simplified Chinese catalog.
   `Settings > System > Language` is a RAM-only switch immediately before
   !System Reset: ON = Chinese (default), OFF = English.
@@ -124,7 +126,8 @@ SW6306 fields until a fresh result arrives.
 Basic bench bring-up has been performed for the buzzer, FM radio and ADC.
 The temporary boot-time hardware test, including forced FM auto-seek, has
 been removed. Startup now always runs the standard MiaoUI/coroOS
-scheduler; Radio starts only when its menu application is entered.
+scheduler. Radio starts according to AUTO/ON/OFF and the debounced
+headphone input, independent of entering the menu application.
 
 `ADC_RTC_AuxAThread` owns ADC calibration and four-channel LL/DMA scans.
 It publishes the mean of 16 scans sampled about 25 ms apart in every
@@ -341,6 +344,11 @@ PB02A source: phase 0 ADC (VBUS/IBUS/VBAT/IBAT), phase 1 Status,
 phase 2 Port/CC, phase 3 idle, phase 4 Power/protocol, with Capacity
 once per two complete cycles (about one second). The sixth thread is now `PowerAlgo_SW6306Thread`, whose Init and data-load calls yield through Protothreads while the I2C1 transfer is active. Other tasks continue to run.
 
+Statistics > Battery places calibrated Battery Current (A, two decimals)
+after Battery Voltage (V, two decimals); both use the same SW6306 ADC
+mirror validity and display unavailable on failed reads. The current
+uses the configured BAT calibration, not the BUS gain.
+
 The Powerbank WORD page displays a RAM snapshot only: shared BUS
 mV/mA (not separate per-port current sensing), battery mV/mA,
 capacity %, negotiated protocol, and C1/A1 path flags. UI labels
@@ -391,10 +399,11 @@ graphics with a static approximation.
   and the bottom time/date row in from below (`y + offset`) using
   the cursor PID. The central frequency and 43/45/47px station ruler
   keep their original coordinates.
-- Five-row menu: original `y=20+i*10`, title/separator, fixed label
-  at x=2 and dynamic value at x=74. The selected row has a 10px high
-  XOR inverted highlight with separate PID-animated **Y position**
-  and **text-width**, not a static full-row outline.
+- Five-row menu: English keeps `y=20+i*10`, title/separator and a 10px
+  XOR cursor. Chinese omits the title, uses `y=12+i*12`, and extends the
+  XOR cursor 1px right and bottom (13px high) without changing row pitch.
+  Labels retain x=2 (option row x=1), values x=74. Separate PID animations
+  govern **Y position** and **text-width**, not a static full-row outline.
 - No blocking `while(1)`: the original animation positions now persist
   across successive `Radio_AppRun()` calls. Each frame advances the
   existing MiaoUI `UI_Animation()` PID using the same tuned coefficients,
@@ -439,7 +448,9 @@ READY with ST set; the original speaker and volume text stay at x=71
 and x=77. Chinese mode names are 自动搜台 / 预设电台 / 手动调频.
 
 Every successful hardware SEEK re-samples the raw hit and probes both
-adjacent 100 kHz channels, skipping out-of-band frequencies. After STC,
+adjacent 100 kHz channels (search direction first, opposite second),
+skipping out-of-band frequencies. Preset full scan always seeks upward;
+Search supports both directions. After STC,
 take two fresh valid/ready RSSI samples 100 ms apart (at least 100 ms
 before the first); score each frequency by the lower reading. A valid
 neighbour must improve the original score by at least 2, or replace an
@@ -448,8 +459,23 @@ hit. Wait for final TUNE completion before saving or continuing.
 For repeated Search/full scans, if the correction moved behind the raw
 hit, tune back to that hit before starting the next SEEK, so a false
 adjacent hit cannot trap or prematurely end a forward scan. No automatic
-merging of adjacent presets. Manual tuning, the five-item menu, SEEKTH=8
-and AFC remain unchanged.
+merging of adjacent presets. The final full-scan frontier is the greater
+of the hardware hit and confirmed frequency. A repeated/non-increasing
+raw hit terminates full scan without saving it. Manual frequency and
+preset tuning bypass the confirmation and clear the prior seek anchor.
+SEEKTH=8, AFC and the five-item menu remain unchanged.
+RSSI is not a guaranteed measure of carrier centre or audio quality;
+antenna motion and adjacent broadcasts may affect the comparison.
+
+During SEARCH confirmation, the 5 ms Radio service starts fresh sample
+requests at 100 ms intervals and consumes their results promptly;
+ordinary status polling retains its 180 ms interval. Probe TUNE may be
+skipped on the 1200 ms timeout, but final/anchor TUNE timeout is an error.
+The UI continues to show Seeking... during internal probes.
+For normal TUNE_WAIT, the requested frequency is published immediately
+and held until STC and READCHAN match; after 1200 ms, readback becomes
+the fallback. Thus the marker does not jump back to the old preset during
+an ordinary successful tune.
 
 CONF short release enters the five-row settings menu. In that menu
 physical UP/DOWN selects items, CONF short release activates them:
@@ -462,7 +488,7 @@ MIC_INDET is low and turns it off when the jack becomes high, even
 after leaving the Radio UI. ON operates without checking the headphone
 input, including in STOP1; OFF always turns the receiver off. All
 three modes keep normal PM auto-sleep policy independent of playback,
-unless the explicit Sleep&Wake > Radio Keep Awake switch is enabled.
+unless the explicit Sleep & Wake > Radio Awake switch is enabled.
 With Keep Awake enabled, ON prevents automatic sleep, whereas AUTO
 does so only while headphones are inserted. Explicit root BACK sleep
 is still a deliberate override of the idle timer.
@@ -660,7 +686,7 @@ thresholds must still be verified on real hardware.
   Lower-priority navigation is suppressed while an alarm rings.
   A higher-priority target can replace a temporary lower-priority
   application without losing the original bookmark. No nested stack.
-- `Settings > Display`: `Headphone Nav`, `USB Port Nav` and
+- `Settings > System`: `Headphone Nav`, `USB Port Nav` and
   `Aux-A Nav` are three independent, default-ON, RAM-only switches
   immediately before `!Burn-in Test`. They control page changes,
   not the Radio power policy or SW6306 output mode. Radio's MiaoUI leave
@@ -959,7 +985,9 @@ pixel station ruler even when the RDA5807 hardware is powered down.
 It only shows "Seeking..." during an active search and "Tuning..."
 during an active tune; it no longer overwrites the frequency with
 "Radio OFF". The top status row already reports headphone connection.
-This is display-only and does **not** start the receiver.
+This is display-only and does **not** start the receiver. During preset
+or manual TUNE_WAIT, hold the requested marker until STC confirms the
+matching channel (or the timeout publishes actual readback).
 
 The menu mosaic transition repair was extracted **only** from existing
 `feature/miaoui-adaptive-games-20261121` at
