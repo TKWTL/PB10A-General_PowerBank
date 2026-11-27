@@ -6,6 +6,11 @@ The 64×128 R1 portrait view uses 4×4 blocks on a 5px pitch with a one-pixel
 gap at both side walls. A dashed line at y=10 marks the bottom of the
 top-out zone (row 1, zero-based). The title, HUD and NEXT preview use
 u8g2 primitives; the OLED buffer and four sound cues are unchanged.
+The well is stored as nineteen `uint16_t` row masks (38 B, 12 valid
+column bits per row). Projected piece-row masks drive collision, locking
+and full-row detection; cleared rows are compacted in place. No shared
+bitmap cache is needed. The adapter requests a 33 ms frame and discards
+elapsed gaps over 150 ms.
 
 Turn the board 90° counterclockwise as for Pac-Man. Portrait LEFT/RIGHT
 move, DOWN speeds up the fall, UP rotates counterclockwise and short CONF
