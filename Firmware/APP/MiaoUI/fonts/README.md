@@ -31,6 +31,13 @@ MiaoUI-based font, byte-for-byte. Existing Han glyph records are
 unchanged; the Unicode index reflects the current translation catalog. The
 360-glyph array occupies 8,175 bytes; the ASCII/degree advance is 6px
 and Han advance is 12px. Layout still measures actual text width.
+The current Radio mode labels are 自动搜台 / 预设电台 / 手动调频;
+the last catalog update replaced one Han glyph without growing the
+8,175-byte array. When changing catalog text (including About), audit
+coverage before regenerating the Unicode index. Keep the 96 original
+Latin/degree records unchanged, and do not assume proportional ASCII
+metrics from the Han source BDF. Chinese Radio settings use 12px row
+pitch and an additional pixel of right/bottom cursor padding.
 
 `font_home_h6w4` remains byte-for-byte identical. SOS and magnetic
 calibration no longer use it; powerbank, I2C scanner, game interiors
