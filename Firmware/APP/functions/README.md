@@ -21,7 +21,7 @@ them.
   and long hold exits. See [README](games/invaders/README.md).
 
 - `games/bomber/`: GPL-3.0-or-later Tiny Bomber port by Daniel C.
-  Original landscape 128x64 bitmaps, five characters, one bomb, fixed cross
+  Original landscape 128x64 bitmaps, five characters, one bomb, wall-clipped 40×40 cross
   blast and three 14-byte destructible maps. Four random-wall-turn enemies,
   three lives and accelerated enemies after all three maps. Native OLED DMA,
   CONF short-release bomb / hold-to-pause / long-hold exit, normal auto STOP1.
@@ -35,10 +35,11 @@ them.
   RAM. Automatic STOP1 is allowed. See [game documentation](games/pacman/README.md).
 
 - `games/arkanoid/`: Tiny Arkanoid by Daniel Champagne, with five original
-  layouts and portrait controls. See [game documentation](games/arkanoid/README.md).
+  layouts, native page rendering, 2 ms logic and 32 ms frame request. See [game documentation](games/arkanoid/README.md).
 
 - `games/tetris/`: Tetris v3, with the original 12×19 well, seven
-  pieces and graphics. See [game documentation](games/tetris/README.md).
+  pieces and graphics, a 38-byte row-mask well and 33 ms frame request in
+  the 64×128 portrait view. See [game documentation](games/tetris/README.md).
 
 - `i2c_scanner.c/.h`: visual UI restored from Collar-Radio: initial
   1.5s title `I2C / Scanner` in the original 24px font, followed by
@@ -103,6 +104,6 @@ angle evaluation. Short stale gaps
 
 Shared foundation services such as RTC calendar editing and the buzzer
 are provided by `APP/framework/`; device logic resides in `APP/algorithm/`.
-For new MiaoUI applications, register their callbacks/pages in `ui_conf.c`
+For new MiaoUI applications, register their callbacks/pages in `APP/MiaoUI/ui_conf.c`
 and their sources in the Keil project. Do not put them in CubeMX-managed
 folders.
