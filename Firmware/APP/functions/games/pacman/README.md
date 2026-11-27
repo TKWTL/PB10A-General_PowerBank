@@ -56,7 +56,9 @@ but is **not** played to avoid prolonged exclusive buzzer use.
   original characters/fruits/music.
 - `LICENSE-GPL-3.0` full upstream license (GPL-3.0-or-later).
 
-Keil compilation and STOP1 device validation remain to be done.
+Validation: use the integrated Keil target; recheck turn buffering,
+corner power-pill masks, leave/re-entry and STOP1 on the board after changes.
+The source description is not a claim of a new hardware test.
 
 ## Game-index icon
 
