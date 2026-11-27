@@ -10,8 +10,12 @@ buttons become the paddle's left and right. Tap CONF to start, and tap again
 to serve. Hold CONF to pause. A long hold returns to the Game menu. Re-entry resumes the retained ball,
 paddle, bricks, lives and level in RAM.
 
-Ball position and velocity use hundredths of a pixel. The fixed-step clock
-discards elapsed time on STOP1 wake. Short PWM cues use the original
+Ball position and velocity use hundredths of a pixel. `game_arkanoid.c`
+uses a nominal 2 ms logic step, 32 ms frame request and a 150 ms gap
+threshold; re-entry resets the timebase rather than catching up. The
+400 ms next-level delay is advanced in logic ticks. Arkanoid does not
+acquire the shared 1024-byte game asset cache. The existing OLED buffer
+is the render target. Short PWM cues use the original
 delay-loop tone parameters, including the first two notes of the title cue.
 
 [Source project](https://github.com/phoenixbozo/TinyJoypad) ·
