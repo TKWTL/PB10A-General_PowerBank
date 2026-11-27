@@ -470,8 +470,9 @@ Radio page is not visible.
   At 64 MHz PCLK, prescaler 128, counter/window 0x7F gives nominal
   524.288 ms. Feed only after a complete scheduler round with an advancing
   Millis tick, before ordinary Sleep; refresh once immediately before
-  actual STOP1. WWDG uses APB and stops during STOP1, not during ordinary
-  Sleep. No Option Bytes, IWDG, RTC wakeup or extra actor.
+  actual STOP1. Clear RCC APBSMENR1.WWDGSMEN immediately before STOP1,
+  then restore it on return (including an interrupted entry). Ordinary
+  Sleep remains monitored. No Option Bytes, IWDG, RTC wakeup or extra actor.
 - Inspect `g_watchdog_max_round_ms` for maximum round duration in awake
   SysTick time, excluding scheduler idle and suspended STOP time.
   `g_watchdog_trace` holds round, tick, thread index (0..9 in app_task's

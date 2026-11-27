@@ -63,9 +63,13 @@ void Watchdog_EndRound(void) {
 void Watchdog_BeforeStop(void) {
     watchdog_phase(WATCHDOG_PHASE_STOP, g_watchdog_trace.thread);
     watchdog_feed(g_watchdog_trace.tick); /* reserve full wake margin */
+    /* STM32G0 WWDGSMEN also controls Stop, not just ordinary Sleep. */
+    LL_APB1_GRP1_DisableClockStopSleep(LL_APB1_GRP1_PERIPH_WWDG);
+    __DSB(); /* complete the RCC write before WFI */
 }
 
 void Watchdog_AfterStop(void) {
+    LL_APB1_GRP1_EnableClockStopSleep(LL_APB1_GRP1_PERIPH_WWDG);
     watchdog_phase(WATCHDOG_PHASE_RESUME, g_watchdog_trace.thread);
 }
 

@@ -29,6 +29,7 @@ void Watchdog_Init(void);
 void Watchdog_BeginRound(void);
 void Watchdog_Thread(uint8_t index);
 void Watchdog_EndRound(void);
+/* Pair around actual STOP entry; ordinary scheduler Sleep stays monitored. */
 void Watchdog_BeforeStop(void);
 void Watchdog_AfterStop(void);
 
