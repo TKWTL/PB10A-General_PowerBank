@@ -711,12 +711,20 @@ __attribute__((noinline)) void RadioAlgo_Poll(void) {
         radio_search_status(freq, status, signal, now);
         return;
     }
-    radio_publish_status(freq, status, signal);
-    if (s_state == RADIO_STATE_TUNE_WAIT &&
-        ((status & RDA5807_REG0A_STC) || (uint32_t)(now - s_state_at) >= RADIO_TUNE_TIMEOUT_MS)) {
+    if (s_state == RADIO_STATE_TUNE_WAIT) {
+        /* radio_tune() publishes the requested frequency immediately.
+         * READCHAN may still report the old channel until TUNE completes;
+         * do not let it move the station marker back during that interval. */
+        if (!((status & RDA5807_REG0A_STC) && freq == s_freq_units) &&
+            (uint32_t)(now - s_state_at) < RADIO_TUNE_TIMEOUT_MS)
+            return;
+        /* On timeout retain the existing fallback to the actual readback. */
+        radio_publish_status(freq, status, signal);
         if (s_first_seek_pending)
             radio_seek(1u);
         else
             s_state = RADIO_STATE_READY;
+        return;
     }
+    radio_publish_status(freq, status, signal);
 }

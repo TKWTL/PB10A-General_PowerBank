@@ -226,8 +226,9 @@ static void radio_draw_menu(ui_t *ui) {
         if (i == s_menu_index)
             selected_label = label;
     }
-    width_target=(uint16_t)(selected_label?
-        Disp_GetUTF8Width(selected_label)+2u:2u);
+    /* Chinese glyphs reach the bottom of the original 12px cursor.
+     * Add one pixel of right/bottom padding without changing row pitch. */
+    width_target = (uint16_t)(selected_label ? Disp_GetUTF8Width(selected_label) + 2u + localized : 2u);
     if(width_target>UI_HOR_RES)width_target=UI_HOR_RES;
 
     /* Collar's UI_Animation label-width + Y-position pair, with its
@@ -238,7 +239,7 @@ static void radio_draw_menu(ui_t *ui) {
                                 s_cursor_y_q, &s_cursor_y_pid);
     Disp_SetDrawColor(&xor_color);
     Disp_DrawRBox(0u, (uint16_t)(UI_FXI(s_cursor_y_q) + 1),
-                  (uint16_t)UI_FXI(s_cursor_w_q), space, 0u);
+                  (uint16_t)UI_FXI(s_cursor_w_q), space + localized, 0u);
     Disp_SetDrawColor(&fg);
     Disp_SendBuffer();
 }
