@@ -24,6 +24,10 @@ games/
     LICENSE-...            Source license, original author attribution
 ```
 
+The layout is a default for ports with a separate core; Tetris keeps its
+row-mask simulation in `game_tetris.c`. Keep the actual module boundaries
+rather than splitting a working small game solely to match the template.
+
 Do not create a separate generic game engine, thread, full-size image buffer,
 malloc allocator or EEPROM/Flash save merely to standardize code. Reuse the
 existing Beep Service and MiaoUI display/keyboard interfaces.
@@ -87,9 +91,11 @@ is not part of the 30px UI and may be dropped; all visible data stays intact.
 6. Never call `pm_api_set_sleep_block()` or `pm_api_refresh_idle()`
    for a game. On STOP1 wake or a long update gap (current threshold
    roughly 150ms), discard elapsed simulation backlog rather than
-   accelerating enemy motion, bullets, animations or bomb timers.
-7. Short audio cues use nonblocking `beep_enqueue()` without
-   preempting active system tones.
+   accelerating enemy motion, bullets, animations or bomb timers. `Millis()` itself
+   does not advance in STOP1; re-entry resets each adapter's baseline.
+7. Short audio cues use nonblocking `beep_enqueue()` only when
+   `beep_busy()` is false. Fault tones and the calendar-alarm loop retain
+   priority over normal game sounds.
 
 ## Collision and sprite consistency lessons
 
@@ -126,7 +132,7 @@ is not part of the 30px UI and may be dropped; all visible data stays intact.
    in `MDK-ARM/PB10A-General_PowerBank.uvprojx`.
 6. On device, recheck actual button directions, visuals, damage-vs-art,
    sound, exit and STOP1 resume. Compare Keil .map `Code + RO + RW`
-   before/after under `-Os` + LTO: source reuse does not guarantee
+   before/after under `-Oz` + LTO: source reuse does not guarantee
    smaller linked Flash.
 
 ## Shared 1 KiB cache, byte RLE and sparse dots (PB10A implementation)
@@ -185,4 +191,6 @@ is not part of the 30px UI and may be dropped; all visible data stays intact.
   now encoded in **2064 bytes** total including Pac-Man dot records.
   Gross static data reduction is **5104 bytes**, before decoder,
   pointers and alignment. Measure real `Program Size` after Keil
-  `-Os`+LTO; cache adds 1024 bytes to ZI RAM.
+  `-Oz`+LTO; cache adds 1024 bytes to ZI RAM. Tetris and Arkanoid do not
+  acquire it. Tetris stores its 12×19 well in 19 `uint16_t` row masks
+  (38 B); use mask intersection and in-place row compaction.
