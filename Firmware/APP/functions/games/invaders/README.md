@@ -44,7 +44,10 @@ hardware tuning may be needed to recover the original subjective pacing.
 | CONF held | Pause the game (no logic steps) |
 | CONF long hold | Return to game menu (MiaoUI BACK) |
 
-Game state is static RAM only. No peripheral-specific coroutine, persistent
+Game state is static RAM only. Leaving the page releases the shared
+backdrop cache, not the simulation state; re-entry rebuilds the backdrop
+and resets the elapsed-time baseline. MCU reset discards the session.
+No peripheral-specific coroutine, persistent
 writes, dynamic allocation, PM sleep lock or artificial idle refresh is used.
 After a STOP1 gap over 150ms the accumulated simulation time is discarded;
 projectiles and movement do not run at accelerated speed after wake.
