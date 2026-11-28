@@ -66,7 +66,7 @@ git commit -m "firmware: PB10A-General_PowerBank v1.0.0 (tag v1.0.0)"
 
 拷入后核对三处版本号一致：文件名、`Firmware/README.md` 的记录、外层 git tag。
 忘记这一步的后果是发布包里没有固件——所以它被单独列为一步，而不是附在第 4 步里。
-详见 [`../Hardware/Manufacturing/README.md`](../Hardware/Manufacturing/README.md)。
+详见 [`Hardware/Manufacturing/README.md`](Hardware/Manufacturing/README.md)。
 
 ## 5. 检查：许可与第三方声明
 

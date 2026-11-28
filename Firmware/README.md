@@ -1,6 +1,8 @@
 # Firmware · STM32G070KBTx
 
-**状态：主要功能已集成，进入功能收敛与长期可靠性验证阶段。** ADC、蜂鸣器、FM 等基础硬件已有板级联调记录；当前固件包含多口电源管理、FM、传感器、双 RTC 闹钟、游戏、中英文界面及故障恢复。最新源码的所有组合与低功耗行为仍需整机回归，本文不代表完成新一轮编译或实测。调试经验见 [`Docs/Debug/`](../Docs/Debug/README.md)，早期 OLED 记录见 [`Docs/OLED_BRINGUP.md`](../Docs/OLED_BRINGUP.md)。
+**状态：主要功能已集成，进入功能收敛与长期可靠性验证阶段。** ADC、蜂鸣器、FM 等基础硬件已有板级联调记录；当前固件包含多口电源管理、FM、传感器、双 RTC 闹钟、游戏、中英文界面及故障恢复。最新源码的所有组合与低功耗行为仍需整机回归，本文不代表完成新一轮编译或实测。调试经验见 [`Debug/`](Debug/README.md)，早期 OLED 记录见 [`Debug/OLED_BRINGUP.md`](Debug/OLED_BRINGUP.md)。
+
+用户操作与复刻资料见 [产品文档](../Docs/README.md)。Keil 远程同步约定见 [GIT_WORKFLOW.md](GIT_WORKFLOW.md)。
 
 ## 分层与依赖
 

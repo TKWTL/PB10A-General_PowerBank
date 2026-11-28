@@ -26,7 +26,7 @@ disables it, and keypad EXTI can wake STOP1. External nodes reside in
 `APP/algorithm/power_algo.c`, `sc7a20_algo.c`, `mmc5603_algo.c`, `bmp180_algo.c`, `radio_algo.c`;
 OLED and STM32 platform nodes reside in `pm_device_builtin.c`.
 Power sequencing, callback order and hardware caveats are recorded in
-[`Docs/Debug/2026-11-19_pm_callbacks.md`](../../Docs/Debug/2026-11-19_pm_callbacks.md).
+[`Firmware/Debug/2026-11-19_pm_callbacks.md`](../Debug/2026-11-19_pm_callbacks.md).
 Board-level current and wake reliability still require measurement.
 
 
@@ -248,7 +248,7 @@ rank 3 and STM32G0 factory TS_CAL1/TS_CAL2.
 The reproduced G0 calibration failure (`hadc1.State=0x13`,
 `ErrorCode=0x01`, second `ADC_DISABLE_TIMEOUT` branch) and the verified
 CubeMX clock adjustment are documented in
-[`Docs/Debug/2026-11-19_stm32g0_adc_calibration.md`](../../Docs/Debug/2026-11-19_stm32g0_adc_calibration.md).
+[`Firmware/Debug/2026-11-19_stm32g0_adc_calibration.md`](../Debug/2026-11-19_stm32g0_adc_calibration.md).
 
 ### SW6306 20V input request and integer SHUNT calibration
 
@@ -275,7 +275,7 @@ a sink or charging; other settings remain eligible. A failed reinsert
 is retried by the same SW6306 owner before metering; an explicit manual
 BUS cycle supersedes it. No new scheduled thread is introduced.
 Earlier measurements are in the
-[SW6306 debug note](../../Docs/Debug/2026-11-19_sw6306_monitor.md).
+[SW6306 debug note](../Debug/2026-11-19_sw6306_monitor.md).
 
 ### Fault history and non-modal notices
 

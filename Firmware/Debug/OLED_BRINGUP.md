@@ -1,4 +1,6 @@
-# PB10A OLED bring-up (not hardware-tested)
+# PB10A OLED bring-up (historical record)
+
+> 历史联调记录：以下正文保留早期 OLED 接入阶段的配置、预期行为与验证边界，不是当前固件的操作或实现说明。现行实现见 [Firmware 总览](../README.md) 和 [BSP](../BSP/README.md)。
 
 Scope: make the STM32G070KBTx drive a 128x64 SSD1306 OLED over
 SPI1 TX DMA with the MiaoUI/u8g2 drawing stack and cooperative coroOS.

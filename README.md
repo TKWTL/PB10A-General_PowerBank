@@ -1,6 +1,13 @@
 # PB10A · General PowerBank
 
-> **项目状态：硬件联调与基础业务接入。** OLED、MiaoUI/coroOS、设备休眠回调已接入；SW6306 正在验证初始化、缓存监控与端口睡眠保护。参见 [`Docs/OLED_BRINGUP.md`](Docs/OLED_BRINGUP.md)。
+> **项目状态：主要功能已集成，进入功能收敛与长期可靠性验证阶段。** 实测性能与验证边界见整机测试报告。
+
+## 产品文档
+
+- [用户说明书](Docs/User_Manual.md)：功能与操作（待完善）。
+- [组装指南](Docs/Assembly_Guide.md)：制造与复刻（待完善）。
+- [整机测试报告](Docs/Test_Report.md)：实际性能、测试工况及待测项。
+- [软件实现](Firmware/README.md) · [硬件资料](Hardware/README.md) · [文档导航](Docs/README.md) · [发布流程](RELEASE.md)。
 
 ## 基本信息
 
@@ -21,16 +28,16 @@
 | `Firmware/Core/Inc`、`Core/Src` | CubeMX 生成层；只允许改 `USER CODE BEGIN/END` 段内的代码 |
 | `Firmware/Drivers/` | ST HAL/LL + CMSIS，第三方代码，不手改 |
 | `Firmware/APP/` | 应用层：`framework/`（基础时间、蜂鸣器与低功耗服务）、`algorithm/`（设备状态机/传感器/功率算法）、`functions/`（应用页面） |
-| `Firmware/BSP/` | 板级支持：OLED、按键、蜂鸣器、调试串口等板载人机与调试接口 |
+| `Firmware/BSP/` | 板级支持：OLED、按键、外部功能芯片、Millis 与 WWDG 等板级设备支持 |
 | `Firmware/MDK-ARM/` | Keil 工程、启动文件、RTE、调试器配置；产物输出到 `Objects/`、`Listings/` |
-| `Docs/` | 实验报告、协议与接口说明、测量原始数据 |
+| `Docs/` | 用户说明书、组装指南、整机测试报告 |
 | `Hardware/` | 原理图、PCB、BOM、结构件 |
 | `Images/` | `Assembly/` 装配、`Product/` 成品、`Testing/` 测试波形与截图 |
-| `相关数据手册/` | 关键器件数据手册，按器件类别分目录；已入库供远程 agent 查阅，版权属原厂，发布前须从历史移除（见 `Docs/RELEASE.md`） |
+| `相关数据手册/` | 关键器件数据手册，按器件类别分目录；已入库供远程 agent 查阅，版权属原厂，发布前须从历史移除（见 `RELEASE.md`） |
 
 分层以 `APP → BSP → Core/Drivers` 为主要方向；外接设备寄存器驱动位于 `BSP/`，系统基础服务位于 `APP/framework/`，设备算法位于 `APP/algorithm/`。`Core` 与 `Drivers` 保留生成代码和厂商库，避免引入应用业务依赖。
 
-## 快速开始
+## 固件开发快速开始
 
 1. 用 STM32CubeMX 打开 `Firmware/PB10A-General_PowerBank.ioc` 改外设，重新生成代码（工程名与目录保持不变）。
 2. 用 Keil MDK-ARM 打开 `Firmware/MDK-ARM/PB10A-General_PowerBank.uvprojx`，Build 目标 `PB10A-General_PowerBank`。

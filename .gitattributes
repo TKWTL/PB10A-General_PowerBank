@@ -7,7 +7,7 @@
 *.uvprojx  text eol=lf
 # uvoptx 是"本机调试状态"却仍需入库(调试器选择、Flash 下载算法、断点)。
 # 它天然会在多机同步时冲突,且冲突内容没有合并意义,故挂自定义驱动:
-# 冲突时保留本地一份。驱动定义在仓库根 .gitconfig,引入方式见 Docs/GIT_WORKFLOW.md。
+# 冲突时保留本地一份。驱动定义在仓库根 .gitconfig,引入方式见 Firmware/GIT_WORKFLOW.md。
 *.uvoptx   text eol=lf merge=keil-uvoptx
 
 # 网表(Hardware/Preview/*.tel,Protel/Altium 文本导出)是纯文本:
@@ -70,7 +70,7 @@ Images/**/README.md  text diff
 Images/**/.gitkeep   text diff
 
 # 相关数据手册/:器件手册版权属原厂,只供本工程与远程 agent 查阅,不随发布分发。
-# 已入库;发布前必须 git filter-repo 重写历史移除,仅删文件不够(见 Docs/RELEASE.md)。
+# 已入库;发布前必须 git filter-repo 重写历史移除,仅删文件不够(见 RELEASE.md)。
 # export-ignore 是兜底:git archive 打出的发布包不含该目录。
 相关数据手册        export-ignore
 相关数据手册/**      export-ignore

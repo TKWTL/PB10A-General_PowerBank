@@ -15,4 +15,4 @@
   `firmware: PB10A-General_PowerBank v1.0.0 (tag v1.0.0, 2026-01-20)`
 - 拷入后核对三处版本号一致：文件名、`Firmware/README.md` 的记录、外层 git tag。
 - `.gitignore` 刻意**不**忽略 `Hardware/**` 下的 `*.hex`/`*.bin`，所以手动拷入即可入库；
-  反过来，忘记拷入时发布包里就是没有固件的——`Docs/RELEASE.md` 的清单为此留了一步。
+  反过来，忘记拷入时发布包里就是没有固件的——[RELEASE.md](../../RELEASE.md) 的清单为此留了一步。

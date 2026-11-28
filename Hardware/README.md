@@ -1,6 +1,6 @@
 # Hardware
 
-硬件资料：原理图、PCB、BOM、结构件与制造文件。
+硬件资料：原理图、PCB、BOM、结构件与制造文件。复刻操作见 [组装指南](../Docs/Assembly_Guide.md)，测量与验证见 [整机测试报告](../Docs/Test_Report.md)。
 
 | 目录/文件 | 内容 |
 |---|---|
