@@ -112,6 +112,7 @@ typedef enum {
 #define CFG_PORT_MASK (CFG_BIT(CFG_C1_INPUT) | CFG_BIT(CFG_C1_OUTPUT) | CFG_BIT(CFG_A1_OUTPUT))
 #define CFG_PROTOCOL_MASK ((UINT32_MAX << CFG_PD_OUT) & ~CFG_BROADCAST_MASK)
 #define CFG_CHIP_SWITCH_MASK (CFG_PORT_MASK | CFG_PROTOCOL_MASK)
+#define CFG_INPUT_SWITCH_MASK (CFG_BIT(CFG_C1_INPUT) | CFG_BIT(CFG_PD_IN) | CFG_BIT(CFG_UFCS_IN) | CFG_BIT(CFG_AFC_IN) | CFG_BIT(CFG_SCP_IN) | CFG_BIT(CFG_VOOC_IN))
 _Static_assert(CFG_COUNT == 32, "settings command mask covers one bit per item");
 
 typedef enum {
@@ -325,6 +326,7 @@ static uint8_t s_meter_a1_on, s_meter_real_path, s_meter_real_present;
 /* Manually removed but still attached ports do not reopen for the same
  * metering session. Clear suppression when a real port goes away or opens. */
 static uint8_t s_meter_ignored;
+static uint8_t s_config_reopen; /* Real output paths owed a replacement insert. */
 static uint8_t s_meter_ports_valid;
 static uint32_t s_meter_ports_at, s_meter_attempt_at, s_meter_command_at;
 
@@ -1676,7 +1678,7 @@ THRD_DECLARE(meter_read_ports) {
 }
 
 static void meter_update_guard(void) {
-    s_idle_verified = meter_ports_fresh(Millis()) &&
+    s_idle_verified = meter_ports_fresh(Millis()) && !s_config_reopen &&
                       s_meter_a2 == METER_A2_OFF && SW6306_PowerPathsIdle();
     s_monitor.port_busy = !s_idle_verified;
     pm_api_set_sleep_block(POWER_SW_SLEEP_BLOCK, !s_idle_verified);
@@ -1752,13 +1754,38 @@ THRD_DECLARE(meter_poll) {
     THRD_END;
 }
 
+static uint8_t meter_insert_events(uint8_t paths) {
+    return (paths & SW6306_CONNECTED_A1 ? SW6306_PORTEVT_A1_INS : 0u) |
+           (paths & SW6306_CONNECTED_C1 ? SW6306_PORTEVT_C1_INS : 0u);
+}
+
+static char meter_remove_paths(coro_pt_t *pt, uint8_t paths, uint8_t *confirmed) {
+    static uint32_t started;
+    static uint8_t sent;
+    THRD_BEGIN;
+    *confirmed = 0u;
+    SW6306_OperationReset();
+    THRD_SPAWN_ARGS(SW6306_PortEvents, meter_insert_events(paths) << 1u);
+    sent = SW6306_LastOperationOK();
+    started = Millis();
+    do {
+        THRD_SPAWN_NOARG(meter_read_ports);
+        if (!sent || !s_meter_ports_valid || !(s_meter_real_path & paths))
+            break;
+        THRD_DELAY(50u);
+    } while ((uint32_t)(Millis() - started) < METER_RETRY_MS);
+    *confirmed = sent && s_meter_ports_valid && !(s_meter_real_path & paths);
+    THRD_END;
+}
+
 /* Manual cycle is based on confirmed real power paths, never synthetic A2.
  * Break before make; keep external-load requests across the transition. */
 THRD_DECLARE(bus_cycle_step) {
-    static uint8_t paths, target, remove_events;
+    static uint8_t paths, target, confirmed;
     static uint32_t started;
     THRD_BEGIN;
     s_bus_force_off = 1u;
+    s_config_reopen = 0u; /* Explicit manual switching supersedes a pending reinsert. */
     THRD_SPAWN_NOARG(meter_read_ports);
     if (s_meter_ports_valid) {
         paths = s_meter_real_path;
@@ -1770,21 +1797,9 @@ THRD_DECLARE(bus_cycle_step) {
             target = 0u;
             paths &= (uint8_t)~SW6306_CONNECTED_C1;
         }
-        remove_events = (paths & SW6306_CONNECTED_A1 ? SW6306_PORTEVT_A1_RMV : 0u) |
-                        (paths & SW6306_CONNECTED_C1 ? SW6306_PORTEVT_C1_RMV : 0u);
-        if (remove_events) {
-            SW6306_OperationReset();
-            THRD_SPAWN_ARGS(SW6306_PortEvents, remove_events);
-            if (!SW6306_LastOperationOK())
-                target = 0u;
-            started = Millis();
-            do {
-                THRD_SPAWN_NOARG(meter_read_ports);
-                if (!s_meter_ports_valid || !(s_meter_real_path & paths))
-                    break;
-                THRD_DELAY(50u);
-            } while ((uint32_t)(Millis() - started) < METER_RETRY_MS);
-            if (!s_meter_ports_valid || (s_meter_real_path & paths))
+        if (paths) {
+            THRD_SPAWN_ARGS(meter_remove_paths, paths, &confirmed);
+            if (!confirmed)
                 target = 0u;
         }
         if (target && s_meter_ports_valid && s_meter_a2 != METER_A2_OFF) {
@@ -1801,7 +1816,7 @@ THRD_DECLARE(bus_cycle_step) {
         if (target && !pm_api_ui_should_block()) {
             SW6306_OperationReset();
             THRD_SPAWN_ARGS(SW6306_PortEvents,
-                            target == SW6306_CONNECTED_A1 ? SW6306_PORTEVT_A1_INS : SW6306_PORTEVT_C1_INS);
+                            meter_insert_events(target));
             THRD_SPAWN_NOARG(meter_read_ports);
         }
         /* A manual OFF must not immediately revive an attached C1 via
@@ -1822,10 +1837,10 @@ THRD_DECLARE(bus_cycle_step) {
 
 THRD_DECLARE(battery_learn_rearm) {
     THRD_BEGIN;
-    /* The DONE sample has already updated/saved capacity. Acknowledge its
-     * event before rearming, so a new completion cannot be cleared later. */
+    /* Capacity DONE is 0xA2[5], already consumed/saved by BatteryAlgo.
+     * Clear the separate periodic gauge pending bit before rearming. */
     SW6306_OperationReset();
-    THRD_SPAWN_ARGS(SW6306_ClearEvents, SW6306_FAULT0_LEARNEND);
+    THRD_SPAWN_ARGS(SW6306_ClearEvents, SW6306_FAULT0_GAUGE_DONE);
     if (!SW6306_LastOperationOK())
         PT_EXIT(pt);
     SW6306_OperationReset();
@@ -1837,8 +1852,85 @@ THRD_DECLARE(battery_learn_rearm) {
 
 /* Only the SW6306 owner consumes dirty bits. One register operation or
  * power transaction per service slot leaves the monitor and ADC responsive. */
+static uint8_t config_input_active(void) {
+    return SW6306_IsCharging() || SW6306_IsPortC1Sink();
+}
+
+static uint32_t config_disabled(uint32_t bits) {
+    uint32_t disabled = 0u;
+    bits &= CFG_CHIP_SWITCH_MASK;
+    for (unsigned i = CFG_C1_INPUT; i < CFG_COUNT; ++i)
+        if ((bits & CFG_BIT(i)) && !s_setting_switch[i])
+            disabled |= CFG_BIT(i);
+    return disabled;
+}
+
 static uint32_t config_eligible(void) {
-    return s_config_dirty & (CFG_POWER_MASK | CFG_BROADCAST_MASK | CFG_CHIP_SWITCH_MASK);
+    uint32_t bits = s_config_dirty & (CFG_POWER_MASK | CFG_BROADCAST_MASK | CFG_CHIP_SWITCH_MASK);
+    /* Source-only 0x22 events cannot disconnect a sink session safely. */
+    if (config_input_active())
+        bits &= ~config_disabled(bits & CFG_INPUT_SWITCH_MASK);
+    return bits;
+}
+
+/* SW6306 reports one active protocol, not one code per output. PD/PPS can
+ * only use C1; DPDM families can use either physical output. */
+static uint8_t config_affected_paths(uint32_t disabled) {
+    static const uint32_t protocol_cfg[] = {
+        [SW6306_QCSTAT_QC2] = CFG_BIT(CFG_QC),
+        [SW6306_QCSTAT_QC3] = CFG_BIT(CFG_QC),
+        [SW6306_QCSTAT_QC3P] = CFG_BIT(CFG_QC),
+        [SW6306_QCSTAT_FCP] = CFG_BIT(CFG_FCP),
+        [SW6306_QCSTAT_SCP] = CFG_SCP_MASK | CFG_BIT(CFG_PD_SCP),
+        [SW6306_QCSTAT_PDFIX] = CFG_BIT(CFG_PD_OUT),
+        [SW6306_QCSTAT_PDPPS] = CFG_BIT(CFG_PD_OUT) | CFG_BIT(CFG_PPS_11) | CFG_BIT(CFG_PPS_21),
+        [SW6306_QCSTAT_PE11] = CFG_BIT(CFG_PE),
+        [SW6306_QCSTAT_PE20] = CFG_BIT(CFG_PE),
+        [SW6306_QCSTAT_VOOC1] = CFG_BIT(CFG_VOOC_OUT) | CFG_BIT(CFG_PD_VOOC),
+        [SW6306_QCSTAT_VOOC4] = CFG_BIT(CFG_VOOC_OUT) | CFG_BIT(CFG_PD_VOOC),
+        [SW6306_QCSTAT_SVOOC] = CFG_BIT(CFG_SVOOC) | CFG_BIT(CFG_PD_VOOC),
+        [SW6306_QCSTAT_SFCP] = CFG_BIT(CFG_SFCP),
+        [SW6306_QCSTAT_AFC] = CFG_BIT(CFG_AFC_OUT),
+        [SW6306_QCSTAT_UFCS] = CFG_BIT(CFG_UFCS_OUT) | CFG_BIT(CFG_PD_UFCS),
+        [SW6306_QCSTAT_UNKNOWN] = CFG_PROTOCOL_MASK & ~CFG_INPUT_SWITCH_MASK,
+    };
+    uint8_t proto = SW6306_ReadProtocolCode();
+    if (!proto || SW6306_IsCharging())
+        return 0u; /* QCSTAT describes the input when charging. */
+    uint8_t paths = 0u;
+    if (disabled & CFG_BIT(CFG_C1_OUTPUT))
+        paths |= SW6306_CONNECTED_C1;
+    if (disabled & CFG_BIT(CFG_A1_OUTPUT))
+        paths |= SW6306_CONNECTED_A1;
+    if (disabled & protocol_cfg[proto])
+        paths |= (proto == SW6306_QCSTAT_PDFIX || proto == SW6306_QCSTAT_PDPPS)
+                     ? SW6306_CONNECTED_C1
+                     : SW6306_CONNECTED_C1 | SW6306_CONNECTED_A1;
+    if (proto == SW6306_QCSTAT_PDFIX || proto == SW6306_QCSTAT_PDPPS)
+        paths &= SW6306_CONNECTED_C1;
+    if (SW6306_IsPortC1Sink())
+        paths &= (uint8_t)~SW6306_CONNECTED_C1;
+    return paths & s_meter_real_path;
+}
+
+THRD_DECLARE(config_reopen_ports) {
+    THRD_BEGIN;
+    THRD_SPAWN_NOARG(meter_read_ports);
+    if (s_meter_ports_valid) {
+        /* Do not revive C1 as a source if an input appeared while it was off. */
+        if (config_input_active())
+            s_config_reopen &= (uint8_t)~SW6306_CONNECTED_C1;
+        s_config_reopen &= (uint8_t)~s_meter_real_path;
+        if (s_config_reopen) {
+            SW6306_OperationReset();
+            THRD_SPAWN_ARGS(SW6306_PortEvents, meter_insert_events(s_config_reopen));
+            if (SW6306_LastOperationOK())
+                s_config_reopen = 0u;
+            THRD_SPAWN_NOARG(meter_read_ports);
+        }
+    }
+    meter_update_guard();
+    THRD_END;
 }
 
 /* Execute only between SW6306 transactions. The chip's Init writes the
@@ -1867,12 +1959,16 @@ static void config_restore_switches(void) {
 }
 
 THRD_DECLARE(config_step) {
-    static uint32_t selected;
+    static uint32_t selected, disabled;
     static unsigned index;
     static const setting_desc_t *desc;
-    static uint8_t value, value2, value3;
+    static uint8_t value, value2, value3, confirmed;
     THRD_BEGIN;
 
+    if (s_config_reopen) {
+        THRD_SPAWN_NOARG(config_reopen_ports);
+        PT_EXIT(pt);
+    }
     selected = config_eligible();
     if (!selected)
         PT_EXIT(pt);
@@ -1900,7 +1996,26 @@ THRD_DECLARE(config_step) {
     }
 
     /* Snapshot before yielding; a new UI change sets its bit again. */
+    disabled = config_disabled(selected & s_config_dirty);
     s_config_dirty &= ~selected;
+    if (disabled) {
+        THRD_SPAWN_NOARG(meter_read_ports);
+        if (!s_meter_ports_valid || ((disabled & CFG_INPUT_SWITCH_MASK) && config_input_active()))
+            goto retry;
+        if ((disabled & ~CFG_INPUT_SWITCH_MASK) && s_meter_real_path && !SW6306_IsCharging()) {
+            SW6306_OperationReset();
+            THRD_SPAWN_NOARG(SW6306_PowerLoad);
+            if (!SW6306_LastOperationOK() || !SW6306_ValidateInitialized())
+                goto retry;
+            s_config_reopen = config_affected_paths(disabled);
+            if (s_config_reopen) {
+                meter_update_guard();
+                THRD_SPAWN_ARGS(meter_remove_paths, s_config_reopen, &confirmed);
+                if (!confirmed)
+                    goto retry;
+            }
+        }
+    }
     SW6306_OperationReset();
     /* Protothreads resume through an enclosing switch: keep all
      * wait points outside any nested switch. */
@@ -1925,8 +2040,13 @@ THRD_DECLARE(config_step) {
     } else if (index == CFG_UFCS_BROADCAST) {
         THRD_SPAWN_NOARG(SW6306_UFCSBroadcast);
     }
-    if (!SW6306_LastOperationOK())
-        s_config_dirty |= selected;
+    if (SW6306_LastOperationOK())
+        goto finish;
+retry:
+    s_config_dirty |= selected;
+finish:
+    if (s_config_reopen)
+        THRD_SPAWN_NOARG(config_reopen_ports);
     THRD_END;
 }
 
@@ -2139,12 +2259,12 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
             }
             s_sw_owner_busy = 0u;
         } else if (s_sw_phase == 3u) {
-            if (meter_due(Millis())) {
+            if (!s_config_reopen && meter_due(Millis())) {
                 idle_reset();
                 s_sw_owner_busy = 1u;
                 THRD_SPAWN_NOARG(meter_step);
                 s_sw_owner_busy = 0u;
-            } else if (bus_idle_due(Millis())) {
+            } else if (!s_config_reopen && bus_idle_due(Millis())) {
                 /* Do not count synthetic metering during the asynchronous removal. */
                 s_bus_force_off = 1u;
                 s_sw_owner_busy = 1u;
@@ -2155,11 +2275,11 @@ char PowerAlgo_SW6306Thread(coro_pt_t *pt) {
                 meter_invalidate();
                 s_idle_verified = 0u;
                 s_bus_force_off = 0u;
-            } else if (BatteryAlgo_LearnRearmPending()) {
+            } else if (!s_config_reopen && BatteryAlgo_LearnRearmPending()) {
                 s_sw_owner_busy = 1u;
                 THRD_SPAWN_NOARG(battery_learn_rearm);
                 s_sw_owner_busy = 0u;
-            } else if (config_eligible()) {
+            } else if (s_config_reopen || config_eligible()) {
                 s_sw_owner_busy = 1u;
                 THRD_SPAWN_NOARG(config_step);
                 s_sw_owner_busy = 0u;

@@ -266,6 +266,14 @@ compile-time BAT nominal/actual shunt values (5.0/5.0 mΩ), with BUS gain
 limit encoding/readback and coulomb-counter energy. BUS calibration
 includes about 15 mA of U3 test-fixture consumption and affects only
 current readback, not hardware BUS limits. See the SW6306 BSP README.
+
+Disabling an active fast-charge source protocol now uses the existing
+confirmed port removal followed by the register change and reinsert.
+Only the affected physical C1/A1 paths are cycled (PD/PPS: C1 only);
+synthetic A2 is not cycled. Input disables remain pending while C1 is
+a sink or charging; other settings remain eligible. A failed reinsert
+is retried by the same SW6306 owner before metering; an explicit manual
+BUS cycle supersedes it. No new scheduled thread is introduced.
 Earlier measurements are in the
 [SW6306 debug note](../../Docs/Debug/2026-11-19_sw6306_monitor.md).
 

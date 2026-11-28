@@ -18,7 +18,7 @@
  * 1. 驱动状态、错误记录与运行时配置
  *============================================================================*/
 /* initialized 默认 0（零初始化，.bss）：MCU 复位后即视为未初始化，
- * SW6306_task 会对 SW6306 执行一次 ForceOff+Init（芯片复位后重置）。
+ * SW6306任务会对芯片执行Init，不主动中断输出。
  * 芯片独立复位（PowerLoad 读回失配）、ADCLoad 数据越界、MarkUninitialized
  * 手动失能同样会清 0，从而触发重新 Init。 */
 /* 同一SW6306实例的寄存器组连续I²C失败次数。 */
@@ -29,12 +29,20 @@ static uint8_t s_i2c_fail_groups;
 static uint32_t s_status_read_seq;
 static uint32_t s_port_read_seq;
 static uint8_t s_io_failed; /* sticky until SW6306_OperationReset */
+enum { SW_PAGE_UNKNOWN,
+       SW_PAGE_LOW,
+       SW_PAGE_HIGH };
+static uint8_t s_page;
+static void sw6306_page_lost(void) {
+    s_page = SW_PAGE_UNKNOWN;
+    SW6306_Status.unlocked = 0u;
+}
 void SW6306_OperationReset(void) { s_io_failed = 0u; }
 uint8_t SW6306_LastOperationOK(void) { return (uint8_t)(s_io_failed == 0u); }
 uint32_t SW6306_PortReadSequence(void) { return s_port_read_seq; }
 void SW6306_Invalidate(void) {
     SW6306_Status.initialized = 0u;
-    SW6306_Status.unlocked = 0u;
+    sw6306_page_lost();
 }
 static void sw6306_i2c_failed(void) {
     if (s_i2c_fail_groups < SW6306_I2C_FAILURE_LIMIT)
@@ -107,9 +115,22 @@ static uint8_t sw6306_batt_limit_register(uint32_t current_ma) {
 /*============================================================================
  * 3. 基础 I²C 操作、寄存器页切换与读改写
  *============================================================================*/
+/* A failed operation must not send a register address on an unknown page.
+ * 0xFF=0 is the documented low-page selector, used to resynchronize. */
+static uint8_t sw6306_access_ok(uint16_t reg) {
+    if (s_page != (reg > 0xFFu ? SW_PAGE_HIGH : SW_PAGE_LOW))
+        s_io_failed = 1u;
+    return !s_io_failed;
+}
+
 SW6306_RET SW6306_ByteWrite(SW6306_ARGS(uint16_t reg, uint8_t data)) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
+    if (s_io_failed || (reg == SW6306_CTRG_LREGSET ? data != 0u : !sw6306_access_ok(reg))) {
+        s_io_failed = 1u;
+        SW6306_MUTEX_GIVE;
+        SW6306_FUNC_ABORT;
+    }
     SW6306_Status.sendbuf[0] = data;
     SW6306_EXEC(SW6306_I2C_Transmit(SW6306_I2C_ADDR, reg, (uint8_t *)SW6306_Status.sendbuf, 1, (uint8_t *)&SW6306_Status.flag));
     SW6306_UNTIL(SW6306_Status.flag);
@@ -117,19 +138,13 @@ SW6306_RET SW6306_ByteWrite(SW6306_ARGS(uint16_t reg, uint8_t data)) {
     if (SW6306_Status.flag != I2C_ASYNC_DONE)
         s_io_failed = 1u;
 #endif
-    SW6306_MUTEX_GIVE;
-    SW6306_FUNC_END;
-}
-
-SW6306_RET SW6306_ByteRead(SW6306_ARGS(uint16_t reg, volatile uint8_t *data)) {
-    SW6306_FUNC_BEGIN;
-    SW6306_MUTEX_TAKE;
-    SW6306_EXEC(SW6306_I2C_Receive(SW6306_I2C_ADDR, reg, (uint8_t *)data, 1, (uint8_t *)&SW6306_Status.flag));
-    SW6306_UNTIL(SW6306_Status.flag);
-#if SW6306_USE_PROTOTHREAD
-    if (SW6306_Status.flag != I2C_ASYNC_DONE)
-        s_io_failed = 1u;
-#endif
+    if (s_io_failed)
+        sw6306_page_lost();
+    else if (reg == SW6306_CTRG_LREGSET || (reg == SW6306_CTRG_WREN && data == 0x81u)) {
+        SW6306_DELAY(2u); /* >=50us; publish only after settling */
+        s_page = reg == SW6306_CTRG_LREGSET ? SW_PAGE_LOW : SW_PAGE_HIGH;
+    } else if ((reg == SW6306_CTRG_WREN || reg == SW6306_CTRG_LPSET) && !data)
+        SW6306_Status.unlocked = 0u;
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
@@ -137,46 +152,49 @@ SW6306_RET SW6306_ByteRead(SW6306_ARGS(uint16_t reg, volatile uint8_t *data)) {
 SW6306_RET SW6306_BytesRead(SW6306_ARGS(uint16_t reg, uint8_t *pdata, uint16_t len)) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
+    if (!sw6306_access_ok(reg)) {
+        SW6306_MUTEX_GIVE;
+        SW6306_FUNC_ABORT;
+    }
     SW6306_EXEC(SW6306_I2C_Receive(SW6306_I2C_ADDR, reg, pdata, len, (uint8_t *)&SW6306_Status.flag));
     SW6306_UNTIL(SW6306_Status.flag);
 #if SW6306_USE_PROTOTHREAD
     if (SW6306_Status.flag != I2C_ASYNC_DONE)
         s_io_failed = 1u;
 #endif
+    if (s_io_failed)
+        sw6306_page_lost();
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
 
-/*SW6306寄存器组切换
- /通过读取版本寄存器(0x01)的值来确定目前采用的寄存器组，并进行切换
- /读出0x01时为0x00~0xFF，其他值则为0x100~0x1FF
- */
+SW6306_RET SW6306_ByteRead(SW6306_ARGS(uint16_t reg, volatile uint8_t *data)) {
+#if SW6306_USE_PROTOTHREAD
+    return SW6306_BytesRead(pt, reg, (uint8_t *)data, 1u);
+#else
+    SW6306_BytesRead(reg, (uint8_t *)data, 1u);
+#endif
+}
+
+/* Track the acknowledged page, not the aliased 0x01/0x101 register. */
 SW6306_RET SW6306_RegsetSwitch(SW6306_ARGS(uint16_t regset)) {
     SW6306_FUNC_BEGIN;
-    SW6306_MUTEX_TAKE;
-    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_REV, SW6306_Status.sendbuf);
-    if (s_io_failed) {
-        SW6306_MUTEX_GIVE;
+    if (s_io_failed)
         SW6306_FUNC_ABORT;
-    }
-    if (regset > 0xFFU) {
-        if (SW6306_Status.sendbuf[0] == 0x01) // 需要读写高位地址但目前是低地址
-        {
-            SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_WREN, 0x81);
-            SW6306_DELAY(2u); /* >=50us */
-        }
-    } else {
-        if (SW6306_Status.sendbuf[0] != 0x01) // 需要读写低位地址但目前是高地址
-        {
-            SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_LREGSET, 0x00);
-            SW6306_DELAY(2u); /* >=50us */
-        }
+    SW6306_MUTEX_TAKE;
+    if (!SW6306_Status.unlocked || s_page == SW_PAGE_UNKNOWN)
+        SW6306_SPAWN_NOARG(SW6306_Unlock_Nolock);
+    if (!s_io_failed) {
+        if (regset > 0xFFu && s_page == SW_PAGE_LOW)
+            SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_WREN, 0x81u);
+        else if (regset <= 0xFFu && s_page == SW_PAGE_HIGH)
+            SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_LREGSET, 0u);
     }
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
 
-/*SW6306修改对应寄存器的特定位，不对寄存器组作检查
+/*SW6306修改对应寄存器的特定位，调用者先选择对应寄存器组
  /遵循读-修改-写的顺序
  /将mask中为1的位按data中的对应位修改成1或0，mask中为0的位不被修改
  */
@@ -507,6 +525,11 @@ uint8_t SW6306_ConnectedPortMask(void) {
     return mask;
 }
 
+uint8_t SW6306_IsPortC1Sink(void) {
+    return (SW6306_Status.port_stat & SW6306_PORT_STA_C1SNK) ||
+           ((SW6306_Status.typec_stat & SW6306_TYPEC_C1MSK) == SW6306_TYPEC_C1SNK);
+}
+
 /* 普通休眠只要求充放电和功率通路停止。
  * CC连接、端口在线标志和历史故障不等于通路正在供电。
  * 协程模式由调用者保证PortStatusLoad成功且镜像新鲜。 */
@@ -606,12 +629,12 @@ SW6306_NOINLINE SW6306_RET SW6306_PowerLoad(SW6306_NOARG) {
 
 /* 读取充电时端口限流实时值（单位：mA） */
 uint16_t SW6306_ReadIPortLimit(void) {
-    return SW6306_Status.ibuslim_chg * 50 + 200;
+    return SW6306_Status.ibuslim_chg * 50U;
 }
 
 /* 读取充电时电池限流实时值（单位：mA，已按感测电阻校准） */
 uint16_t SW6306_ReadIBattLimit(void) {
-    uint16_t nominal_ma = (uint16_t)(SW6306_Status.ibatlim_chg * 100U + 100U);
+    uint16_t nominal_ma = (uint16_t)(SW6306_Status.ibatlim_chg * 100U);
 #if SW6306_USE_FLOAT_API
     return sw6306_scale_current(nominal_ma, SW6306_BATT_CURRENT_GAIN);
 #else
@@ -1037,25 +1060,20 @@ static SW6306_RET SW6306_Unlock_Nolock(SW6306_NOARG) {
     uint8_t rev;
 #endif
     SW6306_FUNC_BEGIN;
-    /* Keep the verified synchronous sequence: LP exit, 2ms settle,
-     * page selection, version check and three write-unlock pulses. */
+    /* Normalize the page before addressing 0x23 (0x123 is DPDM config).
+     * A normal LPSet leaves the known low page selected. */
     SW6306_Status.unlocked = 0u;
-    SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_LPSET, SW6306_LPSET_EN);
+    if (s_page != SW_PAGE_LOW)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_LREGSET, 0u);
+    if (!s_io_failed)
+        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_LPSET, SW6306_LPSET_EN);
     if (s_io_failed)
         SW6306_FUNC_ABORT;
     SW6306_DELAY(2u);
     SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_REV, &rev);
-    if (s_io_failed)
-        SW6306_FUNC_ABORT;
-    if (rev != 0x01u) {
-        SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_LREGSET, 0u);
-        if (s_io_failed)
-            SW6306_FUNC_ABORT;
-        SW6306_DELAY(2u);
-    }
-    SW6306_SPAWN_ARGS(SW6306_ByteRead, SW6306_STRG_REV, &rev);
     if (s_io_failed || !(rev & 0x0fu)) {
         s_io_failed = 1u;
+        sw6306_page_lost();
         SW6306_FUNC_ABORT;
     }
     SW6306_SPAWN_ARGS(SW6306_ByteWrite, SW6306_CTRG_WREN, 0x20u);
@@ -1079,7 +1097,6 @@ static SW6306_RET SW6306_Unlock_Nolock(SW6306_NOARG) {
 SW6306_RET SW6306_SetMaxOutputPower(SW6306_ARGS(uint8_t watt)) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
-    SW6306_SPAWN_NOARG(SW6306_Unlock_Nolock);
     if (!s_io_failed)
         SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_POSET);
     if (!s_io_failed)
@@ -1248,7 +1265,6 @@ SW6306_RET SW6306_PPSEnable(SW6306_ARGS(sw6306_pps_t pps, uint8_t enable)) {
 SW6306_RET SW6306_SetLowCurrentMode(SW6306_ARGS(uint8_t enable)) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
-    SW6306_SPAWN_NOARG(SW6306_Unlock_Nolock);
     SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_INDET4);
     SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_INDET4,
                       SW6306_INDET4_BLUTHREGSET | SW6306_INDET4_BLUTHEN | SW6306_INDET4_BLUTH4H,
@@ -1271,7 +1287,6 @@ SW6306_RET SW6306_SetLowCurrentMode(SW6306_ARGS(uint8_t enable)) {
 SW6306_RET SW6306_SetMaxInputPower(SW6306_ARGS(uint8_t watt)) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
-    SW6306_SPAWN_NOARG(SW6306_Unlock_Nolock);
     if (!s_io_failed)
         SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_PISET);
     if (!s_io_failed)
@@ -1385,7 +1400,6 @@ SW6306_RET SW6306_PortA1Remove(SW6306_NOARG) {
 SW6306_RET SW6306_A1AutoOffSet(SW6306_ARGS(uint8_t enable)) {
     SW6306_FUNC_BEGIN;
     SW6306_MUTEX_TAKE;
-    SW6306_SPAWN_NOARG(SW6306_Unlock_Nolock);
     SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_INDET1);
     SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_INDET1,
                       SW6306_INDET1_NOA1NL, enable ? 0U : SW6306_INDET1_NOA1NL);
@@ -1537,9 +1551,9 @@ SW6306_RET SW6306_VbatForceCtrlSet(SW6306_ARGS(uint8_t status)) {
     SW6306_MUTEX_TAKE;
     SW6306_SPAWN_ARGS(SW6306_RegsetSwitch, SW6306_CTRG_FORCECTL); // 切换低地址
     if (status)
-        SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_FORCECTL, SW6306_FORCECTL_VBUS, SW6306_FORCECTL_VBUS);
+        SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_FORCECTL, SW6306_FORCECTL_VBAT, SW6306_FORCECTL_VBAT);
     else
-        SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_FORCECTL, SW6306_FORCECTL_VBUS, 0x00);
+        SW6306_SPAWN_ARGS(SW6306_ByteModify, SW6306_CTRG_FORCECTL, SW6306_FORCECTL_VBAT, 0x00);
     SW6306_MUTEX_GIVE;
     SW6306_FUNC_END;
 }
@@ -1746,10 +1760,14 @@ static SW6306_NOINLINE SW6306_RET SW6306_UFCSSet(SW6306_NOARG) {
  * 18. 芯片初始化寄存器表与执行流程
  *============================================================================*/
 static const sw6306_reg_op_t s_init_high_regs[] = {
-    // 禁止放电恒温环
-    SW6306_REG_WRITE(SW6306_CTRG_DCHG0, SW6306_DCHG0_NOCT),
+    // 禁止放电恒温环；100W寄存器基准，0x4F强制功率设定优先
+    SW6306_REG_WRITE(SW6306_CTRG_DCHG0, SW6306_DCHG0_NOCT | SW6306_DCHG0_POREGSET | SW6306_DCHG0_PO100W),
     // 放电UVLO 3.0V，0.3V迟滞
     SW6306_REG_MODIFY(SW6306_CTRG_DCHG4, SW6306_DCHG4_MSK, SW6306_DCHG4_UVLOHYS_V3 | SW6306_DCHG4_UVLO_3V0),
+    // 放电NTC保护60~-10°C，保留电感设置与保留位
+    SW6306_REG_MODIFY(SW6306_CTRG_DCHG5, SW6306_DCHG5_NTC_MSK, SW6306_DCHG5_NTCOTP_60C | SW6306_DCHG5_NTCUTP_M10C),
+    // MCU模式下输入功率基准由寄存器决定，0x45优先
+    SW6306_REG_MODIFY(SW6306_CTRG_CHG0, SW6306_CHG0_PI_MSK, SW6306_CHG0_PIREGSET | SW6306_CHG0_PI100W),
     // 4.2V电池，5S
     SW6306_REG_WRITE(SW6306_CTRG_CHG1, SW6306_CHG1_BTYPE_REGSET | SW6306_CHG1_BTYPE_4V2 | SW6306_CHG1_SERIES_REGSET | SW6306_CHG1_5S),
     // 涓流充电400mA，电压迟滞0.2V，48H超时
@@ -1763,7 +1781,7 @@ static const sw6306_reg_op_t s_init_high_regs[] = {
     // 62368充电常温范围45°C
     SW6306_REG_WRITE(SW6306_CTRG_CHG10, SW6306_CHG10_TN_45C),
     // 62368放电常温范围60~-10°C
-    SW6306_REG_WRITE(SW6306_CTRG_CHG11, SW6306_CHG11_TR_NTC),
+    SW6306_REG_MODIFY(SW6306_CTRG_CHG11, SW6306_CHG11_MSK, SW6306_CHG11_TR_NTC),
     // 禁止充电恒温环，阈值100°C
     SW6306_REG_MODIFY(SW6306_CTRG_CHG12, SW6306_CHG12_MSK, SW6306_CHG12_NOCT | SW6306_CHG12_CT_100C),
     // 300kHz，峰值限流18A（充放电共用），芯片120°C过温保护
@@ -1893,14 +1911,14 @@ uint8_t SW6306_ValidateInitialized(void) {
         (SW6306_Status.pomax_set == s_pomax_target)) {
         return 1U;
     }
-    SW6306_Status.initialized = 0U;
+    SW6306_Invalidate();
     return 0U;
 }
 
 /* 手动失能已初始化标志（供 UI/算法请求强制重新初始化）。
- * 置 0 后 SW6306_task 会触发 ForceOff+Init。 */
+ * 置0后SW6306任务重新Init。 */
 SW6306_RET SW6306_MarkUninitialized(SW6306_NOARG) {
     SW6306_FUNC_BEGIN;
-    SW6306_Status.initialized = 0;
+    SW6306_Invalidate();
     SW6306_FUNC_END;
 }
