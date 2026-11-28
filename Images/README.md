@@ -7,7 +7,8 @@
 | `Assembly/` | 装配过程、焊接、结构安装照片 |
 | `Product/` | 成品正反面、界面、包装等对外展示图 |
 | `Testing/` | 示波器截图、测试台架、故障现场照片 |
+| [Hardware_Preview/](Hardware_Preview/README.md) | 各模块局部原理图预览、FSBB 拓扑示意及图片索引，供硬件架构说明引用 |
 
 命名建议：`现象_条件_日期.扩展名`，例如 `#003_300K_71W_CT输出_2026-01-20.png`。文件名里的 `#` 在 Markdown 链接中需转义为 `%23`。
 
-引用原则：图片只作为工况记录，不得单独作为效率、额定功率或安全裕量的证据；结论性描述写在 [整机测试报告](../Docs/Test_Report.md)，装配与成品图片由 [组装指南](../Docs/Assembly_Guide.md) 和 [用户说明书](../Docs/User_Manual.md) 引用。
+引用原则：图片只作为工况记录，不得单独作为效率、额定功率或安全裕量的证据；结论性描述写在 [整机测试报告](../Docs/Test_Report.md)，装配与成品图片由 [组装指南](../Docs/Assembly_Guide.md) 和 [用户说明书](../Docs/User_Manual.md) 引用；局部原理图的模块解释见 [硬件架构与模块解读](../Hardware/Hardware_Architecture.md)。
