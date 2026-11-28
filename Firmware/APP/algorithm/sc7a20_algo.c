@@ -415,7 +415,8 @@ void SC7A20Algo_Init(void) {
     s_pm_step=0u;s_wake_armed=0u;s_pm_routes=0u;
     s_orientation=SC7A20_ORIENT_UNKNOWN;
     s_candidate=SC7A20_ORIENT_UNKNOWN;s_confirm=0u;
-    s_pickup_wake=0u;s_motion_wake=0u;
+    s_pickup_wake = 1u;
+    s_motion_wake = 0u;
     s_tool_mode=0u;s_orient_div=0u;
     memset(&s_sample,0,sizeof(s_sample));
     s_retry_at=Millis();

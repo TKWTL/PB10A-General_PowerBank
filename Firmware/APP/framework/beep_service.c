@@ -61,7 +61,9 @@ static void beep_hw_set_frequency(uint16_t frequency_hz) {
 
 static const uint16_t s_key_sound[] = {2700u, 100u, BEEP_END};
 static const uint16_t s_fault_sound[] = {
-    2400u, 150u, BEEP_REST, 80u, 2400u, 150u, BEEP_REST, 80u, 2400u, 150u, BEEP_END};
+    2400u, 150u, BEEP_REST, 80u, 2400u, 150u, BEEP_END};
+static const uint16_t s_battery_sound[] = {
+    2400u, 300u, BEEP_REST, 160u, 2400u, 300u, BEEP_REST, 160u, 2400u, 300u, BEEP_END};
 /* PB10A is 32-bit. Queue stores one 4-byte pointer value per entry. */
 #if defined(__arm__) || defined(__thumb__)
 typedef char beep_pointer_must_be_32bit[(sizeof(const uint16_t *) == 4u) ? 1 : -1];
@@ -106,6 +108,15 @@ static void beep_clear(void) {
 
 uint8_t beep_fault_active(void) {
     return s_current == s_fault_sound;
+}
+
+uint8_t beep_power_notice_active(void) {
+    return beep_fault_active() || s_current == s_battery_sound;
+}
+
+void beep_battery_notice(void) {
+    if (s_current != s_battery_sound)
+        beep_play(s_battery_sound); /* Alarm and FAULT keep priority. */
 }
 
 void beep_stop(void) {

@@ -26,6 +26,7 @@ static const struct {
     {" BUS Current A", " BUS电流A"},
     {" BUS Voltage V", " BUS电压V"},
     {" Background", " 背景"},
+    {" Batt Beep", " 电池提示音"},
     {" Batt Temp°C", " 电池温度°C"},
     {" Beep Volume", " 音量"},
     {" C1 Fast In", " C1快充输入"},

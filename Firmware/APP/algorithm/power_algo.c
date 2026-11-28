@@ -184,7 +184,10 @@ static ui_element_t s_setting_elements[CFG_COUNT - 2u];
 static ui_data_t s_setting_data[CFG_COUNT - 2u];
 static unsigned s_setting_data_count;
 static uint32_t s_config_dirty;
-static ui_item_t s_config_reset_item;
+static ui_item_t s_config_reset_item, s_battery_beep_item;
+static ui_data_t s_battery_beep_data;
+static ui_element_t s_battery_beep_element;
+static uint8_t s_battery_beep; /* RAM-only, defaults OFF. */
 static uint8_t s_config_reset_pending;
 static uint8_t s_idle_running, s_idle_fired;
 static uint32_t s_idle_since;
@@ -276,7 +279,14 @@ void PowerAlgo_AddPowerLimitItems(ui_page_t *page) {
     add_settings(page, CFG_OUTPUT, CFG_C1_INPUT);
 }
 
-void PowerAlgo_AddResetItem(ui_page_t *page) {
+void PowerAlgo_AddSettingsItems(ui_page_t *page) {
+    s_battery_beep_data.name = " Batt Beep";
+    s_battery_beep_data.ptr = &s_battery_beep;
+    s_battery_beep_data.dataType = UI_DATA_SWITCH;
+    s_battery_beep_data.actionType = UI_DATA_ACTION_RW;
+    s_battery_beep_element.data = &s_battery_beep_data;
+    Create_element(&s_battery_beep_item, &s_battery_beep_element);
+    AddItem(s_battery_beep_data.name, UI_ITEM_DATA, 0, &s_battery_beep_item, page, 0, 0);
     AddItem("!SW6306 Reset", UI_ITEM_ONCE_FUNCTION, 0, &s_config_reset_item, page, 0, config_reset_selected);
 }
 
@@ -444,6 +454,8 @@ static void fault_report(uint8_t code, uint8_t source) {
     if (s_fault.count != UINT16_MAX)
         ++s_fault.count;
     fault_offer_notice(code, s_fault.severity);
+    if (code == 1u && s_battery_beep)
+        beep_battery_notice();
 }
 
 /* Reasons are historical; qualify them by the observed event / live
@@ -548,7 +560,23 @@ static void fault_consume_status(void) {
     /* A recorded hardware protection that has recovered must not
      * become ACTIVE again due to a different protection later. */
     s_fault_live_mask &= (uint8_t)~falling;
-    uint8_t charge_code = (directions & SW6306_SYS_STAT_CHGERR) ? fault_direction_code(changed, snap, SW6306_SYS_STAT_CHGERR) : 0u;
+    uint8_t charge_code = 0u;
+    if (directions & SW6306_SYS_STAT_CHGERR) {
+        charge_code = fault_decode(changed, SW6306_SYS_STAT_CHGERR);
+        if (charge_code == 13u) {
+            charge_code = fault_decode(snap, SW6306_SYS_STAT_CHGERR);
+            /* CHGD shares 0x15[3] with charge faults. A fresh FULL bit
+             * without a new/live fault also disambiguates old reason bits.
+             * Keep actual simultaneous faults and unrelated live edges. */
+            if ((snap.charge & SW6306_FAULT2_FULL) &&
+                (((changed.charge & SW6306_FAULT2_FULL) && (charge_code == 13u || !(live & SW6306_SYS_STAT_CHGERR))) ||
+                 ((fresh & SW6306_FAULT0_CHGERR) && charge_code == 13u && !(live & SW6306_SYS_STAT_CHGERR)))) {
+                charge_code = 0u;
+                if ((fresh & SW6306_FAULT0_CHGERR) && s_battery_beep)
+                    beep_battery_notice();
+            }
+        }
+    }
     uint8_t discharge_code = (directions & SW6306_SYS_STAT_DISCHGERR) ? fault_direction_code(changed, snap, SW6306_SYS_STAT_DISCHGERR) : 0u;
     if (fresh & SW6306_FAULT0_UVLO) {
         /* A normal UVLO may also set DISCHGERR. Only a separate fresh
@@ -1451,7 +1479,7 @@ static void battery_publish_lifetime(void) {
     battery_view_t view;
     BatteryAlgo_GetView(&view);
     s_battery_values[BATTERY_SOH] = view.soh_d10;
-    s_battery_data[BATTERY_SOH].ptr = view.full_mwh ? &s_battery_values[BATTERY_SOH] : NULL;
+    s_battery_data[BATTERY_SOH].ptr = view.soh_valid ? &s_battery_values[BATTERY_SOH] : NULL;
 
     /* Round before choosing the width, so 9.9999 becomes 10.00,
      * rather than an overflowing six-character 10.000. */

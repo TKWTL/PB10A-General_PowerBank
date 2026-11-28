@@ -4,14 +4,15 @@
 #include <stdint.h>
 #include "sw6306.h"
 
-#define BAT_FACTORY_ENERGY_MWH 102600u
+#define BAT_REFERENCE_UNKNOWN_MWH 9999000u /* 9999 Wh until first learning. */
 #define BAT_EFC_SCALE 10000u
 
 typedef struct {
     uint32_t full_mwh;
-    uint16_t soh_d10; /* 0.1%, valid when full_mwh is nonzero. */
+    uint32_t soh_d10; /* 0.1%, valid when soh_valid is set. */
     uint32_t efc_q10000; /* Settled cycles plus the valid active session estimate. */
     sw6306_learn_state_t learn;
+    uint8_t soh_valid;
 } battery_view_t;
 
 void BatteryAlgo_Init(void);

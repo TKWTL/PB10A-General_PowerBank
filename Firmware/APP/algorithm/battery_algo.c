@@ -7,6 +7,7 @@
 #define BAT_FULL_MIN_MWH 500u
 #define BAT_FULL_MAX_MWH 200000u
 #define BAT_RECORD_TAG 0xBA02u
+#define BAT_REFERENCE_TAG 0xBA03u
 #define BAT_START_SAMPLES 2u
 #define BAT_STOP_SAMPLES 4u
 
@@ -20,7 +21,11 @@ typedef struct {
 
 static volatile battery_noinit_t s_record[2]
     __attribute__((section(".bss.noinit"), used, aligned(4)));
-static uint32_t s_sequence, s_full_mwh, s_efc;
+/* Immutable baseline uses a separate checksum; cycle record format is unchanged. */
+static volatile struct {
+    uint32_t full_mwh, crc;
+} s_reference_record __attribute__((section(".bss.noinit"), used, aligned(4)));
+static uint32_t s_sequence, s_full_mwh, s_efc, s_reference_mwh;
 static uint8_t s_slot;
 static sw6306_learn_state_t s_learn;
 static uint8_t s_done_seen, s_rearm_pending;
@@ -79,6 +84,10 @@ void BatteryAlgo_Init(void) {
     } else {
         s_sequence = s_full_mwh = s_efc = 0u;
     }
+    uint32_t ref = s_reference_record.full_mwh;
+    s_reference_mwh = full_valid(ref) && s_reference_record.crc == crc32_words3(ref, BAT_REFERENCE_TAG, 0u)
+                          ? ref
+                          : BAT_REFERENCE_UNKNOWN_MWH;
     s_learn = SW6306_LEARN_ST_UNKNOWN;
     s_done_seen = s_rearm_pending = 0u;
     session_reset();
@@ -163,6 +172,15 @@ uint8_t BatteryAlgo_Update(uint32_t full, uint32_t remain, sw6306_learn_state_t 
     s_learn = learn;
     uint8_t done = 0u;
     if (learn == SW6306_LEARN_ST_DONE) {
+        if (s_reference_mwh == BAT_REFERENCE_UNKNOWN_MWH) {
+            /* Commit the first valid learned energy before acknowledging DONE.
+             * CRC written last; a reset before commit leaves no valid baseline. */
+            s_reference_record.full_mwh = full;
+            __DMB();
+            s_reference_record.crc = crc32_words3(full, BAT_REFERENCE_TAG, 0u);
+            __DSB();
+            s_reference_mwh = full;
+        }
         done = !s_done_seen;
         s_done_seen = s_rearm_pending = 1u;
     } else if (learn != SW6306_LEARN_ST_UNKNOWN) {
@@ -191,8 +209,8 @@ void BatteryAlgo_LearnRearmed(void) {
 
 void BatteryAlgo_GetView(battery_view_t *out) {
     out->full_mwh = s_full_mwh;
-    out->soh_d10 = (uint16_t)((s_full_mwh * 1000u + BAT_FACTORY_ENERGY_MWH / 2u) /
-                              BAT_FACTORY_ENERGY_MWH);
+    out->soh_valid = full_valid(s_full_mwh) && s_reference_mwh != BAT_REFERENCE_UNKNOWN_MWH;
+    out->soh_d10 = (s_full_mwh * 1000u + s_reference_mwh / 2u) / s_reference_mwh;
     out->efc_q10000 = efc_add(session_delta());
     out->learn = s_learn;
 }

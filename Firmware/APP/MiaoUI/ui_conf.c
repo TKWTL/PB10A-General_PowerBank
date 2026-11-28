@@ -147,7 +147,7 @@ void Create_MenuTree(ui_t *ui) {
             AddItem("-Protocol#1",UI_ITEM_PARENTS,0,&s_protocol1_item,&s_power_settings,&s_protocol1,0);
             AddItem("-Protocol#2",UI_ITEM_PARENTS,0,&s_protocol2_item,&s_power_settings,&s_protocol2,0);
             AddItem("-Power Limits",UI_ITEM_PARENTS,0,&s_power_limit_item,&s_power_settings,&s_power_limit,0);
-            PowerAlgo_AddResetItem(&s_power_settings);
+            PowerAlgo_AddSettingsItems(&s_power_settings);
 
             AddPage("[Ports]",&s_ports,UI_PAGE_TEXT,&s_power_settings);
                 add_return(&s_ports,&s_power_settings,&s_ports_back,0);

@@ -220,9 +220,9 @@ void pm_api_poll(void) {
     else if(s_paused) {
         pm_controller_resume_idle(&s_ctrl);s_paused=0u;
     }
-    /* Finish the finite fault cue before entering a low-power state,
+    /* Finish finite power notices before entering a low-power state,
      * without requiring OLED availability or manufacturing a key wake. */
-    if (beep_fault_active() && !s_ctrl.wake_latched && !s_ctrl.resuming)
+    if (beep_power_notice_active() && !s_ctrl.wake_latched && !s_ctrl.resuming)
         return;
     if(pm_sleep_timer_expired())pm_controller_mark_ui_active(&s_ctrl,0u);
     previous=s_ctrl.state;

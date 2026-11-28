@@ -79,9 +79,9 @@ Settings order: Powerbank, Display, Sleep & Wake, Time & Date, Sensors,
 System. Sensors contains !Accel Calibration, !Mag Calibration and
 !I2C Scanner; the original icons remain archived in source.
 
-Settings > Powerbank groups Ports, Protocol#1, Protocol#2, Power Limits and
-`!SW6306 Reset` (the last item, not inside Power Limits).
-They expose 32 RAM-only settings and actions derived from PB02B plus chip reset.
+Settings > Powerbank groups Ports, Protocol#1, Protocol#2, Power Limits,
+Batt Beep (default OFF) and `!SW6306 Reset` (the last item, not inside Power Limits).
+They expose 32 RAM-only settings and actions derived from PB02B plus Batt Beep and chip reset.
 
 - Power Limits: input 5–100 W, output 5–105 W, both in 5 W steps; defaults 100 W / 105 W. Higher output requests were rejected in hardware testing.
 - Ports: C1 input/output and A1 output fast-charge switches,
@@ -289,8 +289,10 @@ events and live protection edges. Historical reason bits only help decode
 a qualified event; they do not create events by themselves. A successful
 W1C acknowledgement re-arms the bit. Failed clears are retried without
 counting a persistent event again. Fault bits are acknowledged here;
-capacity learning and scene changes have separate consumers. N01
-(capacity learned) does not increment the fault count. Events coalesced by the chip cannot be counted separately.
+capacity learning and scene changes have separate consumers. CHGD
+(0x15[3] with 0x2B[5]) without an actual charge fault is acknowledged,
+not recorded as E13; newly observed fault reasons remain reportable.
+N01 (capacity learned) does not increment the fault count. Events coalesced by the chip cannot be counted separately.
 
 AUX undervoltage/short cutoff reports E20; WLED thermal-envelope cutoff
 reports E30. Meter retries no longer produce E40. Startup protection data
@@ -305,16 +307,20 @@ there is no low-current-mode operation UI. Protection policy is unchanged.
 E01 (battery UVLO) is a WARNING: normal discharge termination is
 expected and is part of SW6306 capacity learning. E01 retains fault
 history and its event acknowledgement, but does not play the FAULT
-cue or independently delay sleep. A separate fresh discharge event
+cue. The optional Batt Beep cue plays once per new E01 or normal CHGD;
+when OFF neither event requests audio. A separate fresh discharge event
 with a newly observed fault reason retains its own classification.
 The 3.0 V/cell SW6306 discharge cutoff (15.0 V for 5S) retains its
 0.3 V/cell hysteresis; AUX-A/WLED use the matching pack threshold.
 
 The priority mailbox overlays INFO/WARNING for 2.5 s or FAULT for 4 s.
-Only FAULT requests audio at notice creation, independently of OLED/Toast:
-a 610 ms three-high-note cue (2400 Hz, 150 ms each, two 80 ms gaps), coalesced while playing. Beep Service priority
-is FAULT > Alarm > normal FIFO/playback > idle-only key click. FAULT
-preempts and restarts an active alarm at the beginning of its melody.
+FAULT requests a 380 ms two-note cue (2400 Hz, 150 ms each, one 80 ms
+gap) independently of OLED/Toast. Batt Beep requests a distinct 1220 ms
+three-note cue (2400 Hz, 300 ms each, two 160 ms gaps) for UVLO or normal
+CHGD. Both coalesce while playing. FAULT > Alarm > normal FIFO/playback
+(including Batt Beep) > idle-only key click. FAULT preempts and restarts
+an active alarm at the beginning of its melody. PM lets a finite power
+cue finish before sleeping.
 All audio follows volume 0–5; no alarm or fault mute exemption.
 ASCII notices reuse the existing fonts; the portrait layout uses the
 smaller font. Toast saves at most 456 bytes of affected framebuffer area,
@@ -325,8 +331,12 @@ through UI_OFF/STOP1 without requesting wake or setting a PM sleep block.
 
 ### Battery health and equivalent full cycles
 
-The fixed factory energy is 102600 mWh (102.6 Wh). SOH is rounded
-to 0.1% from the last valid SW6306 full energy, without a 100% clamp.
+SOH is rounded to 0.1% relative to the first valid learned SW6306 full
+energy, without a 100% clamp. An independent 8-byte CRC-protected NOINIT
+record stores this reference once on the first valid LEARN_DONE before
+acknowledgement. Later learning updates current full energy only.
+When no valid reference survives, the internal baseline is 9999000 mWh
+(9999 Wh) and SOH displays unavailable until a valid learning completes.
 BatteryAlgo uses integer mWh and accepts full energy from 500 to
 200000 mWh. EFC is cumulative discharge energy normalized by the
 actual full energy at the start of each discharge session, not by the
@@ -639,7 +649,7 @@ it changes. CONF is independent of rotation.
   Off (no automatic sleep), 15s, 30s, 1min, 2min, 5min, 10min,
   15min, 30min. The parameter editor applies each step immediately.
   The default is 1min, matching PM's 60000ms default.
-- Both wake switches default OFF. When either is enabled, SC7A20 runs
+- Pickup Wake defaults ON; Motion Wake defaults OFF. When either is enabled, SC7A20 runs
   25 Hz low power during STOP1. **Pickup Wake** uses PB02B's six-direction
   (all ±XYZ) 6D movement detection via AOI2, threshold 32 and duration 1;
   this is not restricted to ±Z. **Motion Wake** monitors high-pass XYZ
@@ -982,7 +992,8 @@ VDD power-down just like ordinary SRAM. Instead, a 20-byte
 `s_calibration_noinit` record shares the Keil linker scatter file's
 reserved `RW_NOINIT` section with `g_fault_record` (48 bytes), the live
 watchdog trace (16 bytes) and
-the two battery statistics slots (40 bytes), and the MMC5603 magnetic
+the two battery statistics slots (40 bytes) and immutable SOH reference
+(8 bytes), and the MMC5603 magnetic
 bias record (16 bytes) plus the altitude reference (12 bytes).
 The scatter currently reserves the **last 256 bytes of 36 KiB SRAM**
 for this area. The calibration consists of three signed 16-bit zero

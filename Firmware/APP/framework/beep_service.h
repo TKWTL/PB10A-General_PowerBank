@@ -58,6 +58,8 @@ void beep_poll(uint32_t now_ms);
 void beep_stop(void); /* Explicitly stop all audio (system reset). */
 void beep_fault(void); /* Finite high-priority cue, coalesced while active. */
 uint8_t beep_fault_active(void);
+void beep_battery_notice(void); /* Optional UVLO/charge-done cue, below Alarm/FAULT. */
+uint8_t beep_power_notice_active(void); /* Finite FAULT or battery cue. */
 /* Persistent high-priority repeating sequence, below FAULT. NULL clears it. */
 void beep_set_loop(const uint16_t *sequence);
 uint8_t beep_busy(void);
