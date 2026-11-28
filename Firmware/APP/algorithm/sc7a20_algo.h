@@ -15,17 +15,17 @@ void SC7A20Algo_AddStatisticsItems(ui_page_t *page);
  *       3 compass 25Hz. */
 typedef struct {
     int16_t raw[3];      /* uncalibrated right-aligned 12-bit codes */
-    int16_t mg[3];       /* PB10A physical sensor XYZ, calibrated mg */
+    int16_t mg[3]; /* enclosure-aligned XYZ, same signs/order, calibrated mg */
     /* PB02B leveler drawing coordinates, mapped from PB10A actual axes:
      * level_X = sensor_Z; level_Y = -sensor_X; level_Z = sensor_Y.
-     * The physical raw[] and mg[] stay in chip-native order for
-     * six-face calibration, rotation and diagnostic statistics. */
+     * The raw[] stays in chip-native order for calibration/statistics;
+     * mg[] corrects cross-axis response relative to the enclosure. */
     int16_t level_mg[3];
     uint32_t seq, at_ms;
 } sc7a20_sample_t;
 void SC7A20Algo_SetToolMode(uint8_t mode);
 uint8_t SC7A20Algo_GetSample(sc7a20_sample_t *out);
-/* Face order X-,X+,Y-,Y+,Z-,Z+. Validated/calibrated atomically.
+/* Face order X-,X+,Y-,Y+,Z-,Z+. Full affine calibration, committed atomically.
  * CRC-protected calibration retained in Keil RW_NOINIT SRAM across warm
  * MCU reset only. Lost when VDD/SRAM power is removed; not Flash/NVM. */
 uint8_t SC7A20Algo_ApplySixFace(const int16_t face_raw[6][3]);

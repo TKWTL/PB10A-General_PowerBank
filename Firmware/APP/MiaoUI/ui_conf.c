@@ -223,6 +223,13 @@ void Create_MenuTree(ui_t *ui) {
 ui_rotation_policy_t MiaoUi_ItemRotationPolicy(const ui_item_t *item) {
     if (item == &s_tetris)
         return UI_ROTATION_R1;
+    if (item == &s_compass_cal) {
+        /* The inverted pose must remain readable even if global auto
+         * rotation is disabled. Other pages retain the user's setting. */
+        uint8_t flipped = Disp_GetRotation();
+        (void)SC7A20Algo_GetRotation(&flipped);
+        return flipped ? UI_ROTATION_R2 : UI_ROTATION_R0;
+    }
     if (item->page.location == &s_game || item == &s_leveler || item == &s_accel_cal)
         return UI_ROTATION_R0;
     return UI_ROTATION_AUTO;

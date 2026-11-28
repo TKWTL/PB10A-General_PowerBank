@@ -401,7 +401,7 @@ defaults, not independently confirmed PB10A battery/hardware specs.
 ### Key input (Collar-Radio Buttons DAS)
 
 The four direction keys use the adapted `BSP/Buttons/buttons.c/.h`:
-10 ms scans, 30 ms debounce, 1 s initial DAS hold and 200 ms repeat.
+10 ms scans, 30 ms debounce, 450 ms initial DAS hold and 100 ms repeat.
 Inputs are enqueued for MiaoUI; OLED DMA busy frames do not lose events.
 CONF does not repeat. A short press triggers ENTER **on release**; holding
 for 700 ms produces one BACK with no ENTER on release. Presses begun
@@ -968,9 +968,10 @@ The **Tools** icon page now offers two WORD-page apps:
   place the device on each of X-/X+/Y-/Y+/Z-/Z+ and hold the candidate
   for 10 additional fresh 200ms intervals (about 2 seconds).
   No partial face capture updates runtime calibration. When all
-  faces validate, derive each axis' zero midpoint and
-  slope=2000mg/(raw positive-negative span); the three sensors'
-  calibration setters receive the six validated results together.
+  faces validate, derive the raw zero vector from the six-face mean
+  and a full 3x3 Q12 transform from the positive-negative raw vector
+  differences. This corrects per-axis gain, bias and cross-axis
+  enclosure alignment together, without float or per-sample inversion.
   Success is briefly displayed and the app exits automatically;
   any key can exit early before completion.
 
@@ -988,7 +989,7 @@ auto-rotation eligibility.
 **Calibration retention (corrected for PB10A power hardware):**
 PB10A has no independent backup-domain supply. Calibration therefore
 does **not** use RTC DR1..DR4, whose contents would be lost on a full
-VDD power-down just like ordinary SRAM. Instead, a 20-byte
+VDD power-down just like ordinary SRAM. Instead, a 32-byte
 `s_calibration_noinit` record shares the Keil linker scatter file's
 reserved `RW_NOINIT` section with `g_fault_record` (48 bytes), the live
 watchdog trace (16 bytes) and
@@ -997,10 +998,12 @@ the two battery statistics slots (40 bytes) and immutable SOH reference
 bias record (16 bytes) plus the altitude reference (12 bytes).
 The scatter currently reserves the **last 256 bytes of 36 KiB SRAM**
 for this area. The calibration consists of three signed 16-bit zero
-codes and three unsigned 16-bit Q14 slopes, plus a 32-bit version marker
-and hardware CRC32. Older CRC16 records are intentionally invalidated.
+codes and nine signed 16-bit Q12 matrix coefficients, plus a 32-bit version
+marker and hardware CRC32. The listed records occupy 172 of 256 bytes.
+Older diagonal-only records are intentionally invalidated; repeat all six
+faces after upgrading.
 The marker is written last to reject interrupted
-updates, and every boot checks the marker, CRC and plausible slopes.
+updates, and every boot checks the marker, CRC and coefficient ranges.
 `SC7A20Algo_Init()` recovers it after reset without asking the RTC.
 It is retained only if SRAM stayed powered (e.g. software reset,
 NRST, and some watchdog resets). **A full power cycle or a debugger
@@ -1043,9 +1046,9 @@ screen in its normal orientation gives native **Z=-1g**; with the
 screen face down, **Y=+1g**; with the right edge down, **X=+1g**.
 `SC7A20Algo` now publishes a separate, calibrated leveler-space
 vector `level_mg={native_Z,-native_X,native_Y}`, preserving
-native `raw[]` and `mg[]` for SC7A20 rotation, statistics and
-six-face calibration. After physical testing the horizon
-raster was corrected separately: top-white/bottom-black in the normal
+native `raw[]` for statistics and six-face calibration, and the
+enclosure-aligned `mg[]` for rotation and compass tilt compensation.
+After physical testing the horizon raster was corrected separately: top-white/bottom-black in the normal
 pose, original downward translation preserved, and horizon roll
 compensation opposite to case tilt. The plumb/zenith mapping and
 six-face sensor axes are unchanged.

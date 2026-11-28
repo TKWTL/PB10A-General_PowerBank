@@ -326,7 +326,7 @@ void Motion_LevelerRun(ui_t *ui) {
  * LEFT  -> X+ (right edge downwards);
  * face UP   -> Y- (screen faces upwards);
  * face DOWN -> Y+ (screen faces downwards).
- * Face indices remain raw X-,X+,Y-,Y+,Z-,Z+ for the six-axis slope
+ * Face indices remain raw X-,X+,Y-,Y+,Z-,Z+ for the six-face matrix
  * calculation and retained .noinit calibration data. */
 static uint8_t cal_detect(const int16_t raw[3]) {
     int16_t x=raw[0],y=raw[1],z=raw[2];

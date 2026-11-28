@@ -9,7 +9,11 @@
 #include <string.h>
 #define SC_SAMPLE_MS 200u
 #define SC_LEVEL_SAMPLE_MS 40u
-#define SC_CAL_RECORD_TAG 0xA721u
+#define SC_CAL_RECORD_TAG 0xA722u /* New affine six-face format. */
+#define SC_CAL_Q12_ONE 4096
+#define SC_CAL_DIAG_MIN 1024
+#define SC_CAL_DIAG_MAX 12288
+#define SC_CAL_CROSS_MAX 8192
 #define SC_RETRY_MS 2000u
 #define SC_ORIENT_ENTER_MG 650
 #define SC_ORIENT_CONFIRM 10u /* 10 stable updates at 5 Hz ~2 seconds */
@@ -46,15 +50,24 @@ static sc7a20_sample_t s_sample;
  * alongside g_fault_record, but never initialized by the C startup.
  * NO VBAT: neither RAM nor RTC backup survives full loss of VDD.
  * No initializer: magic + CRC + range guards decide whether RAM is usable. */
+/* 24-byte payload: raw-code offset and enclosure-aligned 3x3 Q12
+ * transform. The old diagonal-only record cannot recover cross-axis terms. */
+typedef union {
+    struct {
+        int16_t zero[3];
+        int16_t matrix[3][3];
+    } data;
+    uint32_t words[6];
+} sc_cal_payload_t;
 typedef struct {
-    uint32_t a;   /* Yzero:Xzero */
-    uint32_t b;   /* XscaleQ14:Zzero */
-    uint32_t c;   /* ZscaleQ14:YscaleQ14 */
+    sc_cal_payload_t payload;
     uint32_t crc;
     uint32_t tag; /* Version/magic; commit LAST */
 } sc_cal_noinit_t;
+_Static_assert(sizeof(sc_cal_noinit_t) == 32u, "SC7A20 retention layout");
 static volatile sc_cal_noinit_t s_calibration_noinit
     __attribute__((section(".bss.noinit"), used, aligned(4)));
+static uint8_t s_calibrated;
 static ui_item_t s_items[3],s_wake_items[2];
 static ui_data_t s_data[3],s_wake_data[2];
 static ui_element_t s_elements[3],s_wake_elements[2];
@@ -125,59 +138,125 @@ uint8_t SC7A20Algo_GetRotation(uint8_t *flipped) {
     return 1u;
 }
 
-/* Hardware CRC32 protects the uninitialized SRAM record across a warm reset.
- * Q14 slopes retain roughly 0.000061 mg/LSB resolution. */
-static void sc_calibration_load(void) {
-    uint32_t a,b,c,tag;
-    uint16_t xq,yq,zq;
-    a=s_calibration_noinit.a;
-    b=s_calibration_noinit.b;
-    c=s_calibration_noinit.c;
-    tag=s_calibration_noinit.tag;
-    if (tag != SC_CAL_RECORD_TAG ||
-        s_calibration_noinit.crc != crc32_words3(a, b, c))
-        return;
-    xq=(uint16_t)(b>>16);yq=(uint16_t)c;zq=(uint16_t)(c>>16);
-    if(xq<4096u||yq<4096u||zq<4096u ||
-       xq>49152u||yq>49152u||zq>49152u)return;
-    const int16_t zero[3] = {(int16_t)(uint16_t)a, (int16_t)(uint16_t)(a >> 16), (int16_t)(uint16_t)b};
-    const uint16_t slope[3] = {xq, yq, zq};
-    SC7A20_SetCalibrationQ14(zero, slope);
+static uint32_t sc_calibration_crc(const sc_cal_payload_t *p) {
+    /* Reuse the existing three-word CRC primitive for both payload halves. */
+    uint32_t a = crc32_words3(p->words[0], p->words[1], p->words[2]);
+    uint32_t b = crc32_words3(p->words[3], p->words[4], p->words[5]);
+    return crc32_words3(a, b, SC_CAL_RECORD_TAG);
 }
-uint8_t SC7A20Algo_ApplySixFace(const int16_t face_raw[6][3]) {
-    int16_t zero[3];
-    uint16_t q[3];
-    uint32_t a,b,c;
-    uint8_t i;
-    if(!face_raw)return 0u;
-    for(i=0u;i<3u;i++) {
-        int32_t span = (int32_t)face_raw[2u * i + 1u][i] - face_raw[2u * i][i];
-        if (span < 1000 || span > 4000) return 0u;
-        zero[i] = (int16_t)(((int32_t)face_raw[2u * i + 1u][i] + face_raw[2u * i][i]) / 2);
-        q[i] = (uint16_t)((2000u * SC7A20_CAL_Q14_ONE + (uint32_t)span / 2u) / (uint32_t)span);
-        if(q[i]<4096u||q[i]>49152u)return 0u;
+
+static void sc_calibration_load(void) {
+    s_calibrated = 0u;
+    if (s_calibration_noinit.tag != SC_CAL_RECORD_TAG)
+        return;
+    sc_cal_payload_t p = s_calibration_noinit.payload;
+    if (s_calibration_noinit.crc != sc_calibration_crc(&p))
+        return;
+    for (unsigned i = 0u; i < 3u; ++i) {
+        if (p.data.zero[i] < -2048 || p.data.zero[i] > 2047 ||
+            p.data.matrix[i][i] < SC_CAL_DIAG_MIN || p.data.matrix[i][i] > SC_CAL_DIAG_MAX)
+            return;
+        for (unsigned j = 0u; j < 3u; ++j) {
+            if (i != j && (p.data.matrix[i][j] < -SC_CAL_CROSS_MAX ||
+                           p.data.matrix[i][j] > SC_CAL_CROSS_MAX))
+                return;
+        }
     }
-    /* Invalidate the old record before replacing any field; the tag is
-     * written LAST so a mid-reset partial update cannot pass validation. */
-    a=((uint32_t)(uint16_t)zero[1]<<16)|(uint16_t)zero[0];
-    b=((uint32_t)q[0]<<16)|(uint16_t)zero[2];
-    c=((uint32_t)q[2]<<16)|q[1];
-    s_calibration_noinit.tag=0u;
+    s_calibrated = 1u;
+}
+
+/* Symmetric round-to-nearest with positive denominator. */
+static int32_t sc_round_div(int32_t num, int32_t den) {
+    return (num + (num < 0 ? -den / 2 : den / 2)) / den;
+}
+
+uint8_t SC7A20Algo_ApplySixFace(const int16_t face_raw[6][3]) {
+    sc_cal_payload_t p;
+    int32_t a[3][6] = {{0}};
+    if (!face_raw)
+        return 0u;
+    /* For raw row i and physical axis j, D[i][j] = raw(+j)-raw(-j).
+     * Six-face mean estimates the offset, and M = 2000*inverse(D)
+     * converts raw deltas into enclosure-aligned milligravity. */
+    for (unsigned i = 0u; i < 3u; ++i) {
+        int32_t sum = 0;
+        for (unsigned j = 0u; j < 3u; ++j) {
+            int32_t neg = face_raw[2u * j][i], pos = face_raw[2u * j + 1u][i];
+            if (neg < -2048 || neg > 2047 || pos < -2048 || pos > 2047)
+                return 0u;
+            int32_t span = pos - neg;
+            if (i == j ? (span < 1000 || span > 4000) : (span < -400 || span > 400))
+                return 0u;
+            a[i][j] = span;
+            sum += pos + neg;
+        }
+        p.data.zero[i] = (int16_t)sc_round_div(sum, 6);
+        a[i][i + 3u] = 2000;
+    }
+
+    /* Gauss-Jordan on [D | 2000 I]. D is strictly diagonally dominant
+     * after the six-face checks, so no pivot swaps or 64-bit math needed.
+     * Normalized rows use Q12; unnormalized rows keep raw-code units. */
+    for (unsigned k = 0u; k < 3u; ++k) {
+        int32_t pivot = a[k][k];
+        if (pivot < 500)
+            return 0u;
+        for (unsigned j = 0u; j < 6u; ++j)
+            a[k][j] = sc_round_div(a[k][j] * SC_CAL_Q12_ONE, pivot);
+        for (unsigned i = 0u; i < 3u; ++i) {
+            if (i == k)
+                continue;
+            int32_t factor = a[i][k];
+            for (unsigned j = 0u; j < 6u; ++j)
+                a[i][j] -= sc_round_div(factor * a[k][j], SC_CAL_Q12_ONE);
+        }
+    }
+    for (unsigned i = 0u; i < 3u; ++i) {
+        if (a[i][i + 3u] < SC_CAL_DIAG_MIN || a[i][i + 3u] > SC_CAL_DIAG_MAX)
+            return 0u;
+        for (unsigned j = 0u; j < 3u; ++j) {
+            int32_t v = a[i][j + 3u];
+            if (i != j && (v < -SC_CAL_CROSS_MAX || v > SC_CAL_CROSS_MAX))
+                return 0u;
+            p.data.matrix[i][j] = (int16_t)v;
+        }
+    }
+
+    s_calibration_noinit.tag = 0u;
     __DMB();
-    s_calibration_noinit.a=a;
-    s_calibration_noinit.b=b;
-    s_calibration_noinit.c=c;
-    s_calibration_noinit.crc = crc32_words3(a, b, c);
+    s_calibration_noinit.payload = p;
+    s_calibration_noinit.crc = sc_calibration_crc(&p);
     __DMB();
     s_calibration_noinit.tag = SC_CAL_RECORD_TAG;
     __DSB();
-    SC7A20_SetCalibrationQ14(zero, q);
-    s_orientation=SC7A20_ORIENT_UNKNOWN;
-    s_candidate=SC7A20_ORIENT_UNKNOWN;
-    s_confirm=0u;
-    s_sample.seq=0u;
+    s_calibrated = 1u;
+    s_orientation = SC7A20_ORIENT_UNKNOWN;
+    s_candidate = SC7A20_ORIENT_UNKNOWN;
+    s_confirm = 0u;
+    s_sample.seq = 0u;
     return 1u;
 }
+
+static void sc_calibrated_axes_update(void) {
+    /* PB10A always samples +/-2g HR (1 mg/raw code). Keep the BSP's
+     * per-axis calibration API unchanged for other projects. */
+    if (!s_calibrated) {
+        memcpy(s_sample.mg, s_sample.raw, sizeof(s_sample.mg));
+        return;
+    }
+    int32_t delta[3];
+    for (unsigned i = 0u; i < 3u; ++i)
+        delta[i] = (int32_t)s_sample.raw[i] - s_calibration_noinit.payload.data.zero[i];
+    /* The coefficient bounds keep both the dot product and the resulting
+     * signed 16-bit mg value in range even at full-scale raw input. */
+    for (unsigned i = 0u; i < 3u; ++i) {
+        int32_t sum = 0;
+        for (unsigned j = 0u; j < 3u; ++j)
+            sum += delta[j] * s_calibration_noinit.payload.data.matrix[i][j];
+        s_sample.mg[i] = (int16_t)sc_round_div(sum, SC_CAL_Q12_ONE);
+    }
+}
+
 void SC7A20Algo_SetToolMode(uint8_t mode) {
     if (mode > 3u)
         mode = 0u;
@@ -251,7 +330,7 @@ __attribute__((noinline)) void SC7A20Algo_Poll(void) {
             SC7A20_ReadRawCode(&x,&y,&z);
             s_axes[0]=(int)x;s_axes[1]=(int)y;s_axes[2]=(int)z;
             s_sample.raw[0]=x;s_sample.raw[1]=y;s_sample.raw[2]=z;
-            SC7A20_ReadCalibratedMg(s_sample.mg);
+            sc_calibrated_axes_update();
             sc_level_axes_update(); /* PB10A -> PB02B drawing axes */
             ++s_sample.seq;if(!s_sample.seq)++s_sample.seq;
             s_sample.at_ms = Millis();

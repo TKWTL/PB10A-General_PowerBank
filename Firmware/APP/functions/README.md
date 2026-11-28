@@ -58,9 +58,10 @@ them.
   plumb double-circle view and a default-font tilt angle at bottom right;
   its `img_leveler` and `img_leveler_cal` 30x30 XBM icons live in this
   module (derived from Collar-Radio).
-  Calibration uses six stable ±axis placements, then records zero/slope
-  with CRC into the Keil `.bss.noinit` SRAM area; this retains calibration
-  across MCU reset while SRAM has power, **not** across total power loss.
+  Calibration uses six stable ±axis placements, then records a zero vector
+  and a 3x3 Q12 cross-axis alignment transform with CRC into the Keil
+  `.bss.noinit` SRAM area; this retains calibration across MCU reset while
+  SRAM has power, **not** across total power loss.
   Short CONF starts sampling from the introductory page. Arrow and side-view
   icons show the six poses, with an inverted active pose, completed checks
   and a stability bar. Success returns after 1.2 s. Both applications release
@@ -77,8 +78,12 @@ them.
   target. Short or long CONF exits. Invalid/stale samples, rapid acceleration,
   near-vertical forward axis or weak horizontal field suppress heading.
 - `compass_cal_app.c/.h`: guided six-pose magnetic offset calibration.
-  First rest on the large face (Z-), then turn it upside down (Z+).
-  The remaining four poses use screen-up (Y-) north/east/south/west.
+  First rest normally with the OLED upright (Z-), then turn the housing
+  upside down (Z+), keeping the OLED side-facing rather than face-down.
+  Rotation follows the stable Z orientation in this app even when global
+  auto-rotation is disabled. The remaining four poses use screen-up (Y-)
+  north/east/south/west. An invalid pose shows the target and observed
+  dominant gravity axes (e.g. Z+/Y+).
   The arrow always points screen-right. Under R2 the requested heading
   shifts by 180 degrees so the native edge retains its required heading.
   Short CONF captures 16 new samples; LEFT redoes the previous pose.

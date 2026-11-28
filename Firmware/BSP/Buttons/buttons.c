@@ -1,5 +1,5 @@
 /* PB10A adaptation of Collar-Radio Buttons. Poll at 10ms.
- * Four arrows: 30ms debounce, 1000ms first DAS, 200ms repeat.
+ * Four arrows: 30ms debounce, 450ms first DAS, 100ms repeat.
  * CONF: 30ms debounce, 700ms hold, no automatic repeat.
  */
 #include "buttons.h"
@@ -18,11 +18,12 @@ static uint8_t read_down(void){return (uint8_t)(LL_GPIO_IsInputPinSet(DOWN_GPIO_
 static uint8_t read_left(void){return (uint8_t)(LL_GPIO_IsInputPinSet(LEFT_GPIO_Port,LEFT_Pin)!=0u);}
 static uint8_t read_right(void){return (uint8_t)(LL_GPIO_IsInputPinSet(RIGHT_GPIO_Port,RIGHT_Pin)!=0u);}
 static uint8_t read_conf(void){return (uint8_t)(LL_GPIO_IsInputPinSet(CONF_GPIO_Port,CONF_Pin)!=0u);}
-static const key_cfg_t cfg[KeyIndex_Max]={
-    {100u,20u,1u,read_up},{100u,20u,1u,read_down},
-    {100u,20u,1u,read_left},{100u,20u,1u,read_right},
-    {70u,0u,1u,read_conf}
-};
+static const key_cfg_t cfg[KeyIndex_Max] = {
+    {45u, 10u, 1u, read_up},
+    {45u, 10u, 1u, read_down},
+    {45u, 10u, 1u, read_left},
+    {45u, 10u, 1u, read_right},
+    {70u, 0u, 1u, read_conf}};
 void Key_Init(void) {
     uint8_t i;
     for(i=0u;i<KeyIndex_Max;i++) {

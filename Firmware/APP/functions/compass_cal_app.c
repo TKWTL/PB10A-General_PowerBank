@@ -1,4 +1,4 @@
-/* Six guided magnetic poses: flat N, flipped flat N, screen-up N/E/S/W. */
+/* Six guided magnetic poses: upright N, vertically inverted N, screen-up N/E/S/W. */
 #include "compass_cal_app.h"
 #include "tools_motion_app.h"
 #include "mmc5603_algo.h"
@@ -47,7 +47,8 @@ static int16_t s_faces[CAL_STEPS][3];
 static axis_capture_t s_capture;
 
 static uint8_t pose_ok(const sc7a20_sample_t *a, uint8_t face, uint8_t holding) {
-    /* Native SC7A20: Y- screen-up; Z- normally flat; Z+ flipped. */
+    /* Enclosure axes: Y- screen-up; Z- OLED upright; Z+ OLED inverted.
+     * Neither Z pose requires placing the OLED face down. */
     int32_t x = a->mg[0], y = a->mg[1], z = a->mg[2];
     uint32_t g2 = (uint32_t)(x * x) + (uint32_t)(y * y) + (uint32_t)(z * z);
     if (g2 < 750u * 750u || g2 > 1250u * 1250u)
@@ -139,7 +140,27 @@ static void center_text(uint16_t y, const char *text) {
     Disp_DrawCentered(y, I18N_Text(text), 0u);
 }
 
-static void draw_cal(uint8_t data_valid, uint8_t pose_valid) {
+/* When the requested pose is not accepted, show target/observed
+ * dominant gravity axes rather than an unexplained "Adjust position". */
+static void draw_pose_hint(const sc7a20_sample_t *a, uint8_t face, char *text, unsigned size) {
+    unsigned axis = 0u;
+    int32_t largest = -1;
+    for (unsigned i = 0u; i < 3u; ++i) {
+        int32_t v = a->mg[i];
+        if (v < 0)
+            v = -v;
+        if (v > largest) {
+            largest = v;
+            axis = i;
+        }
+    }
+    mini_snprintf(text, size, "%s %c%c/%c%c", I18N_Text("Adjust position"),
+                  face < 4u ? 'Y' : 'Z', face == 5u ? '+' : '-',
+                  (int)('X' + axis), a->mg[axis] < 0 ? '-' : '+');
+    Disp_DrawCentered(46u, text, 0u);
+}
+
+static void draw_cal(uint8_t data_valid, uint8_t pose_valid, const sc7a20_sample_t *a) {
     static const char *const directions[4] = {"North", "East", "South", "West"};
     uint8_t black = 0u, white = 1u;
     char text[22];
@@ -154,8 +175,8 @@ static void draw_cal(uint8_t data_valid, uint8_t pose_valid) {
         center_text(62u, s_result == 1u ? "CAL 6/6" : "Check headings");
     } else {
         uint8_t face = s_face_order[s_step];
-        const char *title = face < 4u ? "Screen face up" : face == 4u ? "Lay flat"
-                                                                      : "Upside Down";
+        const char *title = face < 4u ? "Screen face up" : face == 4u ? "Screen upright"
+                                                                      : "Screen inverted";
         center_text(10u, title);
         /* Keep the arrow pointing screen-right. Under R2 that direction is
          * the opposite native edge: swap the requested heading instead,
@@ -181,7 +202,10 @@ static void draw_cal(uint8_t data_valid, uint8_t pose_valid) {
             prompt = "Retry capture";
         else
             prompt = "Press CONF";
-        center_text(46u, prompt);
+        if (data_valid && !pose_valid)
+            draw_pose_hint(a, face, text, sizeof(text));
+        else
+            center_text(46u, prompt);
 
         /* Progress/controls are deliberately at the bottom. */
         Disp_SetDrawColor(&black);
@@ -252,6 +276,6 @@ void CompassCal_AppRun(ui_t *ui) {
     /* Recompute after advancing, canceling or backing up a pose. */
     uint8_t pose_valid = !s_result && accel_valid &&
                          pose_ok(&a, s_face_order[s_step], s_sampling);
-    draw_cal(accel_valid && mag_valid, pose_valid);
+    draw_cal(accel_valid && mag_valid, pose_valid, &a);
     UI_RequestNextFrame(ui, CAL_FRAME_MS);
 }
