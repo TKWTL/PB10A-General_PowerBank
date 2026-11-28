@@ -1,6 +1,6 @@
 # Hardware
 
-硬件资料：原理图、PCB、BOM、结构件与制造文件。复刻操作见 [组装指南](../Docs/Assembly_Guide.md)，测量与验证见 [整机测试报告](../Docs/Test_Report.md)。
+硬件资料：原理图、PCB、BOM、结构件与制造文件。复刻操作见 [组装指南](../Docs/Assembly_Guide.md)，测量与验证见 [整机测试报告](../Docs/Test_Report.md)。硬件取舍、外挂检流前端风险及下一代候选改进见 [设计复盘](../Docs/Design_Review.md)；复盘中的候选保护网络与器件不代表当前 PCB 已采用。
 
 | 目录/文件 | 内容 |
 |---|---|
