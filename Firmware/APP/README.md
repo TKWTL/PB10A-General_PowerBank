@@ -299,7 +299,7 @@ history and its event acknowledgement, but does not play the FAULT
 cue or independently delay sleep. A separate fresh discharge event
 with a newly observed fault reason retains its own classification.
 The 3.0 V/cell SW6306 discharge cutoff (15.0 V for 5S) retains its
-0.3 V/cell hysteresis; external loads use the matching pack threshold.
+0.3 V/cell hysteresis; AUX-A/WLED use the matching pack threshold.
 
 The priority mailbox overlays INFO/WARNING for 2.5 s or FAULT for 4 s.
 Only FAULT requests audio at notice creation, independently of OLED/Toast:
@@ -835,13 +835,14 @@ background mode and runs the normal full PM resume path to RUN.
 A background-check timeout also falls back to RUN for diagnosis
 instead of silently skipping protection.
 
-Battery shutdown on a fresh successful snapshot:
-`capacity_pct == 0` or `vbat_mv < 15000` (5S x 3.0 V) forces
-Radio Power Mode to OFF, cancels pending UI commands and powers down
-RDA5807 asynchronously. Mode OFF remains until explicitly changed
-after the low-voltage lock is cleared by capacity >5% and voltage
->=15,500 mV. Failed SW6306 I2C transactions are not assumed to be
-0%; the patrol retries up to three fresh ADC+Capacity sequences.
+Radio has an independent emergency reception reserve. On a fresh
+valid voltage snapshot, `vbat_mv < 14500` forces Radio Power Mode
+to OFF, cancels pending UI commands and powers down RDA5807
+asynchronously. SOC=0% alone does not stop Radio. Voltage >=15,000 mV
+clears the low-voltage latch; Mode OFF remains until explicitly changed.
+SW6306 and AUX-A/WLED retain their 15.0 V pack cutoff; the independent
+battery protection is unchanged. The RTC patrol still requires a
+successful fresh ADC+Capacity sequence and retries up to three times.
 If all fail, unattended Radio is turned OFF (fail closed).
 During normal RUN the Radio coroutine also monitors the latest valid
 SW6306 capacity/voltage cache every 500ms.

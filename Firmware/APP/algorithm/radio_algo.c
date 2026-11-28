@@ -28,6 +28,8 @@
 #define RADIO_FREQ_STEP 4u /* 100 kHz, in 25 kHz units */
 #define RADIO_COMMAND_QUEUE  8u
 #define RADIO_DEFAULT_VOLUME 0u
+#define RADIO_BATTERY_CUTOFF_MV 14500u /* Emergency receive reserve; independent of BUS UVLO/SOC. */
+#define RADIO_BATTERY_RESTART_MV 15000u
 
 static uint8_t s_state,s_mode=RADIO_MODE_PRESET,s_power_mode=RADIO_POWER_AUTO;
 static uint8_t s_volume,s_rssi,s_stereo,s_search_failed,s_error_code;
@@ -106,8 +108,8 @@ static void radio_fail(uint8_t why) {
     pm_api_set_sleep_block(RADIO_KEEP_AWAKE_BLOCK,0u);
 }
 /* One common cutoff path for normal RUN monitoring and RTC inspections.
- * Once empty, do not let a stale button command restart the radio until
- * fresh charge telemetry has cleared the low-battery latch. */
+ * Do not let a stale button command restart the radio until fresh voltage
+ * telemetry has cleared the low-battery latch. SOC is display-only here. */
 static void radio_force_low_battery_off(void) {
     s_low_battery_latched=1u;
     s_power_mode=RADIO_POWER_OFF;
@@ -618,8 +620,9 @@ __attribute__((noinline)) void RadioAlgo_Poll(void) {
         if(s_state!=RADIO_STATE_OFF && !s_stop_pending)
             s_stop_requested=1u;
     }
-    /* A receiver running with the UI on also benefits from the same
-     * cutoff. The 500 ms check reads SW6306's existing RAM mirror only. */
+    /* Radio reserves reception down to its independent voltage floor.
+     * SOC may already be zero after SW6306 UVLO. The 500 ms check reads
+     * the existing RAM mirror only. */
     /* HAL Tick does not include time spent in STOP1. Cached telemetry
      * therefore cannot be assumed fresh after a 30-minute sleep.
      * During RTC inspections use ONLY the explicit fresh ADC+capacity
@@ -629,23 +632,22 @@ __attribute__((noinline)) void RadioAlgo_Poll(void) {
         power_monitor_t power;
         s_last_battery_guard=now;
         PowerAlgo_GetMonitor(&power);
-        if(power.valid && power.capacity_valid) {
-            if (power.capacity_pct == 0u || power.vbat_mv < POWER_BATTERY_CUTOFF_MV)
+        if (power.valid) {
+            if (power.vbat_mv < RADIO_BATTERY_CUTOFF_MV)
                 radio_force_low_battery_off();
-            else if (power.capacity_pct > 5u && power.vbat_mv >= POWER_BATTERY_CUTOFF_MV + 500u)
+            else if (power.vbat_mv >= RADIO_BATTERY_RESTART_MV)
                 s_low_battery_latched=0u;
         }
     }
     if(s_battery_inspection_pending) {
         uint16_t battery_mv=0u;
-        uint8_t battery_pct=0u;
-        uint8_t checked=PowerAlgo_TakeRadioBatteryCheck(&battery_mv,&battery_pct);
+        uint8_t checked = PowerAlgo_TakeRadioBatteryCheck(&battery_mv, NULL);
         if(checked!=0u) {
             s_battery_inspection_pending=0u;
             /* Inspect only complete fresh SW6306 transactions. Never
              * infer empty capacity from a communications failure. */
             if(checked==1u) {
-                if (battery_pct == 0u || battery_mv < POWER_BATTERY_CUTOFF_MV)
+                if (battery_mv < RADIO_BATTERY_CUTOFF_MV)
                     radio_force_low_battery_off();
             }
             else if(s_bg_inspection && ++s_bg_retry_count<3u) {
