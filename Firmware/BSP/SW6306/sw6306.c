@@ -84,8 +84,8 @@ static uint16_t sw6306_scale_current(uint16_t raw, uint32_t num, uint32_t den) {
 }
 #endif
 
-/* BAT limit registers use nominal 100mA steps. Convert physical mA
- * with the reciprocal BAT gain, round to the nearest step, saturate.
+/* BAT limit registers use nominal 100mA steps (valid range 1..120).
+ * Convert physical mA with the reciprocal BAT gain, round and saturate.
  */
 static uint8_t sw6306_batt_limit_register(uint32_t current_ma) {
 #if SW6306_USE_FLOAT_API
@@ -97,8 +97,10 @@ static uint8_t sw6306_batt_limit_register(uint32_t current_ma) {
     const uint32_t d = SW6306_BATT_CURRENT_DEN;
     uint32_t reg = (current_ma * d + (n * 50U)) / (n * 100U);
 #endif
-    if (reg > 255U)
-        reg = 255U;
+    if (reg > 120U)
+        reg = 120U;
+    if (reg < 1U)
+        reg = 1U;
     return (uint8_t)reg;
 }
 

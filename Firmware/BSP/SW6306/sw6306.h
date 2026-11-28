@@ -66,21 +66,22 @@ extern "C" {
 #endif
 
 /* Current calibration is selected with SW6306_USE_FLOAT_API.
- * BAT read gain = nominal / actual shunt; Init uses the reciprocal for
- * CHG_IBAT/DCHG_IBAT. Resistances must be positive, in mOhm.
- * Integer BUS gain is PB10A-specific (4.97A reference / 4.46A reported).
+ * BAT gain applies to current and energy readback; Init uses the reciprocal
+ * for CHG_IBAT/DCHG_IBAT. Float shunt resistances must be positive, in mOhm.
+ * PB10A integer gains: BAT 159/160 (charge/discharge DMM measurements);
+ * BUS 997/892 ((4.970A + 0.015A U3 consumption) / 4.460A).
  * Float mode defaults to unity for reuse on other hardware.
- * It does not change SW6306 hardware current limits or protocol PDOs.
+ * BUS gain does not change hardware current limits or protocol PDOs.
  */
 #if SW6306_USE_FLOAT_API
 #define SW6306_BATT_RSHUNT_NOMINAL 5.0f
 #define SW6306_BATT_RSHUNT_ACTUAL  5.0f
 #define SW6306_BUS_CURRENT_GAIN 1.0f
 #else
-#define SW6306_BATT_CURRENT_NUM 1U
-#define SW6306_BATT_CURRENT_DEN 1U
-#define SW6306_BUS_CURRENT_NUM  497U
-#define SW6306_BUS_CURRENT_DEN  446U
+#define SW6306_BATT_CURRENT_NUM 159U
+#define SW6306_BATT_CURRENT_DEN 160U
+#define SW6306_BUS_CURRENT_NUM 997U
+#define SW6306_BUS_CURRENT_DEN 892U
 #if (SW6306_BATT_CURRENT_NUM == 0U) || (SW6306_BATT_CURRENT_DEN == 0U) || \
     (SW6306_BUS_CURRENT_NUM == 0U) || (SW6306_BUS_CURRENT_DEN == 0U)
 #error "SW6306 current calibration ratios must be nonzero"
@@ -108,7 +109,7 @@ extern "C" {
 #define SW6306_OUTPUT_POWER_MAX 105U // 输出/放电功率，单位1W
 
 // 电池端输入输出最大电流设定，最大100W
-#define SW6306_BAT_DCHG_CURR_MAX 12000U // 设置放电电池端限流值（单位:mA，范围：100~12000）
+#define SW6306_BAT_DCHG_CURR_MAX 10000U // 设置放电电池端限流值（单位:mA，范围：100~12000）
 #define SW6306_BAT_CHG_CURR_MAX  6000U // 设置充电电池端限流值（单位:mA，范围：100~12000）
 
 // PD各电流挡位设置

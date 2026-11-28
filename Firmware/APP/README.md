@@ -260,11 +260,12 @@ and verified battery/thermal margins; setting PISET alone cannot
 guarantee it.
 
 Runtime floating-point SHUNT setters remain removed. The integer build
-uses BAT 1/1 and PB10A-specific BUS 497/446; the float build uses
+uses PB10A-specific BAT 159/160 and BUS 997/892; the float build uses
 compile-time BAT nominal/actual shunt values (5.0/5.0 mΩ), with BUS gain
-1.0 for reuse on other hardware. The integer BUS gain is from a single
-4.97 A / 4.46 A point, applied only to current readback. Internal SW6306
-BUS current limits are unaffected. See the SW6306 BSP README.
+1.0 for reuse on other hardware. BAT calibration covers current readback,
+limit encoding/readback and coulomb-counter energy. BUS calibration
+includes about 15 mA of U3 test-fixture consumption and affects only
+current readback, not hardware BUS limits. See the SW6306 BSP README.
 Earlier measurements are in the
 [SW6306 debug note](../../Docs/Debug/2026-11-19_sw6306_monitor.md).
 

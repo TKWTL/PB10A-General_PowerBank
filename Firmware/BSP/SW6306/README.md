@@ -17,25 +17,29 @@ PB10A 的 Keil 工程选择整数，应用通过现有的 Protothread 任务访�
 
 | 参数 | 整数模式 | 浮点模式 |
 | --- | --- | --- |
-| BAT 校准 | `BATT_CURRENT_NUM/DEN = 1/1` | `BATT_RSHUNT_NOMINAL / BATT_RSHUNT_ACTUAL = 5.0f/5.0f`（mΩ） |
-| BUS 校准 | `BUS_CURRENT_NUM/DEN = 497/446` | `BUS_CURRENT_GAIN = 1.0f` |
+| BAT 校准 | `BATT_CURRENT_NUM/DEN = 159/160` | `BATT_RSHUNT_NOMINAL / BATT_RSHUNT_ACTUAL = 5.0f/5.0f`（mΩ） |
+| BUS 校准 | `BUS_CURRENT_NUM/DEN = 997/892` | `BUS_CURRENT_GAIN = 1.0f` |
 
-BAT 增益为标称采样电阻与实际采样电阻之比，两个电阻值必须为正。
-PB10A 整数 BUS 增益来自 4.97 A 参考仪表读数、4.46 A SW6306 未补偿读数的
-单点实测，约为 1.11435；它不是对实际电阻值的认定。浮点模式
-默认 1.0，便于移植到其他硬件。
+PB10A 整数 BAT 增益为万用表充电 5.952/5.99 A、放电 1.292/1.30 A
+两点增益的平均值近似（0.99375），统一用于电流、限流和库仑计能量。
+BUS 增益在 4.970 A 参考读数上补计 WITRN U3 的约 15 mA 自耗，
+以 (4.970 + 0.015)/4.460 ≈ 1.11771 校准。BAT 实测不加该自耗。
+两者均为实测等效增益，不代表独立测得的采样电阻阻值。
+浮点 BAT 增益仍为标称/实际采样电阻之比，阻值必须为正；
+浮点模式默认增益均为 1.0，便于移植。
 
 | 路径 | 当前实现 |
 | --- | --- |
 | ADC 镜像 | IBAT = raw × 5 mA，IBUS = raw × 4 mA；不补偿 |
 | `ReadIBAT` / `ReadIBUS` | 在读镜像时乘对应增益，四舍五入并饱和至 65535 mA |
 | `ReadIBattLimit` | 对实时电池限流寄存器译码后的 mA 值乘 BAT 增益 |
-| Init 的 CHG_IBAT / DCHG_IBAT | 目标电流除以 BAT 增益，再按 100 mA/LSB 四舍五入、饱和至 255 |
+| Init 的 CHG_IBAT / DCHG_IBAT | 目标电流除以 BAT 增益，再按 100 mA/LSB 四舍五入、限制为 1～120 |
 | 浮点库仑计能量 | 原始码 × 标称 mWh/LSB × BAT 增益；Rounded 接口最后取整 |
 | 整数库仑计能量 | 先四舍五入标称 mWh，再乘 NUM/DEN 并取整 |
 
 BUS 校准只修正电流读数；不修改 BUS 硬件限流、PD/PPS/UFCS 档位、
-外部电流注入 `IextSet` 或 ADC 原始镜像。BAT 默认 1/1，保持原限流设置。
+外部电流注入 `IextSet` 或 ADC 原始镜像。BAT 充电限流目标仍为 6 A，放电降至 10 A。
+整数模式分别量化为 60、101 档，折算约为 5.963 A、10.037 A。
 
 ## PB10A 运行时约束
 
