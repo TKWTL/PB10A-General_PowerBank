@@ -1,9 +1,10 @@
 # Hardware
 
-硬件资料：原理图、PCB、BOM、结构件与制造文件。复刻操作见 [组装指南](../Docs/Assembly_Guide.md)，测量与验证见 [整机测试报告](../Docs/Test_Report.md)。硬件取舍、外挂检流前端风险及下一代候选改进见 [设计复盘](../Docs/Design_Review.md)；复盘中的候选保护网络与器件不代表当前 PCB 已采用。
+硬件资料：原理图、PCB、BOM、结构件与制造文件。**设计原理、功率路径、器件取舍及相关实测图片**见 [硬件架构与设计解读](Hardware_Architecture.md)。复刻操作见 [组装指南](../Docs/Assembly_Guide.md)，测量与验证见 [整机测试报告](../Docs/Test_Report.md)。硬件取舍、外挂检流前端风险及下一代候选改进见 [设计复盘](../Docs/Design_Review.md)；复盘中的候选保护网络与器件不代表当前 PCB 已采用。
 
 | 目录/文件 | 内容 |
 |---|---|
+| [Hardware_Architecture.md](Hardware_Architecture.md) | 5S 电池、SW6306 FSBB、Aux-A 独立降压、控制与低功耗的硬件解读及实测图引用 |
 | `source/` | EasyEDA Pro 工程源（`.epro2`，含原理图与 PCB） |
 | `Preview/` | 主板及 SW6306 的网表、原理图 PDF、交互式 BOM |
 | `Manufacturing/` | 经确认后发布的 BOM、坐标文件、Gerber、量产固件及发布说明 |
